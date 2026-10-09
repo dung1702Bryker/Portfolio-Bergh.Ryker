@@ -1,0 +1,132 @@
+
+  <svg width="1200" height="1200" viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b" />
+      <stop offset="100%" stop-color="#27272a" />
+    </linearGradient>
+  
+      <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+        <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.08"/>
+      </filter>
+    </defs>
+
+    <!-- Background -->
+    <rect width="1200" height="1200" fill="#ffffff" />
+    
+
+    <!-- Transformed Logo Group -->
+    <g transform="translate(600, 600) scale(2.2265625) translate(-256, -256)" filter="url(#subtleShadow)">
+      
+      <!-- "B E R G H" text (clean modern spaced uppercase) -->
+      <text 
+        x="105" 
+        y="250" 
+        font-family="-apple-system, BlinkMacSystemFont, 'Montserrat', 'Helvetica Neue', 'Segoe UI', sans-serif" 
+        font-size="25" 
+        font-weight="300" 
+        fill="#18181b" 
+        letter-spacing="9"
+      >BERGH</text>
+
+      <!-- Horizontal Divider Line -->
+      <line 
+        x1="110" 
+        y1="264" 
+        x2="400" 
+        y2="264" 
+        stroke="#27272a" 
+        stroke-width="1.6" 
+        stroke-linecap="round"
+      />
+
+      <!-- "RYKER STUDIO" subtitle text (below line, right aligned) -->
+      <text 
+        x="278" 
+        y="287" 
+        font-family="-apple-system, BlinkMacSystemFont, 'Montserrat', 'Helvetica Neue', 'Segoe UI', sans-serif" 
+        font-size="12" 
+        font-weight="400" 
+        fill="#3f3f46" 
+        letter-spacing="4.5"
+      >RYKER STUDIO</text>
+
+      <!-- Artistic Handwritten Calligraphy Signature "Ryker" -->
+      <!-- Smooth flowing strokes with variable pressure emulation -->
+      <g fill="none" stroke="url(#goldGradient)" stroke-linecap="round" stroke-linejoin="round">
+        
+        <!-- Flourishing R: Top loop and sweeping stem -->
+        <path 
+          d="M 220 205 
+             C 245 192, 290 182, 320 186
+             C 310 198, 290 220, 240 282
+             C 225 301, 216 308, 222 298
+             C 230 284, 252 245, 275 200
+             C 290 170, 310 188, 305 205
+             C 300 222, 278 244, 256 250" 
+          stroke-width="2.6"
+        />
+
+        <!-- Secondary upper decorative loop of R -->
+        <path 
+          d="M 230 200 
+             C 260 190, 325 180, 324 195 
+             C 322 210, 280 230, 260 248" 
+          stroke-width="1.8" 
+          opacity="0.9"
+        />
+
+        <!-- Downward descender and diagonal stroke connecting to 'y' -->
+        <path 
+          d="M 262 246 
+             C 275 258, 288 275, 296 295
+             C 298 300, 295 306, 290 306
+             C 278 304, 264 280, 260 268
+             C 255 252, 275 240, 288 244
+             C 296 247, 304 256, 308 266" 
+          stroke-width="2.2"
+        />
+
+        <!-- The 'y' loop plunging gracefully below the divider line -->
+        <path 
+          d="M 308 266 
+             C 306 280, 298 318, 292 328
+             C 285 338, 274 340, 272 332
+             C 270 320, 290 288, 315 254" 
+          stroke-width="2.2"
+        />
+
+        <!-- The ascender of 'k' -->
+        <path 
+          d="M 315 254 
+             C 326 238, 342 210, 348 200
+             C 352 194, 356 198, 350 212
+             C 340 235, 332 258, 332 268
+             C 336 260, 345 252, 354 254
+             C 360 256, 354 268, 348 270" 
+          stroke-width="2.0"
+        />
+
+        <!-- The 'e' and concluding 'r' stroke flourishing out -->
+        <path 
+          d="M 348 270 
+             C 354 262, 362 258, 368 264
+             C 372 268, 366 274, 360 274
+             C 366 266, 376 258, 385 258
+             C 392 258, 396 264, 402 260" 
+          stroke-width="2.0"
+        />
+
+        <!-- Dynamic underline accent brush stroke -->
+        <path 
+          d="M 226 295 
+             C 245 285, 270 262, 302 264
+             C 325 266, 355 258, 370 248" 
+          stroke-width="1.4"
+          opacity="0.75"
+        />
+      </g>
+    </g>
+  </svg>
+  

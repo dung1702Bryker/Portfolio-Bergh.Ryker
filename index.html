@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // 1. Fix for sandboxed environments where window.fetch is getter-only and throws on assignment
+      (function() {
+        try {
+          var originalFetch = window.fetch;
+          var fetchValue = originalFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return fetchValue;
+            },
+            set: function(val) {
+              fetchValue = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (_) {}
+
+        // 2. Mock silent WebSocket for disabled HMR in sandboxed iframes to prevent connection errors
+        try {
+          if (typeof window !== 'undefined' && window.WebSocket) {
+            var NativeWS = window.WebSocket;
+            window.WebSocket = function(url, protocols) {
+              if (
+                protocols === 'vite-hmr' ||
+                (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('/@vite/') !== -1))
+              ) {
+                var target = new EventTarget();
+                target.send = function() {};
+                target.close = function() {};
+                target.readyState = 1; // OPEN
+                target.binaryType = 'blob';
+                target.protocol = 'vite-hmr';
+                target.extensions = '';
+                target.url = url;
+                target.CONNECTING = 0;
+                target.OPEN = 1;
+                target.CLOSING = 2;
+                target.CLOSED = 3;
+                setTimeout(function() {
+                  try {
+                    if (typeof target.onopen === 'function') target.onopen(new Event('open'));
+                    target.dispatchEvent(new Event('open'));
+                  } catch (_) {}
+                }, 0);
+                return target;
+              }
+              return new NativeWS(url, protocols);
+            };
+            window.WebSocket.prototype = NativeWS.prototype;
+            window.WebSocket.CONNECTING = 0;
+            window.WebSocket.OPEN = 1;
+            window.WebSocket.CLOSING = 2;
+            window.WebSocket.CLOSED = 3;
+          }
+        } catch (_) {}
+
+        // 3. Suppress [vite] and WebSocket noise across all console channels
+        function isViteNoise(msg) {
+          if (!msg) return false;
+          var str = '';
+          if (typeof msg === 'string') {
+            str = msg;
+          } else if (typeof msg === 'object') {
+            str = (msg.message || '') + ' ' + (msg.stack || '') + ' ' + (msg.reason || '');
+            try { str += ' ' + JSON.stringify(msg); } catch (_) {}
+          }
+          return (
+            str.indexOf('[vite]') !== -1 ||
+            str.indexOf('WebSocket') !== -1 ||
+            str.indexOf('websocket') !== -1 ||
+            str.indexOf('vite-hmr') !== -1 ||
+            str.indexOf('Disconnecting idle stream') !== -1 ||
+            str.indexOf('Timed out waiting for new targets') !== -1
+          );
+        }
+
+        function createFilteredLogger(originalMethod) {
+          return function() {
+            var args = Array.prototype.slice.call(arguments);
+            for (var i = 0; i < args.length; i++) {
+              if (isViteNoise(args[i])) return;
+            }
+            originalMethod.apply(console, args);
+          };
+        }
+
+        try {
+          if (typeof console !== 'undefined') {
+            if (console.error) console.error = createFilteredLogger(console.error);
+            if (console.warn) console.warn = createFilteredLogger(console.warn);
+            if (console.log) console.log = createFilteredLogger(console.log);
+            if (console.debug) console.debug = createFilteredLogger(console.debug);
+          }
+        } catch (_) {}
+
+        // 4. Trap unhandled errors and rejections from [vite] HMR transport
+        try {
+          window.addEventListener('error', function(e) {
+            if (isViteNoise(e.message) || isViteNoise(e.error)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(e) {
+            if (isViteNoise(e.reason)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          }, true);
+        } catch (_) {}
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://lh3.googleusercontent.com" crossorigin>
+    <link rel="dns-prefetch" href="https://lh3.googleusercontent.com">
+    <link rel="preconnect" href="https://drive.google.com">
+    <link rel="dns-prefetch" href="https://drive.google.com">
+    <link rel="preconnect" href="https://images.unsplash.com">
+    <link rel="dns-prefetch" href="https://images.unsplash.com">
+    <link rel="preconnect" href="https://res.cloudinary.com">
+    <link rel="dns-prefetch" href="https://res.cloudinary.com">
+    <link rel="preconnect" href="https://images.weserv.nl">
+    <link rel="dns-prefetch" href="https://images.weserv.nl">
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com">
+    <title>BERGH RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="image_src" href="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BERGH RYKER" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH RYKER. Lưu giữ mọi khoảnh khắc thanh xuân rực rỡ và chuyên nghiệp.">
+    
+    <!-- OpenGraph Social Sharing (Facebook, Messenger, Zalo, iMessage, Telegram) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BERGH.RYKER STUDIO" />
+    <meta property="og:title" content="BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện" />
+    <meta property="og:description" content="Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER. Lưu giữ mọi khoảnh khắc thanh xuân rực rỡ và chuyên nghiệp." />
+    <meta property="og:url" content="https://bergh-ryker.ai.studio/" />
+    <meta property="og:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+    <meta property="og:image:secure_url" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="1200" />
+    <meta property="og:image:alt" content="BERGH.RYKER Studio Logo" />
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện" />
+    <meta name="twitter:description" content="Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER. Lưu giữ mọi khoảnh khắc thanh xuân rực rỡ và chuyên nghiệp." />
+    <meta name="twitter:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

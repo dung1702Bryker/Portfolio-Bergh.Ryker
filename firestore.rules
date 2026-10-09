@@ -1,0 +1,171 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        (request.auth.token.email != null && request.auth.token.email.lower() in ['nguyenducdung1702@gmail.com', 'berghryker2@gmail.com'])
+      );
+    }
+
+    function isValidBooking(bookingId, data) {
+      return isValidId(bookingId)
+        && data.id == bookingId
+        && data.schoolName is string
+        && data.schoolName.size() > 0
+        && data.classSize is int
+        && data.classSize > 0
+        && data.date is string
+        && data.conceptType in ['THPT', 'University', 'Event', 'Custom']
+        && data.instagramOrZalo is string
+        && data.status in ['Chờ duyệt', 'Đã duyệt', 'Từ chối', 'Đã khoá lịch', 'Đang xử lý', 'Đã hoàn thành']
+        && (!('source' in data) || data.source in ['website', 'chatbot'])
+        && (!('editingStatus' in data) || data.editingStatus in ['pending', 'shooting_done', 'editing', 'reviewing', 'completed'])
+        && (!('editingProgress' in data) || (data.editingProgress is number && data.editingProgress >= 0 && data.editingProgress <= 100))
+        && (!('finalPhotosUrl' in data) || (data.finalPhotosUrl is string && data.finalPhotosUrl.size() <= 2000))
+        && (!('rawPhotosUrl' in data) || (data.rawPhotosUrl is string && data.rawPhotosUrl.size() <= 2000))
+        && (!('editingNotes' in data) || (data.editingNotes is string && data.editingNotes.size() <= 2000))
+        && (!('estimatedDeliveryDate' in data) || (data.estimatedDeliveryDate is string && data.estimatedDeliveryDate.size() <= 50))
+        && (!('eventStartTime' in data) || (data.eventStartTime is string && data.eventStartTime.size() <= 20))
+        && (!('eventEndTime' in data) || (data.eventEndTime is string && data.eventEndTime.size() <= 20))
+        && (!('estimatedCost' in data) || (data.estimatedCost is string && data.estimatedCost.size() <= 200));
+    }
+
+    match /availableDates/{dateId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if true;
+      allow write: if isValidBooking(bookingId, request.resource.data) || isAdmin();
+    }
+
+    match /albums/{albumId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      
+      match /photos/{photoId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    match /prom_albums/{albumId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      
+      match /photos/{photoId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    match /freedom_albums/{albumId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      
+      match /photos/{photoId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    match /appStore/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /configs/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /testimonials/{testimonialId} {
+      allow read: if true;
+      allow create: if isValidId(testimonialId)
+        && request.resource.data.author is string
+        && request.resource.data.author.size() > 0
+        && request.resource.data.author.size() <= 120
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 1500
+        && (!('rating' in request.resource.data) || (request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5));
+      allow update, delete: if isAdmin();
+    }
+
+    match /chat_sessions/{sessionId} {
+      allow read, write: if true;
+      
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+    
+    match /conversations/{conversationId} {
+      allow read, write: if true;
+      
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /site_activities/{activityId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /section_analytics/{analyticsId} {
+      allow read: if true;
+      allow create, update: if isValidId(analyticsId)
+        && request.resource.data.id is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.views is int
+        && request.resource.data.views >= 0;
+      allow delete: if isAdmin();
+    }
+
+    match /active_visitors/{visitorId} {
+      allow read: if true;
+      allow create, update: if isValidId(visitorId)
+        && request.resource.data.id is string
+        && request.resource.data.visitorName is string
+        && request.resource.data.visitorName.size() <= 100
+        && request.resource.data.currentPage is string
+        && request.resource.data.currentPage.size() <= 200;
+      allow delete: if true;
+    }
+
+    match /visitor_history/{historyId} {
+      allow read: if true;
+      allow create, update: if isValidId(historyId)
+        && request.resource.data.visitorId is string;
+      allow delete: if isAdmin();
+    }
+
+    match /visitor_logs/{logId} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /admin_notifications/{notifId} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /admin_push_subscriptions/{subId} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -1,0 +1,293 @@
+{
+  "entities": {
+    "Booking": {
+      "title": "Booking",
+      "description": "Booking request for class pictures",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "schoolName": {
+          "type": "string"
+        },
+        "classSize": {
+          "type": "integer"
+        },
+        "date": {
+          "type": "string"
+        },
+        "conceptType": {
+          "type": "string",
+          "enum": ["THPT", "University", "Event"]
+        },
+        "instagramOrZalo": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "shootingDuration": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Chờ duyệt", "Đã duyệt", "Từ chối", "Đã khoá lịch", "Đang xử lý"]
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "schoolName", "classSize", "date", "conceptType", "instagramOrZalo", "status", "createdAt"]
+    },
+    "Album": {
+      "title": "Album",
+      "description": "Creative photo collections and portfolios",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "driveLink": {
+          "type": "string"
+        },
+        "coverImageSrc": {
+          "type": "string"
+        },
+        "coverImageResolutions": {
+          "type": "object",
+          "properties": {
+            "thumbnail": { "type": "string" },
+            "medium": { "type": "string" },
+            "original": { "type": "string" }
+          }
+        },
+        "images": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "title", "subtitle", "body", "driveLink", "images"]
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "Photo item with multiple resolutions (thumbnail, medium, original) for responsive loading",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "src": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "medium": { "type": "string" },
+        "original": { "type": "string" },
+        "resolutions": {
+          "type": "object",
+          "properties": {
+            "thumbnail": { "type": "string" },
+            "medium": { "type": "string" },
+            "original": { "type": "string" }
+          }
+        },
+        "alt": { "type": "string" },
+        "title": { "type": "string" },
+        "focal": { "type": "string" },
+        "iso": { "type": "string" },
+        "desc": { "type": "string" },
+        "order": { "type": "integer" },
+        "objectPosition": { "type": "string" },
+        "imagePosition": { "type": "string" },
+        "galleryImages": { "type": "array" }
+      },
+      "required": ["src", "alt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A live-chat conversation with a client",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string" },
+        "customerContact": { "type": "string" },
+        "customerChannel": { "type": "string", "enum": ["Web", "Zalo", "Instagram", "Facebook"] },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string" },
+        "unreadCountAdmin": { "type": "integer" },
+        "unreadCountCustomer": { "type": "integer" },
+        "status": { "type": "string", "enum": ["open", "pending", "resolved"] },
+        "pinned": { "type": "boolean" },
+        "relatedBookingId": { "type": "string" }
+      },
+      "required": ["customerName", "customerContact", "customerChannel", "lastMessage", "lastMessageAt", "unreadCountAdmin", "unreadCountCustomer", "status", "pinned"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single chat message within a conversation",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderType": { "type": "string", "enum": ["admin", "customer"] },
+        "senderId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "sendingStatus": { "type": "string", "enum": ["sending", "sent", "failed"] },
+        "readAt": { "type": "string" },
+        "deliveredAt": { "type": "string" }
+      },
+      "required": ["text", "senderType", "senderId", "createdAt", "sendingStatus"]
+    },
+    "AvailableDate": {
+      "title": "AvailableDate",
+      "description": "Indicates availability state of a specific date",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "booked", "unavailable"] }
+      },
+      "required": ["date", "status"]
+    },
+    "SiteActivity": {
+      "title": "SiteActivity",
+      "description": "Log of recent site activities and system events",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["booking_new", "booking_status", "chat_message", "review_new", "slot_update", "system"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "actor": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "type", "title", "timestamp"]
+    },
+    "SectionAnalytics": {
+      "title": "SectionAnalytics",
+      "description": "Accurate view counts and visitor analytics for portfolio visitors, collections, albums, and individual photos by month",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["portfolio_visitor", "collection", "album", "photo"] },
+        "collectionId": { "type": "string" },
+        "albumId": { "type": "string" },
+        "photoId": { "type": "string" },
+        "views": { "type": "integer" },
+        "uniqueVisitors": { "type": "integer" },
+        "monthlyViews": { "type": "object" },
+        "monthlyVisitors": { "type": "object" },
+        "hourlyViews": { "type": "object" },
+        "hourlyTimeline": { "type": "object" },
+        "dailyViews": { "type": "object" },
+        "lastViewedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "views", "lastViewedAt"]
+    },
+    "ActiveVisitor": {
+      "title": "ActiveVisitor",
+      "description": "Real-time active visitor presence tracking who is currently viewing the website live",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "visitor"] },
+        "currentPage": { "type": "string" },
+        "currentViewDetail": { "type": "string" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" },
+        "joinedAt": { "type": "string" },
+        "lastActive": { "type": "string" },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["id", "visitorName", "currentPage", "lastActive"]
+    },
+    "VisitorHistory": {
+      "title": "VisitorHistory",
+      "description": "Historical log of visitors and potential clients who browsed the portfolio",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "visitor"] },
+        "isAdminDevice": { "type": "boolean" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" },
+        "firstSeenAt": { "type": "string" },
+        "lastSeenAt": { "type": "string" },
+        "entryPage": { "type": "string" },
+        "lastPage": { "type": "string" },
+        "lastViewDetail": { "type": "string" },
+        "visitedPages": { "type": "array", "items": { "type": "string" } },
+        "pageViews": { "type": "integer" }
+      },
+      "required": ["id", "visitorId", "visitorName", "lastSeenAt"]
+    }
+  },
+  "firestore": {
+    "/visitor_history/{historyId}": {
+      "schema": "VisitorHistory",
+      "description": "Historical log of all visitors, devices, viewed pages, and timestamps"
+    },
+    "/active_visitors/{visitorId}": {
+      "schema": "ActiveVisitor",
+      "description": "Real-time presence tracking who is viewing the website live right now"
+    },
+    "/section_analytics/{analyticsId}": {
+      "schema": "SectionAnalytics",
+      "description": "Store view counts and visitor interest analytics per section and portfolio category"
+    },
+    "/availableDates/{dateId}": {
+      "schema": "AvailableDate",
+      "description": "Store individual date availabilities (yyyy-mm-dd)"
+    },
+    "/site_activities/{activityId}": {
+      "schema": "SiteActivity",
+      "description": "Store site and admin activity events"
+    },
+    "/bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "Store all group bookings"
+    },
+    "/albums/{albumId}": {
+      "schema": "Album",
+      "description": "Store all photo albums and portfolios"
+    },
+    "/albums/{albumId}/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Store individual multi-resolution photos inside an album"
+    },
+    "/prom_albums/{albumId}": {
+      "schema": "Album",
+      "description": "Store school events and prom night albums"
+    },
+    "/prom_albums/{albumId}/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Store individual multi-resolution photos inside a prom album"
+    },
+    "/freedom_albums/{albumId}": {
+      "schema": "Album",
+      "description": "Store concept freedom photo albums"
+    },
+    "/freedom_albums/{albumId}/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Store individual multi-resolution photos inside a freedom album"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Store all customer live chat conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Store individual messages inside a customer conversation"
+    }
+  }
+}

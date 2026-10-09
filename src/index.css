@@ -1,0 +1,324 @@
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-darkroom: #FAF9F6;
+  --color-graphite: #FFFFFF;
+  --color-optic-yellow: #B5945B;
+  --color-cyan-optic: #4F8090;
+
+  --font-sans: "Be Vietnam Pro", "Inter", sans-serif;
+  --font-syne: "Be Vietnam Pro", "Inter", sans-serif;
+  --font-manrope: "Be Vietnam Pro", "Inter", sans-serif;
+  --font-instrument: "Be Vietnam Pro", "Inter", sans-serif;
+
+  --shadow-resting: 0px 8px 24px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 4px 20px rgba(181, 148, 91, 0.08);
+  --shadow-dashboard: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+
+  --radius-tech: 12px;
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    text-shadow: none !important;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: #050505;
+    color: #F8F8F8;
+    font-family: "Be Vietnam Pro", "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-size: 16px;
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+  }
+
+  body {
+    background-color: #050505;
+    color: #F8F8F8;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+  }
+
+  /* Prevent awkward iOS Safari zooming on focus by ensuring minimum 16px font-size */
+  @media (max-width: 640px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+.text-optic { color: #B5945B; }
+.bg-optic { background-color: #B5945B; }
+.border-optic { border-color: #B5945B; }
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@layer utilities {
+  /* Apple VisionOS / macOS Sequoia Ultra-Transparent Liquid Glass System */
+  .liquid-glass {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.01) 50%,
+      rgba(255, 255, 255, 0.03) 100%
+    ), rgba(4, 4, 8, 0.09) !important;
+    backdrop-filter: blur(26px) saturate(200%) brightness(103%) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(103%) !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  /* Pure Ultra-Transparent Liquid Glass - Khung viền trong suốt hoàn toàn, Không đổ bóng */
+  .liquid-glass-pure {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.01) 50%,
+      rgba(255, 255, 255, 0.02) 100%
+    ), rgba(3, 3, 6, 0.08) !important;
+    backdrop-filter: blur(28px) saturate(200%) brightness(103%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(103%) !important;
+    border: 1px solid transparent !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .liquid-glass-header {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.01) 100%
+    ), rgba(4, 4, 8, 0.10) !important;
+    backdrop-filter: blur(24px) saturate(210%) brightness(103%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(210%) brightness(103%) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .liquid-glass-card {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.01) 60%,
+      rgba(255, 255, 255, 0.025) 100%
+    ), rgba(5, 5, 10, 0.09) !important;
+    backdrop-filter: blur(24px) saturate(210%) brightness(104%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(210%) brightness(104%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .liquid-glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    box-shadow: none !important;
+  }
+
+  .liquid-glass-dock {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.10) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    ), rgba(6, 6, 12, 0.16) !important;
+    backdrop-filter: blur(26px) saturate(210%) brightness(105%) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(210%) brightness(105%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .liquid-glass-input {
+    background: rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(22px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(190%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    transform: translateZ(0);
+  }
+
+  .liquid-glass-input:focus {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: #B5945B !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  .liquid-glass-btn {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.035) 100%
+    ) !important;
+    backdrop-filter: blur(22px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(200%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: none !important;
+    transform: translateZ(0);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .liquid-glass-btn:hover {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0.07) 100%
+    ) !important;
+    border-color: rgba(255, 255, 255, 0.32) !important;
+    box-shadow: none !important;
+  }
+
+  .liquid-glass-gold-btn {
+    background: linear-gradient(
+      180deg,
+      #f8e5c4 0%,
+      #deb677 50%,
+      #b5945b 100%
+    ) !important;
+    box-shadow: none !important;
+    color: #08080a !important;
+    transform: translateZ(0);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .liquid-glass-gold-btn:hover {
+    box-shadow: none !important;
+    filter: brightness(1.08);
+  }
+
+  .liquid-glass-dark {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(0, 0, 0, 0.12) 100%
+    ), rgba(6, 6, 10, 0.25) !important;
+    backdrop-filter: blur(28px) saturate(210%) brightness(103%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(210%) brightness(103%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 
+      inset 0 1.5px 0 0 rgba(255, 255, 255, 0.20),
+      0 18px 44px rgba(0, 0, 0, 0.35) !important;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .liquid-glass-pill {
+    background: rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(22px) saturate(200%) brightness(104%) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(200%) brightness(104%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.22) !important;
+    transform: translateZ(0);
+  }
+
+  /* Clean, Sharp Typography - No Blurry Shadows (Bỏ đổ bóng chữ) */
+  .text-legible-shadow {
+    text-shadow: none !important;
+  }
+
+  .title-legible-shadow {
+    text-shadow: none !important;
+  }
+
+  .gold-text-glow {
+    color: #E5C17C !important;
+    text-shadow: none !important;
+  }
+
+  /* Mobile hardware performance & silky 60-120fps touch responsiveness */
+  @media (max-width: 640px) {
+    .liquid-glass,
+    .liquid-glass-card,
+    .liquid-glass-dark,
+    .liquid-glass-dock,
+    .liquid-glass-header {
+      backdrop-filter: blur(20px) saturate(160%) !important;
+      -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+    }
+  }
+
+  /* Smooth momentum scrolling & eliminate touch highlight delays */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Keep base utilities for contrast over background video */
+  .text-opticYellow { color: #B5945B !important; }
+}
+
+body.lightbox-active header { display: none !important; }
+body.lightbox-active #chatbot-trigger-floating,
+body.lightbox-active #chatbot-client-box,
+body.lightbox-active div[class*="fixed right-6"],
+body.lightbox-active div[class*="fixed right-5"],
+body.lightbox-active .fixed:not(.z-\[9999\]):not(.z-50):not(.z-\[99999\]):not(.z-\[10005\]):not(.toast-wrapper):not(#admin-notify) {
+  display: none !important;
+}
+
+/* Hide AI Studio injected debug panel */
+[title*="debug panel" i], [aria-label*="debug panel" i], #aistudio-debug-panel {
+  display: none !important;
+}
+
+/* Lenis smooth scroll core styles */
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
