@@ -687,7 +687,7 @@ export const AdminBatchImportModal: React.FC<AdminBatchImportModalProps> = ({
                 </span>
               </div>
 
-              <div className="max-h-72 overflow-y-auto border border-white/10 rounded-xl overflow-hidden bg-black/50">
+              <div className="max-h-72 overflow-y-auto overscroll-contain border border-white/10 rounded-xl overflow-hidden bg-black/50">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-[#1F3A5F] text-white sticky top-0 font-semibold z-10">
                     <tr>

@@ -24,6 +24,8 @@ import {
  Eye,
  Bell,
  Search,
+ Sparkles,
+  Menu,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Helmet } from "react-helmet-async";
@@ -37,6 +39,8 @@ import { useAdminNotification } from "./context/AdminNotificationContext";
 import { AdminPushNotificationBanner } from "./components/AdminPushNotificationBanner";
 import { AdminNotificationCenterModal } from "./components/AdminNotificationCenterModal";
 import { PhotoProgressLookupModal } from "./components/PhotoProgressLookupModal";
+import { BookingConfirmationPage } from "./components/BookingConfirmationPage";
+import Lenis from "lenis";
 
 // Slide Layout Components
 import { HeroLayout } from "./components/HeroLayout";
@@ -60,10 +64,14 @@ const localforage = {
 
 
 // Data & Types
-import contentData from"./data/contentData";
-import { SlideData } from"./types";
-import { db, auth, handleFirestoreError, OperationType, isFirestoreQuotaExceeded } from"./firebase";
-import { doc, onSnapshot, setDoc } from"firebase/firestore";
+import contentData from "./data/contentData";
+import { SlideData } from "./types";
+import { db, auth, handleFirestoreError, OperationType, isFirestoreQuotaExceeded } from "./firebase";
+import { doc, onSnapshot, setDoc, collection, getDocs } from "firebase/firestore";
+import { CinematicIntroOverlay } from "./components/CinematicIntroOverlay";
+import { AdminIntroEditorModal } from "./components/admin/AdminIntroEditorModal";
+import { useIntroConfig } from "./hooks/useIntroConfig";
+import { IntroCardConfig } from "./types/introConfig";
 
 // Register GSAP plugins
 gsap.registerPlugin(ScrollTrigger);
@@ -185,6 +193,132 @@ export default function App() {
    }
 
    return () => window.removeEventListener("openPhotoProgressLookup", handler);
+ }, []);
+
+ // Cấu hình Intro & Tải ngầm dữ liệu Firestore song song ngay từ giây 0.0s (Quy tắc 3)
+ const { config: introConfig, saveIntroConfig } = useIntroConfig();
+ const [isIntroComplete, setIsIntroComplete] = useState(() => {
+   try {
+     if (typeof window !== "undefined" && window.location.hash.includes("admin")) {
+       return true;
+     }
+   } catch (_) {}
+   return false;
+ });
+ const [isIntroEditorOpen, setIsIntroEditorOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+ const [prefetchedIntroCards, setPrefetchedIntroCards] = useState<IntroCardConfig[]>([]);
+
+ // Quy tắc 3: Tải ngầm Firestore ngay từ giây 0.0s ở phía nền
+ useEffect(() => {
+   let isCancelled = false;
+   const prefetchData = async () => {
+     try {
+       const collectionsToFetch = ["albums", "prom_albums", "freedom_albums"];
+       const loadedCards: IntroCardConfig[] = [];
+       const seen = new Set<string>();
+
+       for (const colName of collectionsToFetch) {
+         try {
+           const snap = await getDocs(collection(db, colName));
+           snap.forEach((docSnap) => {
+             const d = docSnap.data();
+             if (!d.deletedAt && !d.isHidden) {
+               const cover = (d.coverImageSrc || (d.images && d.images[0]?.src) || "").trim();
+               if (
+                 cover &&
+                 !cover.includes("unsplash.com") &&
+                 !cover.startsWith("[") &&
+                 !cover.includes("DÁN_LINK") &&
+                 !seen.has(cover)
+               ) {
+                 seen.add(cover);
+                 loadedCards.push({
+                   id: `prefetch-${docSnap.id}`,
+                   title: d.title || "Bộ Sưu Tập",
+                   category: d.subtitle || (colName === "prom_albums" ? "Prom Night" : colName === "freedom_albums" ? "Concept Tự Do" : "Kỷ Yếu"),
+                   src: cover,
+                 });
+               }
+             }
+           });
+         } catch (_) {}
+       }
+
+       if (!isCancelled && loadedCards.length > 0) {
+         setPrefetchedIntroCards(loadedCards);
+       }
+     } catch (_) {}
+   };
+
+   prefetchData();
+   return () => {
+     isCancelled = true;
+   };
+ }, []);
+
+  // Hỗ trợ mở trực tiếp Thẻ vé điện tử & Xác nhận đặt lịch /booking/:code (Quy tắc 3)
+  // Hỗ trợ mở trực tiếp Thẻ vé điện tử & Xác nhận đặt lịch /booking/:code hoặc ?booking=
+  // Hỗ trợ mở trực tiếp Thẻ vé điện tử & Xác nhận đặt lịch /booking/:code hoặc ?booking=
+  const [bookingConfirmationCode, setBookingConfirmationCode] = useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const qCode = params.get("booking") || params.get("bookingCode") || params.get("bookingId") || params.get("code");
+        if (qCode) return qCode.trim();
+        const path = window.location.pathname;
+        if (path.startsWith("/booking/")) {
+          const code = path.replace("/booking/", "").trim();
+          if (code) return decodeURIComponent(code);
+        }
+        const hash = window.location.hash;
+        if (hash.includes("/booking/")) {
+          const parts = hash.split("/booking/");
+          if (parts[1]) {
+            const code = parts[1].split("?")[0].trim();
+            if (code) return decodeURIComponent(code);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
+ // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps (Quy tắc 4)
+  // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps - Chỉ chạy trên Desktop
+  useEffect(() => {
+    if (typeof window === "undefined" || window.innerWidth < 1024 || "ontouchstart" in window) {
+      return;
+    }
+    let lenis: Lenis | null = null;
+    let rafId: number;
+
+   try {
+     lenis = new Lenis({
+       duration: 1.1,
+       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+       smoothWheel: true,
+       touchMultiplier: 1.5,
+     });
+
+     (window as any).lenis = lenis;
+     lenis.on("scroll", ScrollTrigger.update);
+
+     function raf(time: number) {
+       lenis?.raf(time);
+       rafId = requestAnimationFrame(raf);
+     }
+     rafId = requestAnimationFrame(raf);
+   } catch (e) {
+     console.warn("Lenis init warning:", e);
+   }
+
+   return () => {
+     if (rafId) cancelAnimationFrame(rafId);
+     if (lenis) {
+       lenis.destroy();
+       (window as any).lenis = null;
+     }
+   };
  }, []);
 
  // Hidden admin access
@@ -732,58 +866,154 @@ export default function App() {
  <meta name="twitter:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
  </Helmet>
 
+ {/* CINEMATIC INTRO OVERLAY (Quy tắc 3) */}
+  {!bookingConfirmationCode && introConfig.enabled && !isIntroComplete && (
+   <CinematicIntroOverlay
+     config={introConfig}
+     realAlbumCards={prefetchedIntroCards}
+     onComplete={() => setIsIntroComplete(true)}
+   />
+ )}
+
  {/* GLOBAL FIXED BACKGROUND VIDEO WITH ADAPTIVE STREAMING & COMPRESSED MOBILE FALLBACK */}
  <GlobalBackgroundVideo
  isHeroLayout={slides[activeSlide]?.layout ==="Hero Layout" || slides[activeSlide]?.layout ==="Hero"}
  />
 
- {/* 1. GLASSMORPHISM NAVIGATION HEADER */}
- <header className="sticky top-0 left-0 w-full z-40 bg-zinc-950/40 backdrop-blur-3xl border-b border-white/5 pt-[max(env(safe-area-inset-top),0px)]">
- <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-3 flex flex-row justify-between items-center gap-2">
- {/* Logo brand */}
- <div
- onClick={() => scrollToSlide(slides[0]?.id ||"S1")}
- className="flex items-center cursor-pointer group"
- >
- <span className="font-sans font-bold text-[13px] sm:text-base md:text-[17px] tracking-wide text-[#F8F8F8] transition-opacity hover:opacity-80 uppercase">
- BERGH.RYKER
- </span>
- </div>
+  {/* 1. GLASSMORPHISM NAVIGATION HEADER */}
+  <header className="sticky top-0 left-0 w-full z-40 bg-[rgba(18,18,20,0.75)] backdrop-blur-[16px] border-b border-[rgba(255,255,255,0.08)] pt-[max(env(safe-area-inset-top),0px)]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-3 flex flex-row justify-between items-center gap-2">
+      {/* Logo brand */}
+      <div
+        onClick={() => {
+          scrollToSlide(slides[0]?.id || "S1");
+          setIsMobileMenuOpen(false);
+        }}
+        className="flex items-center cursor-pointer group"
+      >
+        <span className="font-sans font-bold text-[13px] sm:text-base md:text-[17px] tracking-wide text-[#F8F8F8] transition-opacity hover:opacity-80 uppercase">
+          BERGH.RYKER
+        </span>
+      </div>
 
- {/* Responsive Nav menu links */}
- <nav className="flex items-center gap-4 sm:gap-6 md:gap-8 text-[11px] sm:text-[12px] md:text-[13px] font-sans font-medium tracking-wide">
- <button
- onClick={() => scrollToSlide("S8")}
- className="text-zinc-400 hover:text-[#F8F8F8] transition-colors cursor-pointer py-1"
- >
- Bộ sưu tập
- </button>
+      {/* Desktop Nav menu links */}
+      <nav className="hidden md:flex items-center gap-4 sm:gap-6 md:gap-8 text-[11px] sm:text-[12px] md:text-[13px] font-sans font-medium tracking-wide">
+        <button
+          onClick={() => scrollToSlide("S8")}
+          className="text-zinc-400 hover:text-[#F8F8F8] transition-colors cursor-pointer py-1"
+        >
+          Bộ sưu tập
+        </button>
 
- <button
- onClick={() => scrollToSlide("S7")}
- className="text-zinc-400 hover:text-[#F8F8F8] transition-colors cursor-pointer py-1"
- >
- Giới thiệu
- </button>
+        <button
+          onClick={() => scrollToSlide("S7")}
+          className="text-zinc-400 hover:text-[#F8F8F8] transition-colors cursor-pointer py-1"
+        >
+          Giới thiệu
+        </button>
 
- <button
- onClick={() => setIsPhotoProgressOpen(true)}
- className="text-[#B5945B] hover:text-[#d4af37] transition-colors cursor-pointer py-1 flex items-center gap-1.5 font-semibold"
- title="Tra cứu tiến độ chỉnh ảnh & tải file hoàn thiện"
- >
- <Search className="w-3.5 h-3.5" />
- <span>Tra cứu ảnh</span>
- </button>
+        <button
+          onClick={() => setIsPhotoProgressOpen(true)}
+          className="text-[#B5945B] hover:text-[#d4af37] transition-colors cursor-pointer py-1 flex items-center gap-1.5 font-semibold"
+          title="Tra cứu tiến độ chỉnh ảnh & tải file hoàn thiện"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span>Tra cứu ảnh</span>
+        </button>
 
- <button
- onClick={() => scrollToSlide("S9")}
- className="transition-all cursor-pointer bg-[#F8F8F8] text-[#1A1A1A] hover:bg-[#EAEAEA] active:scale-95 text-[11px] font-bold block px-4 py-1.5 sm:px-5 sm:py-2 rounded-full font-sans tracking-wide"
- >
- Đặt lịch
- </button>
- </nav>
- </div>
- </header>
+        <button
+          onClick={() => scrollToSlide("S9")}
+          className="transition-all cursor-pointer bg-[#F8F8F8] text-[#1A1A1A] hover:bg-[#EAEAEA] active:scale-95 text-[11px] font-bold block px-4 py-1.5 sm:px-5 sm:py-2 rounded-full font-sans tracking-wide"
+        >
+          Đặt lịch
+        </button>
+      </nav>
+
+      {/* Mobile Right Action Cluster (Minimalist Split Navbar) */}
+      <div className="flex md:hidden items-center gap-2">
+        <button
+          onClick={() => setIsPhotoProgressOpen(true)}
+          className="p-2 rounded-full bg-white/5 border border-white/10 text-zinc-300 hover:text-white transition-all cursor-pointer"
+          title="Tra cứu ảnh"
+          aria-label="Tra cứu ảnh"
+        >
+          <Search className="w-4 h-4 text-[#B5945B]" />
+        </button>
+
+        <button
+          onClick={() => scrollToSlide("S9")}
+          className="px-3.5 py-1.5 rounded-full bg-[#F8F8F8] text-[#1A1A1A] font-bold text-xs tracking-wide shadow-sm active:scale-95 transition-all cursor-pointer"
+        >
+          Đặt lịch
+        </button>
+
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded-full bg-white/5 border border-white/10 text-zinc-200 hover:text-white transition-all cursor-pointer ml-0.5"
+          aria-label="Menu"
+        >
+          <Menu className="w-5 h-5 text-[#E5C17C]" />
+        </button>
+      </div>
+    </div>
+  </header>
+
+  {/* Mobile Liquid Glass Hamburger Menu Drawer */}
+  <AnimatePresence>
+    {isMobileMenuOpen && (
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-x-0 top-[calc(56px+max(env(safe-area-inset-top),0px))] z-30 md:hidden bg-[rgba(18,18,20,0.92)] backdrop-blur-[20px] border-b border-white/10 shadow-2xl py-6 px-6 flex flex-col gap-4 text-left"
+      >
+        <button
+          onClick={() => {
+            scrollToSlide("S8");
+            setIsMobileMenuOpen(false);
+          }}
+          className="py-2.5 text-sm font-medium text-zinc-300 hover:text-white border-b border-white/5 text-left transition-colors flex items-center justify-between"
+        >
+          <span>Bộ sưu tập</span>
+          <span className="text-xs text-zinc-500 font-mono">01</span>
+        </button>
+
+        <button
+          onClick={() => {
+            scrollToSlide("S7");
+            setIsMobileMenuOpen(false);
+          }}
+          className="py-2.5 text-sm font-medium text-zinc-300 hover:text-white border-b border-white/5 text-left transition-colors flex items-center justify-between"
+        >
+          <span>Giới thiệu</span>
+          <span className="text-xs text-zinc-500 font-mono">02</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setIsPhotoProgressOpen(true);
+            setIsMobileMenuOpen(false);
+          }}
+          className="py-2.5 text-sm font-semibold text-[#B5945B] hover:text-[#d4af37] border-b border-white/5 text-left transition-colors flex items-center justify-between"
+        >
+          <span>Tra cứu tiến độ ảnh</span>
+          <Search className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => {
+            scrollToSlide("S9");
+            setIsMobileMenuOpen(false);
+          }}
+          className="mt-2 w-full py-3 rounded-full bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider text-center transition-all shadow-lg active:scale-95 cursor-pointer"
+        >
+          Đặt lịch chụp ngay
+        </button>
+      </motion.div>
+    )}
+  </AnimatePresence>
+
 
  {/* 2. RIGHT-SIDE SCROLLSPY PROGRESS INDICATOR (FOCUS POINTS) */}
  <div className="fixed right-6 top-1/2 -translate-y-1/2 z-40 hidden xl:flex flex-col gap-5 items-center bg-graphite/45 backdrop-blur-md p-3 rounded-full border border-white/5 shadow-lg">
@@ -825,7 +1055,19 @@ export default function App() {
  </div>
 
  {/* 3. MAIN FULL SCREEN SLIDES CONTAINER */}
- <main className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12 pb-4 md:pb-6 relative">
+  <main className="w-full relative touch-action-pan-y">
+  {bookingConfirmationCode ? (
+    <div className="w-full min-h-screen py-10 px-4 md:px-8 relative z-20 max-w-4xl mx-auto">
+      <BookingConfirmationPage
+        bookingCode={bookingConfirmationCode}
+        onNavigateHome={() => {
+          window.history.pushState({}, "", "/");
+          setBookingConfirmationCode(null);
+        }}
+      />
+    </div>
+  ) : (
+    <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12 pb-4 md:pb-6 relative">
  {slides.map((slide, index) => {
  const isHero = index === 0;
  return (
@@ -897,151 +1139,147 @@ export default function App() {
  <SocialProof isAdminGlobal={verifiedAdminEditMode} />
  </section>
 
- </main>
+    </div>
+  )}
+  </main>
 
  {/* 4. FOOTER WITH INTEGRATED GLOBAL ADMINISTRATIVE SWITCH */}
  <footer className="w-full bg-zinc-950/20 backdrop-blur-md border-t border-white/5 pt-8 pb-[calc(1.25rem+env(safe-area-inset-bottom,16px))] md:pt-10 md:pb-8 text-center font-sans text-[12px] text-gray-500 leading-relaxed relative z-20">
  <div className="max-w-2xl mx-auto px-6 space-y-4">
  {/* Admin Switcher & Console Button at very bottom as requested */}
  {isVerifiedAdminLoggedIn && (
- <div className="border-b border-white/5 pb-4 flex flex-col items-center justify-center gap-2">
- <div className="flex flex-col items-center gap-3 py-2 w-full">
- {/* Unified Admin Control Bar - Clean, Modern & Intuitive */}
- <div className="flex items-center justify-center w-full relative px-2">
- <div className="flex items-center bg-zinc-950/90 backdrop-blur-2xl border border-white/10 p-1 sm:p-1.5 rounded-full shadow-2xl relative z-10 gap-1 sm:gap-2 max-w-full">
- 
- {/* 1. Nhóm Chế độ làm việc (Primary Mode Switcher) */}
- <div className="flex items-center bg-black/60 p-0.5 sm:p-1 rounded-full border border-white/5 shrink-0">
- <button
- type="button"
- onClick={() => setIsEditMode(false)}
- className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-xs transition-all flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap ${
- !isEditMode
- ?"bg-zinc-800 text-white shadow-sm font-semibold"
- :"text-zinc-400 hover:text-white"
- }`}
- title="Xem trước website như khách hàng bình thường"
- >
- <Eye className="w-3.5 h-3.5 shrink-0" />
- <span className="text-[11px] sm:text-xs">Xem trước</span>
- </button>
+  <div className="border-b border-white/5 pb-4 flex flex-col items-center justify-center gap-2">
+    <div className="flex flex-col items-center gap-3 py-2 w-full">
+      {/* Icon-only Liquid Glass Admin Dock */}
+      <div className="flex items-center justify-center w-full relative px-2">
+        <div className="flex items-center justify-between overflow-hidden bg-[rgba(18,18,20,0.75)] backdrop-blur-[20px] border border-[rgba(255,255,255,0.1)] px-3 py-1.5 rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.6)] relative z-10 gap-1 sm:gap-1.5 max-w-full">
+          
+          {/* 1. Nhóm Chế độ làm việc (Icon-only Mode Switcher) */}
+          <div className="flex items-center bg-black/60 p-0.5 rounded-full border border-white/5 shrink-0 gap-0.5">
+            <button
+              type="button"
+              onClick={() => setIsEditMode(false)}
+              className={`p-2 rounded-full text-xs transition-all flex items-center justify-center cursor-pointer select-none 
+                ${!isEditMode ? "bg-zinc-800 text-white shadow-sm font-semibold" : "text-zinc-400 hover:text-white hover:bg-white/10"}`}
+              title="Xem trước website như khách hàng"
+              aria-label="Xem trước website"
+            >
+              <Eye className="w-4 h-4 shrink-0" />
+            </button>
 
- <button
- type="button"
- onClick={() => {
- if (isVerifiedAdminLoggedIn) setIsEditMode(true);
- }}
- className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-xs transition-all flex items-center gap-1.5 cursor-pointer select-none whitespace-nowrap ${
- isEditMode
- ?"bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/25"
- :"text-zinc-400 hover:text-white"
- }`}
- title="Bật chế độ chỉnh sửa nội dung, ảnh và album"
- >
- <Settings className={`w-3.5 h-3.5 shrink-0 ${isEditMode ?"animate-[spin_4s_linear_infinite]":""}`} />
- <span className="text-[11px] sm:text-xs">Quản trị</span>
- </button>
- </div>
+            <button
+              type="button"
+              onClick={() => { if (isVerifiedAdminLoggedIn) setIsEditMode(true); }}
+              className={`p-2 rounded-full text-xs transition-all flex items-center justify-center cursor-pointer select-none 
+                ${isEditMode ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/25" : "text-zinc-400 hover:text-white hover:bg-white/10"}`}
+              title="Bật chế độ chỉnh sửa Quản trị"
+              aria-label="Quản trị"
+            >
+              <Settings className={`w-4 h-4 shrink-0 ${isEditMode ? "animate-[spin_4s_linear_infinite]" : ""}`} />
+            </button>
 
- {/* Subtle Divider */}
- <div className="w-[1px] h-4 bg-white/10 shrink-0" />
+            <button
+              type="button"
+              onClick={() => setIsIntroEditorOpen(true)}
+              className="p-2 rounded-full text-xs text-zinc-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center cursor-pointer select-none"
+              title="Cài đặt màn hình Intro điện ảnh"
+              aria-label="Cài đặt Intro"
+            >
+              <Sparkles className="w-4 h-4 text-[#B5945B] shrink-0" />
+            </button>
+          </div>
 
- {/* 2. Nhóm Giám sát & Phân tích (Analytics & Live Presence) - Tối ưu Icon & Số liệu */}
- <div className="flex items-center bg-white/5 p-0.5 rounded-full border border-white/5 shrink-0 gap-0.5">
- {/* Thống kê lượt xem */}
- <button
- type="button"
- onClick={() => setIsAnalyticsOpen(true)}
- className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs text-zinc-300 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
- title="Thống kê chi tiết lượt xem Portfolio"
- >
- <BarChart3 className="w-3.5 h-3.5 text-[#B5945B] shrink-0" />
- <span className="text-[11px] sm:text-xs font-semibold text-zinc-200">
- {formatViewCount(portfolioVisitorsCount)}
- </span>
- <span className="hidden md:inline text-[10px] text-zinc-400 font-normal">lượt</span>
- </button>
+          {/* Subtle Divider */}
+          <div className="w-[1px] h-4 bg-white/10 shrink-0" />
 
- {/* Khách trực tiếp */}
- <button
- type="button"
- onClick={() => setIsWidgetOpen(true)}
- className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-semibold text-emerald-400 hover:bg-emerald-500/15 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
- title="Khách đang trực tuyến trên website"
- >
- <span className="relative flex h-2 w-2 shrink-0">
- <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
- <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
- </span>
- <span className="text-[11px] sm:text-xs font-bold text-emerald-400">
- {activeCount}
- </span>
- <span className="hidden md:inline text-[10px] text-emerald-400/80 font-normal">online</span>
- </button>
- </div>
+          {/* 2. Nhóm Giám sát & Phân tích (Icon-only Stats with Live Pulse) */}
+          <div className="flex items-center bg-white/5 p-0.5 rounded-full border border-white/5 shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => setIsAnalyticsOpen(true)}
+              className="px-2.5 py-1.5 rounded-full text-xs text-zinc-300 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              title={`Thống kê: ${formatViewCount(portfolioVisitorsCount)} lượt xem`}
+              aria-label="Thống kê lượt xem"
+            >
+              <BarChart3 className="w-4 h-4 text-[#B5945B] shrink-0" />
+              <span className="text-[11px] font-bold text-zinc-200">
+                {formatViewCount(portfolioVisitorsCount)}
+              </span>
+            </button>
 
- {/* Subtle Divider */}
- <div className="w-[1px] h-4 bg-white/10 shrink-0" />
+            <button
+              type="button"
+              onClick={() => setIsWidgetOpen(true)}
+              className="relative p-2 rounded-full text-xs text-emerald-400 hover:bg-emerald-500/15 transition-all flex items-center justify-center cursor-pointer"
+              title={`Khách trực tuyến: ${activeCount} online`}
+              aria-label="Khách trực tuyến"
+            >
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+            </button>
+          </div>
 
- {/* 3. Nhóm Tiện ích & Tài khoản (Alerts, Profile & Logout) - Icon-first tinh gọn */}
- <div className="flex items-center gap-1 shrink-0">
- {/* Cảnh Báo / Thông Báo */}
- <button
- type="button"
- onClick={() => setIsNotificationCenterOpen(true)}
- className="relative p-1.5 sm:p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center cursor-pointer"
- title="Trung tâm cảnh báo & thông báo đẩy Admin"
- >
- <Bell className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${unreadCount > 0 ?"text-amber-400 animate-bounce":"text-zinc-400"}`} />
- {unreadCount > 0 && (
- <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white font-extrabold text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse shadow-sm">
- {unreadCount}
- </span>
- )}
- </button>
+          {/* Subtle Divider */}
+          <div className="w-[1px] h-4 bg-white/10 shrink-0" />
 
- {/* Admin Avatar */}
- <div
- className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 select-none overflow-hidden"
- title={`Admin: ${adminUser?.email ||"Quản trị viên"}`}
- >
- {adminUser?.photoURL ? (
- <img
- src={adminUser.photoURL}
- alt="Admin"
- className="w-full h-full object-cover rounded-full"
- referrerPolicy="no-referrer"
- />
- ) : (
- <span className="text-[#B5945B] font-bold text-[10px] sm:text-[11px] uppercase">
- {adminUser?.email?.[0] ||"A"}
- </span>
- )}
- </div>
+          {/* 3. Nhóm Tiện ích & Tài khoản (Alerts, Profile & Logout) */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsNotificationCenterOpen(true)}
+              className="relative p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center cursor-pointer"
+              title="Trung tâm cảnh báo & thông báo Admin"
+              aria-label="Thông báo"
+            >
+              <Bell className={`w-4 h-4 ${unreadCount > 0 ? "text-amber-400 animate-bounce" : "text-zinc-400"}`} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white font-extrabold text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse shadow-sm">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
 
- {/* Logout Button */}
- <button
- type="button"
- onClick={async () => {
- await handleAdminLogout();
- }}
- disabled={isLoggingOut}
- className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/5 hover:bg-red-500/20 border border-white/5 hover:border-red-500/30 text-zinc-400 hover:text-red-400 transition-all flex items-center justify-center disabled:opacity-50 shrink-0 cursor-pointer ml-0.5"
- title="Đăng xuất quyền quản trị"
- >
- {isLoggingOut ? (
- <div className="w-3 h-3 rounded-full border-2 border-red-500 border-t-transparent animate-spin"/>
- ) : (
- <LogOut className="w-3.5 h-3.5 translate-x-[-0.5px]"/>
- )}
- </button>
- </div>
+            <div
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 select-none overflow-hidden"
+              title={`Admin: ${adminUser?.email || "Quản trị viên"}`}
+            >
+              {adminUser?.photoURL ? (
+                <img
+                  src={adminUser.photoURL}
+                  alt="Admin"
+                  className="w-full h-full object-cover rounded-full"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="text-[#B5945B] font-bold text-[10px] sm:text-[11px] uppercase">
+                  {adminUser?.email?.[0] || "A"}
+                </span>
+              )}
+            </div>
 
- </div>
- </div>
- </div>
- </div>
- )}
+            <button
+              type="button"
+              onClick={async () => { await handleAdminLogout(); }}
+              disabled={isLoggingOut}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/5 hover:bg-red-500/20 border border-white/5 hover:border-red-500/30 text-zinc-400 hover:text-red-400 transition-all flex items-center justify-center disabled:opacity-50 shrink-0 cursor-pointer ml-0.5"
+              title="Đăng xuất quyền quản trị"
+              aria-label="Đăng xuất"
+            >
+              {isLoggingOut ? (
+                <div className="w-3 h-3 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
+              ) : (
+                <LogOut className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  )}
 
  <div className="flex flex-col items-center gap-3 py-1 mt-2 text-center">
  <p className="tracking-wide text-xs text-zinc-500 font-sans select-none">
@@ -1074,26 +1312,6 @@ export default function App() {
  </div>
  </footer>
 
- {/* Floating CTA Booking Button - fixed bottom-right aligned above chatbot */}
- <div className="fixed bottom-[calc(4.5rem+max(16px,env(safe-area-inset-bottom)))] sm:bottom-[calc(5.5rem+max(24px,env(safe-area-inset-bottom)))] right-4 sm:right-6 z-[60]">
- <motion.button
- whileHover={{ scale: 1.05, y: -2 }}
- whileTap={{ scale: 0.95 }}
- onClick={() => {
- const el = document.getElementById("S9");
- if (el) {
- el.scrollIntoView({ behavior: 'smooth' });
-                window.dispatchEvent(new CustomEvent('openBookingForm'));
-              }
-            }}
-            className="flex items-center gap-2 px-5 py-3.5 bg-white text-black hover:bg-zinc-200 font-bold text-sm tracking-wide rounded-full transition-all duration-300 shadow-lg cursor-pointer justify-center"
- style={{ animationDuration:"3s"}}
- >
- <CalendarRange className="w-4 h-4 text-zinc-950 shrink-0"/>
- <span className="hidden sm:inline-block">Đặt Lịch Ngay</span>
- <span className="sm:hidden text-[12px]">Đặt lịch</span>
- </motion.button>
- </div>
 
  {/* Chatbot siêu AI */}
  <React.Suspense fallback={null}>
@@ -1311,6 +1529,17 @@ export default function App() {
  }}
  initialBookingId={lookupBookingId}
  myBookingIds={myBookingIds}
+ />
+
+ <AdminIntroEditorModal
+ isOpen={isIntroEditorOpen}
+ onClose={() => setIsIntroEditorOpen(false)}
+ config={introConfig}
+ onSave={saveIntroConfig}
+ onPreview={() => {
+   setIsIntroComplete(false);
+ }}
+ showToast={(msg) => alert(msg)}
  />
  </div>
  );

@@ -12,6 +12,8 @@ import {
   Sparkles,
   PlusCircle,
   FileSpreadsheet,
+  MessageSquare,
+  Clock,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
@@ -226,48 +228,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="lg:col-span-5 flex flex-col gap-5 h-full">
-      {/* ADMIN CONSOLE TABS */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 bg-zinc-900/60 rounded-xl p-1 border border-white/5 shadow-inner relative w-full mb-2 z-10 shrink-0 gap-1">
-        <button
-          onClick={() => setAdminActiveTab("schedule")}
-          className={`min-h-[36px] rounded-lg text-[11px] font-sans font-medium uppercase tracking-wide transition-all ${
-            adminActiveTab === "schedule"
-              ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/20 font-bold"
-              : "text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer"
-          }`}
-        >
-          LỊCH TRÌNH
-        </button>
-        <button
-          onClick={() => setAdminActiveTab("chat")}
-          className={`min-h-[36px] rounded-lg text-[11px] font-sans font-medium uppercase tracking-wide transition-all ${
-            adminActiveTab === "chat"
-              ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/20 font-bold"
-              : "text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer"
-          }`}
-        >
-          TIN NHẮN
-        </button>
-        <button
-          onClick={() => setAdminActiveTab("school_sync")}
-          className={`min-h-[36px] rounded-lg text-[11px] font-sans font-medium uppercase tracking-wide transition-all ${
-            adminActiveTab === "school_sync"
-              ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/20 font-bold"
-              : "text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer"
-          }`}
-        >
-          CA LÀM
-        </button>
-        <button
-          onClick={() => setAdminActiveTab("availability_config")}
-          className={`min-h-[36px] rounded-lg text-[11px] font-sans font-medium uppercase tracking-wide transition-all ${
-            adminActiveTab === "availability_config"
-              ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/20 font-bold"
-              : "text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer"
-          }`}
-        >
-          SLOT
-        </button>
+      {/* MINIMALIST ICON-ONLY ADMIN DOCK WITH TOOLTIPS */}
+      <div className="flex items-center justify-between bg-zinc-950/80 liquid-glass p-1.5 rounded-2xl border border-white/10 shadow-2xl relative w-full mb-2 z-20 shrink-0 gap-1.5">
+        {/* Navigation Tabs (Icon-only with Tooltip) */}
+        <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+          {/* 1. Lịch trình */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setAdminActiveTab("schedule")}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                adminActiveTab === "schedule"
+                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+              }`}
+              aria-label="Lịch trình đặt lịch & Khách hàng"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Lịch trình đặt lịch
+            </div>
+          </div>
+
+          {/* 2. Tin nhắn */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setAdminActiveTab("chat")}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                adminActiveTab === "chat"
+                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+              }`}
+              aria-label="Tin nhắn trực tuyến (Live Chat)"
+            >
+              <MessageSquare className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Tin nhắn trực tiếp
+            </div>
+          </div>
+
+          {/* 3. Ca làm */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setAdminActiveTab("school_sync")}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                adminActiveTab === "school_sync"
+                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+              }`}
+              aria-label="Lịch học & Ca làm FAP"
+            >
+              <Clock className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Ca làm & Lịch học
+            </div>
+          </div>
+
+          {/* 4. Slot */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setAdminActiveTab("availability_config")}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                adminActiveTab === "availability_config"
+                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+              }`}
+              aria-label="Quản lý slot & Khả dụng"
+            >
+              <Sliders className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Cấu hình Slot & Ngày
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Action Icons with Tooltips */}
+        <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+          {/* Thêm booking */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="w-9 h-9 rounded-lg bg-[#B5945B]/20 hover:bg-[#B5945B] text-[#E5C17C] hover:text-zinc-950 border border-[#B5945B]/30 transition-all flex items-center justify-center cursor-pointer shadow-sm"
+              aria-label="Tạo đơn đặt lịch mới"
+            >
+              <PlusCircle className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Tạo đơn đặt lịch mới
+            </div>
+          </div>
+
+          {/* Mở lịch */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={onOpenCalendar}
+              className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-all flex items-center justify-center cursor-pointer"
+              aria-label="Mở lịch biểu"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Mở lịch biểu
+            </div>
+          </div>
+
+          {/* Đồng bộ Google Sheets */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={handleSyncAllToGoogleSheet}
+              disabled={isSyncingSheets}
+              className="w-9 h-9 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+              aria-label="Đồng bộ Google Sheets"
+            >
+              <FileSpreadsheet className={`w-4 h-4 ${isSyncingSheets ? "animate-spin" : ""}`} />
+            </button>
+            <div className="absolute top-full mt-2 right-0 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
+              Đồng bộ Google Sheets
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* HIDDEN DIAGNOSTIC PANEL FOR PUBLIC BOOKING BASE URL & RECENT BOOKINGS */}

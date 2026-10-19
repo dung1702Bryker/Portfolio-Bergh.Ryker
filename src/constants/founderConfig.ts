@@ -40,7 +40,12 @@ export function isUnsplashUrl(url: string | undefined | null): boolean {
 export function isValidImageUrl(url: string | undefined | null): boolean {
   if (!url || typeof url !== "string") return false;
   const trimmed = url.trim();
-  if (trimmed.startsWith("[") || trimmed.includes("DÁN_LINK_ẢNH") || isUnsplashUrl(trimmed)) {
+  if (
+    trimmed.startsWith("[") ||
+    trimmed.includes("DÁN_LINK") ||
+    trimmed.includes("DÁN_LINK_ẢNH") ||
+    isUnsplashUrl(trimmed)
+  ) {
     return false;
   }
   return trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("/");
@@ -50,7 +55,7 @@ export function isValidImageUrl(url: string | undefined | null): boolean {
  * LINK ẢNH CHÂN DUNG FOUNDER & PHOTOGRAPHER - NGUYỄN ĐỨC DŨNG
  * Dán link Google Drive hoặc URL ảnh của bạn vào đây:
  */
-export const RAW_FOUNDER_PORTRAIT_URL = "[DÁN_LINK_ẢNH_CỦA_BẠN_VÀO_ĐÂY]";
+export const RAW_FOUNDER_PORTRAIT_URL = "[DÁN_LINK_DRIVE_ẢNH_CHÂN_DUNG_CỦA_BẠN_VÀO_ĐÂY]";
 
 /**
  * Hằng số DEFAULT_FOUNDER_PORTRAIT chuẩn hóa (sz=w1200 nếu là Google Drive)

@@ -3,8 +3,6 @@ const founderPortrait = DEFAULT_FOUNDER_PORTRAIT;
 import sonyCamera from "../assets/images/regenerated_image_1779884047451.jpg";
 import sigmaLens from "../assets/images/regenerated_image_1779884713797.jpg";
 import godoxFlash from "../assets/images/regenerated_image_1779933195915.webp";
-const highSchoolPrimary = "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1000";
-const aoDaiPortrait = "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=1000";
 import emptySchoolYard from "../assets/images/regenerated_image_1779928721895.png";
 
 const contentData = {
@@ -29,28 +27,7 @@ const contentData = {
         "Concept độc bản theo tính cách | Unique concept tailored to your personality",
         "Màu sắc điện ảnh tinh tế | Sophisticated cinematic color grading"
       ],
-      "images": [
-        {
-          "src": highSchoolPrimary,
-          "alt": "Highschool Group Editorial",
-          "type": "Primary"
-        },
-        {
-          "src": aoDaiPortrait,
-          "alt": "Ao Dai Portrait",
-          "type": "Vertical Right"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1516627145497-ae6968895b74?auto=format&fit=crop&q=80&w=800",
-          "alt": "Candid dynamic shot",
-          "type": "Square Bottom"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800",
-          "alt": "Macro Detail school badge",
-          "type": "Detail"
-        }
-      ]
+      "images": []
     },
     {
       "id": "S6",
@@ -63,23 +40,7 @@ const contentData = {
         "Bắt trọn không khí sự kiện & âm nhạc | Capturing event & music vibes",
         "Phong cách phóng sự/tài liệu (Documentary) | True documentary style"
       ],
-      "images": [
-        {
-          "src": "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=1200",
-          "alt": "Prom Night Flash Drag",
-          "type": "Top Split"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=800",
-          "alt": "Campfire Warm Documentary",
-          "type": "Bottom Left Split"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1484820540004-14229fe36ca4?auto=format&fit=crop&q=80&w=800",
-          "alt": "Deep Emotion Documentary",
-          "type": "Bottom Right Split"
-        }
-      ]
+      "images": []
     },
     {
       "id": "S8",
@@ -92,28 +53,7 @@ const contentData = {
         "Định hướng thời trang cao cấp & phá cách | High-end fashion editorial direction",
         "Màu sắc điện ảnh & nghệ thuật | Cinematic & artistic aesthetics"
       ],
-      "images": [
-        {
-          "src": "https://images.unsplash.com/photo-1541534401786-2077efa33b15?auto=format&fit=crop&q=80&w=1200",
-          "alt": "Creative freedom portrait",
-          "type": "Primary"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=800",
-          "alt": "Streetwear group",
-          "type": "Vertical Right"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=800",
-          "alt": "Event dynamic",
-          "type": "Square Bottom"
-        },
-        {
-          "src": "https://images.unsplash.com/photo-1551855350-13f59ed4111f?auto=format&fit=crop&q=80&w=800",
-          "alt": "Detail texture",
-          "type": "Detail"
-        }
-      ]
+      "images": []
     },
     {
       "id": "S9",

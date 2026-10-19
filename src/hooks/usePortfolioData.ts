@@ -92,10 +92,10 @@ export function usePortfolioData(
   defaultSeeds?: CustomCollection[],
   isAdminGlobal?: boolean,
 ) {
-  const [collectionsData, setCollectionsData] = useState<CustomCollection[]>(() => {
-    return defaultSeeds && defaultSeeds.length > 0 ? defaultSeeds : [];
-  });
-  const [loading, setLoading] = useState(false);
+  // Quy tắc 1: Khởi tạo mảng rỗng [] kèm isLoadingData = true, cấm gán ảnh mẫu Unsplash lúc chờ
+  const [collectionsData, setCollectionsData] = useState<CustomCollection[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   const photoUnsubsRef = useRef<{ [albumId: string]: () => void }>({});
 
@@ -147,8 +147,14 @@ export function usePortfolioData(
             }
           }
           if (defaultSeeds && defaultSeeds.length > 0) {
-            setCollectionsData(defaultSeeds);
+            const cleanSeeds = defaultSeeds.map(c => ({
+              ...c,
+              coverImageSrc: c.coverImageSrc && !c.coverImageSrc.includes("unsplash.com") ? c.coverImageSrc : "",
+              images: (c.images || []).filter(img => !img.src.includes("unsplash.com")),
+            }));
+            setCollectionsData(cleanSeeds);
           }
+          setIsLoadingData(false);
           setLoading(false);
           return;
         }
@@ -202,6 +208,7 @@ export function usePortfolioData(
           });
           return newState;
         });
+        setIsLoadingData(false);
         setLoading(false);
 
         // Cleanup stale listeners
@@ -510,6 +517,7 @@ export function usePortfolioData(
   return {
     collectionsData: resolvedCollections,
     loading,
+    isLoadingData,
     addAlbum,
     updateAlbumMeta,
     addPhotos,

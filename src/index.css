@@ -85,175 +85,66 @@
 }
 
 @layer utilities {
-  /* Apple VisionOS / macOS Sequoia Ultra-Transparent Liquid Glass System */
-  .liquid-glass {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.01) 50%,
-      rgba(255, 255, 255, 0.03) 100%
-    ), rgba(4, 4, 8, 0.09) !important;
-    backdrop-filter: blur(26px) saturate(200%) brightness(103%) !important;
-    -webkit-backdrop-filter: blur(26px) saturate(200%) brightness(103%) !important;
-    border: 1px solid transparent !important;
+
+  /* Border-Free & Shadow-Free Clean Liquid Glass Standards */
+  .liquid-glass,
+  .liquid-glass-pure,
+  .liquid-glass-header,
+  .liquid-glass-card,
+  .liquid-glass-dock,
+  .liquid-glass-modal,
+  .liquid-glass-dark,
+  .liquid-glass-pill,
+  .liquid-glass-input {
+    position: relative !important;
+    overflow: hidden !important;
+    border-radius: 1.5rem !important;
+    background: rgba(18, 18, 20, 0.45) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    border: none !important;
     box-shadow: none !important;
     transform: translateZ(0);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
   }
-
-  /* Pure Ultra-Transparent Liquid Glass - Khung viền trong suốt hoàn toàn, Không đổ bóng */
-  .liquid-glass-pure {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.05) 0%,
-      rgba(255, 255, 255, 0.01) 50%,
-      rgba(255, 255, 255, 0.02) 100%
-    ), rgba(3, 3, 6, 0.08) !important;
-    backdrop-filter: blur(28px) saturate(200%) brightness(103%) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(103%) !important;
-    border: 1px solid transparent !important;
-    box-shadow: none !important;
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
-  .liquid-glass-header {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.01) 100%
-    ), rgba(4, 4, 8, 0.10) !important;
-    backdrop-filter: blur(24px) saturate(210%) brightness(103%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(210%) brightness(103%) !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-    box-shadow: none !important;
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
-  .liquid-glass-card {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(255, 255, 255, 0.01) 60%,
-      rgba(255, 255, 255, 0.025) 100%
-    ), rgba(5, 5, 10, 0.09) !important;
-    backdrop-filter: blur(24px) saturate(210%) brightness(104%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(210%) brightness(104%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    box-shadow: none !important;
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .liquid-glass-card:hover {
-    border-color: rgba(255, 255, 255, 0.16) !important;
-    box-shadow: none !important;
-  }
-
-  .liquid-glass-dock {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.10) 0%,
-      rgba(255, 255, 255, 0.02) 100%
-    ), rgba(6, 6, 12, 0.16) !important;
-    backdrop-filter: blur(26px) saturate(210%) brightness(105%) !important;
-    -webkit-backdrop-filter: blur(26px) saturate(210%) brightness(105%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    box-shadow: none !important;
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
+  
+  /* Input specific override */
   .liquid-glass-input {
     background: rgba(255, 255, 255, 0.05) !important;
-    backdrop-filter: blur(22px) saturate(190%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(190%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
-    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
     color: #ffffff !important;
-    transform: translateZ(0);
+  }
+
+  .liquid-glass-input::placeholder {
+    color: rgba(255, 255, 255, 0.6) !important;
+    opacity: 1;
   }
 
   .liquid-glass-input:focus {
     background: rgba(255, 255, 255, 0.08) !important;
-    border-color: #B5945B !important;
-    box-shadow: none !important;
+    border-color: rgba(202, 138, 4, 0.5) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(202, 138, 4, 0.3) !important;
     outline: none !important;
   }
 
-  .liquid-glass-btn {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.14) 0%,
-      rgba(255, 255, 255, 0.035) 100%
-    ) !important;
-    backdrop-filter: blur(22px) saturate(200%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(200%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+
+  /* Remove sheen */
+  .liquid-glass::before,
+  .liquid-glass-pure::before,
+  .liquid-glass-header::before,
+  .liquid-glass-card::before,
+  .liquid-glass-dock::before,
+  .liquid-glass-modal::before,
+  .liquid-glass-dark::before,
+  .liquid-glass-pill::before {
+    display: none !important;
+  }
+
+  .liquid-glass-card:hover {
+    border: none !important;
     box-shadow: none !important;
-    transform: translateZ(0);
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .liquid-glass-btn:hover {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.22) 0%,
-      rgba(255, 255, 255, 0.07) 100%
-    ) !important;
-    border-color: rgba(255, 255, 255, 0.32) !important;
-    box-shadow: none !important;
-  }
-
-  .liquid-glass-gold-btn {
-    background: linear-gradient(
-      180deg,
-      #f8e5c4 0%,
-      #deb677 50%,
-      #b5945b 100%
-    ) !important;
-    box-shadow: none !important;
-    color: #08080a !important;
-    transform: translateZ(0);
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .liquid-glass-gold-btn:hover {
-    box-shadow: none !important;
-    filter: brightness(1.08);
-  }
-
-  .liquid-glass-dark {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.06) 0%,
-      rgba(0, 0, 0, 0.12) 100%
-    ), rgba(6, 6, 10, 0.25) !important;
-    backdrop-filter: blur(28px) saturate(210%) brightness(103%) !important;
-    -webkit-backdrop-filter: blur(28px) saturate(210%) brightness(103%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 
-      inset 0 1.5px 0 0 rgba(255, 255, 255, 0.20),
-      0 18px 44px rgba(0, 0, 0, 0.35) !important;
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
-  .liquid-glass-pill {
-    background: rgba(255, 255, 255, 0.07) !important;
-    backdrop-filter: blur(22px) saturate(200%) brightness(104%) !important;
-    -webkit-backdrop-filter: blur(22px) saturate(200%) brightness(104%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.14) !important;
-    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.22) !important;
-    transform: translateZ(0);
   }
 
   /* Clean, Sharp Typography - No Blurry Shadows (Bỏ đổ bóng chữ) */
@@ -303,7 +194,7 @@ body.lightbox-active .fixed:not(.z-\[9999\]):not(.z-50):not(.z-\[99999\]):not(.z
 /* Hide AI Studio injected debug panel */
 [title*="debug panel" i], [aria-label*="debug panel" i], #aistudio-debug-panel {
   display: none !important;
-}
+  }
 
 /* Lenis smooth scroll core styles */
 html.lenis, html.lenis body {
@@ -322,3 +213,57 @@ html.lenis, html.lenis body {
   pointer-events: none;
 }
 
+/* Luxury Dark Shimmer Skeleton for Bergh.Ryker */
+@keyframes luxuryShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.luxury-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: #0E0E12;
+  border: 1px solid rgba(181, 148, 91, 0.12);
+}
+
+.luxury-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(181, 148, 91, 0.05) 25%,
+    rgba(229, 193, 124, 0.14) 50%,
+    rgba(181, 148, 91, 0.05) 75%,
+    transparent 100%
+  );
+  animation: luxuryShimmer 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+
+  @media (max-width: 768px) {
+    .liquid-glass,
+    .liquid-glass-pure,
+    .liquid-glass-header,
+    .liquid-glass-card,
+    .liquid-glass-dock,
+    .liquid-glass-modal,
+    .liquid-glass-dark,
+    .liquid-glass-pill {
+      backdrop-filter: blur(10px) saturate(140%) !important;
+      -webkit-backdrop-filter: blur(10px) saturate(140%) !important;
+    }
+  }
+
+.touch-action-pan-y {
+  touch-action: pan-y;
+}

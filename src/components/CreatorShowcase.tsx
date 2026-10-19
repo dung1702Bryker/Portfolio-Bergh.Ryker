@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { PortfolioSkeleton } from "./PortfolioSkeleton";
 import { Award, Camera, Settings, X, Save } from "lucide-react";
 import { SlideData } from "../types";
 import { compressImage } from "../utils/imageCompressor";
@@ -95,6 +96,11 @@ export const CreatorShowcase: React.FC<CreatorShowcaseProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 py-6 sm:py-12 liquid-glass rounded-2xl sm:rounded-3xl overflow-hidden shadow-none relative border border-transparent">
+      {!imgLoaded && (
+        <div className="absolute inset-0 z-0">
+          <PortfolioSkeleton />
+        </div>
+      )}
       {/* GLOBAL ADMIN DASHBOARD for Slide 7 specific details */}
       {isAdminGlobal && (
         <>
@@ -221,11 +227,11 @@ export const CreatorShowcase: React.FC<CreatorShowcaseProps> = ({
             {isValidPortrait && !imgError ? (
               <>
                 {!imgLoaded && (
-                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center bg-zinc-950/80">
-                    <div className="w-12 h-12 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/30 flex items-center justify-center text-[#B5945B] mb-3 animate-pulse">
-                      <Camera className="w-6 h-6" />
+                  <div className="luxury-shimmer absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/30 flex items-center justify-center text-[#E5C17C] mb-3 animate-pulse">
+                      <Camera className="w-7 h-7" />
                     </div>
-                    <span className="text-[11px] font-mono uppercase tracking-widest text-zinc-400">
+                    <span className="text-[11px] font-sans font-medium uppercase tracking-widest text-[#E5C17C]/70">
                       Đang tải ảnh chân dung...
                     </span>
                   </div>
@@ -241,12 +247,12 @@ export const CreatorShowcase: React.FC<CreatorShowcaseProps> = ({
                     setImgError(false);
                   }}
                   onError={() => {
-                    // Tuyệt đối không fallback về ảnh Unsplash! Chỉ hiển thị nền tối thương hiệu studio
+                    // Tuyệt đối không fallback về ảnh Unsplash!
                     setImgError(true);
                     setImgLoaded(true);
                   }}
                   style={{ objectPosition: slide.images?.[0]?.objectPosition || "center" }}
-                  className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 relative z-10 ${
+                  className={`w-full h-full object-cover transition-all duration-700 ease-out group-hover:scale-105 relative z-10 ${
                     imgLoaded ? "opacity-100" : "opacity-0"
                   }`}
                 />

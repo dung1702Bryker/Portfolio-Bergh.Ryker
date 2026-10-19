@@ -201,7 +201,7 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  initial="initial"
  animate="animate"
  exit="exit"
- className="w-full liquid-glass border border-white/10 p-4 xs:p-6 sm:p-10 rounded-2xl sm:rounded-3xl relative flex flex-col justify-between gap-5 sm:gap-6 cursor-grab active:cursor-grabbing shadow-none"
+ className="w-full liquid-glass border-0 p-4 xs:p-6 sm:p-10 rounded-2xl sm:rounded-3xl relative flex flex-col justify-between gap-5 sm:gap-6 cursor-grab active:cursor-grabbing shadow-none"
  drag="x"
  dragConstraints={{ left: 0, right: 0 }}
  dragElastic={0.3}
@@ -403,7 +403,7 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  value={author}
  onChange={(e) => setAuthor(e.target.value)}
  placeholder="VD: Minh Anh"
- className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all font-medium"
+ className="w-full bg-white/5 border-0 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all font-medium"
  />
  </div>
  <div>
@@ -416,7 +416,7 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  value={role}
  onChange={(e) => setRole(e.target.value)}
  placeholder="VD: Lớp 12A1 Chu Văn An"
- className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all font-medium"
+ className="w-full bg-white/5 border-0 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all font-medium"
  />
  </div>
  <div>
@@ -429,7 +429,7 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  value={content}
  onChange={(e) => setContent(e.target.value)}
  placeholder="Chia sẻ trải nghiệm chụp ảnh của bạn..."
- className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all resize-none font-medium"
+ className="w-full bg-white/5 border-0 rounded-md px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#B5945B]/50 focus:ring-1 focus:ring-[#B5945B]/50 transition-all resize-none font-medium"
  />
  </div>
  <div className="pt-2">

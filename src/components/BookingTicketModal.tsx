@@ -399,7 +399,7 @@ Cảm ơn bạn đã tin chọn Bergh.Ryker Studio! Hẹn gặp bạn tại bu�
         </div>
 
         {/* Modal Body: Ticket Preview */}
-        <div className="p-4 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-4 max-h-[70vh] overflow-y-auto overscroll-contain">
           {/* Card Visual Preview */}
           <div
             ref={ticketCardRef}

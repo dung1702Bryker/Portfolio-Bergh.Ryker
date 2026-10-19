@@ -1,6 +1,14 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User } from "firebase/auth";
-import { getFirestore, doc, getDocFromServer, setLogLevel } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer,
+  setLogLevel
+} from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Silence internal Firestore SDK debug logs to prevent console pollution
@@ -34,7 +42,20 @@ if (typeof console !== "undefined" && console.error) {
 const app = initializeApp(firebaseConfig);
 
 // CRITICAL: The app will break without this line
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || "ai-studio-01acd3e7-5d2e-492d-a9cc-c46484de9c60");
+// Enable offline persistent cache (IndexedDB) for instant load on 4G / offline
+const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || "ai-studio-01acd3e7-5d2e-492d-a9cc-c46484de9c60";
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  }, firestoreDbId);
+} catch (_err) {
+  firestoreInstance = getFirestore(app, firestoreDbId);
+}
+
+export const db = firestoreInstance;
 export const auth = getAuth();
 
 /**

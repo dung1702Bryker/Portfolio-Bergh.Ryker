@@ -45,6 +45,7 @@ import {
   SlidersHorizontal,
   LayoutGrid,
 } from "lucide-react";
+import { PortfolioSkeleton } from "./PortfolioSkeleton";
 const GoogleDrivePicker = React.lazy(() =>
   import("./GoogleDrivePicker").then((m) => ({ default: m.GoogleDrivePicker }))
 );
@@ -162,527 +163,10 @@ interface CustomCollection {
   eventType?: string;
 }
 
-const DEFAULT_COLLECTIONS: CustomCollection[] = [
-  {
-    id: "col-1",
-    title: "Thanh Xuân - Như Quỳnh - THPT Trần Phú",
-    subtitle: "Kỷ Yếu THPT & Cấp 3",
-    year: "2025",
-    eventType: "Kỷ yếu THPT & Cấp 3",
-    body: "Những khung hình ngập tràn ánh nắng hoàng hôn sân trường, tà áo dài bay trong gió và nụ cười vô tư nhất tuổi 18. Phong cách Youth Editorial mang đến nguồn năng lượng tươi sáng, trong trẻo nhưng vẫn đậm chất thơ của lứa tuổi học trò.",
-    coverImageSrc: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1000",
-    driveLink:
-      "https://drive.google.com/drive/folders/1A_z_example_chuvanaan_12a1",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1000",
-        alt: "Golden Hour - Ánh Sáng Tự Nhiên",
-        title: "Mở Đầu Câu Chuyện",
-        focal: "35mm F/2.0",
-        iso: "320",
-        desc: "Thanh Xuân - Như Quỳnh - THPT Trần Phú. Bức ảnh ở độ phân giải gốc siêu nét.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=1000",
-        alt: "Han Hoang - THPT Quang Hạ",
-        title: "Cảm Xúc Tự Nhiên",
-        focal: "85mm F/1.4",
-        iso: "100",
-        desc: "Ánh sáng tự nhiên buổi chiều tản lối qua hàng cây sân trường...",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1516627145497-ae6968895b74?auto=format&fit=crop&q=80&w=800",
-        alt: "Minh Anh - THCS Ka Long",
-        title: "Nét Đẹp Tuổi Học Trò",
-        focal: "50mm F/1.8",
-        iso: "400",
-        desc: "Bắt trọn nụ cười rạng rỡ tự nhiên nhất của nhóm bạn thân sau giờ chào cờ.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800",
-        alt: "Khánh Khắc Đất Gió",
-        title: "Khoảnh Khắc Đất Gió",
-        focal: "90mm Macro F/2.8",
-        iso: "200",
-        desc: "Chi tiết thêu tỉ mỉ trên vai áo đồng phục trường THPT, nét lưu dấu kỷ niệm.",
-      },
-    ],
-  },
-  {
-    id: "col-2",
-    title: "Kỷ Yếu Chuyên Hà Nội - Amsterdam",
-    subtitle: "Mùa Nắng Cuối Cùng",
-    year: "2025",
-    eventType: "Cử nhân & Đại học",
-    body: "Dự án lưu giữ thanh xuân và tinh thần đam mê tột độ cùng các thế hệ học sinh chuyên Hà Nội - Amsterdam. Trải nghiệm concept cử nhân kịch tính, nghệ thuật đầy cảm xúc chân thành.",
-    coverImageSrc: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "https://drive.google.com/drive/folders/1B_z_example_ams_shoot",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
-        alt: "Graduation Moment",
-        title: "Nữ Sinh Cử Nhân",
-        focal: "50mm F/1.2",
-        iso: "100",
-        desc: "Ánh nhìn đầy quyết tâm và nụ cười rạng ngời ngày nhận bằng tốt nghiệp.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800",
-        alt: "Premium Portrait",
-        title: "Chân Dung Cử Nhân Nam",
-        focal: "85mm F/1.4",
-        iso: "160",
-        desc: "Khoảnh khắc trầm ngâm trưởng thành nhưng đầy tự hào và khí chất.",
-      },
-    ],
-  },
-  {
-    id: "col-3",
-    title: "Pre-Graduation THPT Chuyên Ngoại Ngữ",
-    subtitle: "Áo Dài & Giảng Đường Xanh",
-    year: "2026",
-    eventType: "Pre-Graduation & Áo dài",
-    body: "Bộ ảnh Pre-Graduation tôn vinh nét đẹp truyền thống của tà áo dài trắng tinh khôi hòa cùng cảnh sắc rợp bóng cây xanh của khuôn viên trường chuyên ngữ.",
-    coverImageSrc: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=1000",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=1000",
-        alt: "Ao Dai Pre Grad",
-        title: "Áo Dài Dưới Tán Cây",
-        focal: "85mm F/1.4",
-        iso: "100",
-        desc: "Nụ cười hồn nhiên của các nữ sinh trong buổi chụp Pre-Graduation trước ngày thi.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=800",
-        alt: "School steps portrait",
-        title: "Bậc Thềm Kỷ Niệm",
-        focal: "50mm F/1.8",
-        iso: "200",
-        desc: "Góc cầu thang quen thuộc nơi lưu giữ hàng ngàn kỷ niệm cùng bè bạn.",
-      },
-    ],
-  },
-  {
-    id: "col-4",
-    title: "Kỷ Yếu THPT Phan Đình Phùng 12D3",
-    subtitle: "Mùa Hoa Sữa & Ký Ức 18",
-    year: "2024",
-    eventType: "Kỷ yếu THPT & Cấp 3",
-    body: "Phan Đình Phùng cổ kính với những hàng cây rợp bóng, nắng vàng xuyên qua kẽ lá và những trang lưu bút nghẹn ngào cảm xúc của tuổi 18 trưởng thành.",
-    coverImageSrc: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=1000",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=1000",
-        alt: "Phan Dinh Phung Group",
-        title: "Sân Trường Ngập Nắng",
-        focal: "35mm F/1.4",
-        iso: "160",
-        desc: "Cả tập thể lớp cùng nắm tay sải bước trên con đường rải đầy lá vàng.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&q=80&w=800",
-        alt: "Friendship moments",
-        title: "Bạn Thân & Áo Trắng",
-        focal: "85mm F/1.8",
-        iso: "250",
-        desc: "Khoảnh khắc tự nhiên không gượng gạo của đôi bạn thân 3 năm chung bàn.",
-      },
-    ],
-  },
-  {
-    id: "col-5",
-    title: "Kỷ Yếu THPT Kim Liên Khối 12",
-    subtitle: "Tone Phim Retro & Nụ Cười Tuổi Học Trò",
-    year: "2024",
-    eventType: "Kỷ yếu THPT & Cấp 3",
-    body: "Sử dụng tông màu film hoài niệm thập niên 90 mang đến cảm giác ấm áp, chân thực như một cuộn phim nhựa ghi lại thời học sinh tươi đẹp nhất.",
-    coverImageSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=1000",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=1000",
-        alt: "Kim Lien Highschool",
-        title: "Tiếng Cười Giòn Tan",
-        focal: "28mm F/2.8",
-        iso: "400",
-        desc: "Những khoảnh khắc nô đùa bất tận trước giờ chia tay mái trường Kim Liên.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1519766304817-4f37bda74a27?auto=format&fit=crop&q=80&w=800",
-        alt: "Retro Classroom",
-        title: "Lớp Học Chiều Tà",
-        focal: "35mm F/2.0",
-        iso: "320",
-        desc: "Bảng đen, phấn trắng và ánh nắng chiều hoàng hôn rọi sáng những ước mơ.",
-      },
-    ],
-  },
-  {
-    id: "col-6",
-    title: "Lễ Bế Giảng & Tri Ân THPT Việt Đức",
-    subtitle: "Thời Khắc Chia Tay & Ước Mơ Bay Xa",
-    year: "2025",
-    eventType: "Lễ Tri ân & Bế giảng",
-    body: "Thời khắc bế giảng thiêng liêng, những cái ôm siết chặt, giọt nước mắt tri ân thầy cô và những quả bóng bay mang theo ước mơ bay cao vào bầu trời tương lai.",
-    coverImageSrc: "https://images.unsplash.com/photo-1525921429624-479b6a26d84d?auto=format&fit=crop&q=80&w=1000",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1525921429624-479b6a26d84d?auto=format&fit=crop&q=80&w=1000",
-        alt: "Viet Đức Graduation",
-        title: "Bóng Bay Ước Mơ",
-        focal: "50mm F/1.4",
-        iso: "100",
-        desc: "Những chùm bóng bay rực rỡ được thả lên bầu trời trong ngày lễ bế giảng.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&q=80&w=800",
-        alt: "Emotional Farewell",
-        title: "Cái Ôm Tri Ân",
-        focal: "85mm F/1.4",
-        iso: "200",
-        desc: "Khoảnh khắc nghẹn ngào lưu dấu tình bạn và lòng biết ơn sâu sắc.",
-      },
-    ],
-  },
-];
-
-const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
-  {
-    id: "prom-col-1",
-    title: "TEDx MPV Hanoi",
-    subtitle: "Prom & Sự Kiện",
-    year: "2025",
-    eventType: "Prom & Sự kiện",
-    body: "Từ lễ khai giảng trang nghiêm, những đêm Prom bùng nổ đến hội trại gắn kết. Hướng tiếp cận Warm Documentary giúp Bergh.Ryker hòa mình vào đám đông, nắm bắt trọn vẹn bầu không khí và những khoảnh khắc bùng nổ nhất mà không làm gián đoạn cuộc vui.",
-    coverImageSrc: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "https://drive.google.com/drive/folders/1Prom_example_link",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=1200",
-        alt: "Prom Night Flash Drag",
-        title: "Bùng Nổ Sân Khấu",
-        focal: "24mm F/2.8",
-        iso: "800",
-        desc: "Ánh sáng rực rỡ và nhịp điệu cuồng nhiệt của đêm Prom Night.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=800",
-        alt: "Campfire Warm Documentary",
-        title: "Lửa Trại Ấm Áp",
-        focal: "35mm F/1.4",
-        iso: "1600",
-        desc: "Những gương mặt rạng rỡ bên ánh lửa trại bập bùng đêm ngoại khóa.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1484820540004-14229fe36ca4?auto=format&fit=crop&q=80&w=800",
-        alt: "Deep Emotion Documentary",
-        title: "Nốt Trầm Cảm Xúc",
-        focal: "50mm F/1.8",
-        iso: "400",
-        desc: "Khoảnh khắc sâu lắng lắng đọng cảm xúc của những người bạn thân thương.",
-      },
-    ],
-  },
-  {
-    id: "prom-col-2",
-    title: "Sự Kiện Khai Giảng & Tri Ân",
-    subtitle: "Kỷ Niệm Ngày Tựu Trường",
-    year: "2024",
-    eventType: "Lễ Khai giảng & Tri ân",
-    body: "Lễ khai giảng trang nghiêm với cờ hoa khoe sắc dưới sân trường ngập nắng, những giọt nước mắt nghẹn ngào ngày tri ân thầy cô trước chặng đường mới.",
-    coverImageSrc: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "https://drive.google.com/drive/folders/2Prom_example_link",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
-        alt: "Opening Ceremony",
-        title: "Nắng Sớm Sân Trường",
-        focal: "50mm F/1.4",
-        iso: "100",
-        desc: "Những tà áo dài trắng thướt tha hòa cùng sắc nắng tinh khôi của buổi sáng tựu trường.",
-      },
-    ],
-  },
-  {
-    id: "prom-col-3",
-    title: "Midnight Masquerade Prom 2026",
-    subtitle: "Dạ Hội Mặt Nạ Hoàng Gia",
-    year: "2026",
-    eventType: "Prom Night & Dạ hội",
-    body: "Không gian dạ hội lộng lẫy với ánh nến lung linh, trang phục tuxedo và váy dạ hội kiêu sa. Từng điệu valse xoay vòng lưu dấu một đêm tiệc cổ tích không thể nào quên.",
-    coverImageSrc: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1200",
-        alt: "Masquerade Prom Night",
-        title: "Điệu Valse Hoàng Gia",
-        focal: "50mm F/1.4",
-        iso: "1250",
-        desc: "Ánh đèn pha lê rọi sáng những bước nhảy quyến rũ giữa khán phòng dạ hội.",
-      },
-      {
-        src: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&q=80&w=800",
-        alt: "King & Queen Prom",
-        title: "King & Queen Prom",
-        focal: "85mm F/1.4",
-        iso: "800",
-        desc: "Giây phút công bố vương miện danh giá cho cặp đôi Prom King & Queen.",
-      },
-    ],
-  },
-  {
-    id: "prom-col-4",
-    title: "Hội Trại Thanh Xuân & Flashmob",
-    subtitle: "Nhiệt Huyết Sân Trường Bùng Cháy",
-    year: "2025",
-    eventType: "Hội trại & Flashmob",
-    body: "Hội trại rực lửa tuổi trẻ với các màn trình diễn flashmob đồng đều, pháo khói màu sắc và tiếng reo hò cổ vũ cuồng nhiệt khắp sân trường.",
-    coverImageSrc: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=1200",
-        alt: "Campfire Flashmob",
-        title: "Flashmob Cuồng Nhiệt",
-        focal: "24mm F/2.8",
-        iso: "400",
-        desc: "Vũ đạo trẻ trung và nguồn năng lượng tích cực lan tỏa khắp đám đông.",
-      },
-    ],
-  },
-  {
-    id: "prom-col-5",
-    title: "Sunset Gala & After Party",
-    subtitle: "Giao Hưởng Ánh Sáng Hoàng Hôn",
-    year: "2024",
-    eventType: "Sunset Gala & After Party",
-    body: "Bữa tiệc hoàng hôn ngoài trời bên hồ với ánh đèn fairy lights lãng mạn, âm nhạc acoustic du dương và những câu chuyện chia sẻ thân tình.",
-    coverImageSrc: "https://images.unsplash.com/photo-1484820540004-14229fe36ca4?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1484820540004-14229fe36ca4?auto=format&fit=crop&q=80&w=1200",
-        alt: "Sunset Gala Event",
-        title: "Hoàng Hôn Lãng Mạn",
-        focal: "35mm F/1.4",
-        iso: "640",
-        desc: "Khung cảnh ấm áp khi hoàng hôn buông xuống trên không gian tiệc gala.",
-      },
-    ],
-  },
-  {
-    id: "prom-col-6",
-    title: "Lễ Hội Âm Nhạc & Countdown Cấp 3",
-    subtitle: "Âm Nhạc, Sắc Màu & Tuổi Trẻ",
-    year: "2026",
-    eventType: "Đại nhạc hội & Countdown",
-    body: "Sân khấu nhạc sống hoành tráng, dàn DJ sôi động và hàng nghìn cánh tay giơ cao hòa vào nhịp điệu đêm hội countdown cuối cấp.",
-    coverImageSrc: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        src: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=1200",
-        alt: "Music Festival Countdown",
-        title: "Bầu Không Khí Đại Nhạc Hội",
-        focal: "16mm F/2.8",
-        iso: "1600",
-        desc: "Ánh sáng laser và biển người cùng hòa nhịp vào giai điệu thanh xuân.",
-      },
-    ],
-  },
-];
-
-// Presets for easy and helpful admin photo injection
-const PHOTO_PRESETS = [
-  {
-    title: "Thế hệ thanh xuân rạng rỡ",
-    src: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=800",
-    desc: "Bức ảnh ghi lại nụ cười ngọt ngào hồn nhiên đầy mơ ước dưới mái trường rợp bóng cổ thụ.",
-    focal: "85mm F/1.4",
-    iso: "100",
-  },
-  {
-    title: "Buổi chiều nắng xế vàng ươm",
-    src: "https://images.unsplash.com/photo-1519766304817-4f37bda74a27?auto=format&fit=crop&q=80&w=800",
-    desc: "Hình tập thể vui tươi đùa giỡn trong ánh nắng hoàng hôn hắt xiên qua ô cửa sổ lớp học.",
-    focal: "35mm F/2.0",
-    iso: "320",
-  },
-  {
-    title: "Cơn mưa bong bóng ước mơ",
-    src: "https://images.unsplash.com/photo-1516627145497-ae6968895b74?auto=format&fit=crop&q=80&w=800",
-    desc: "Bóng bong bóng xà phòng ngũ sắc bay lượn tạo tiền cảnh lãng mạn cho tà áo dài.",
-    focal: "50mm F/1.8",
-    iso: "200",
-  },
-  {
-    title: "Bục thềm rêu phong kỷ niệm",
-    src: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800",
-    desc: "Góc hành lang cũ mang sắc màu retro đầy hoài niệm, nâng bước những trái tim học trò cực kì nhẹ nhàng.",
-    focal: "50mm F/1.8",
-    iso: "160",
-  },
-];
-
-const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
-  {
-    id: "freedom-col-1",
-    title: "Trần Ngọc Tài Linh",
-    subtitle: "Concept Áo Dài",
-    year: "2025",
-    eventType: "Concept Nghệ thuật",
-    body: "Tái hiện âm hưởng Y2K nổi loạn với những set trang phục bụi bặm, phá cách trên đường phố về đêm. Không cần dàn dựng phức tạp, tinh thần tự do và năng lượng gen Z là lớp makeup đẹp nhất.",
-    coverImageSrc: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=800",
-    driveLink: "",
-    images: [
-      {
-        title: "Streetwear Group",
-        alt: "Streetwear Group",
-        src: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=800",
-        desc: "Cuộc chạy trốn khỏi những quy tắc khô khan để sống thật với chính mình trên góc phố.",
-        focal: "35mm F/1.4",
-        iso: "800",
-      },
-      {
-        title: "Neon Accent Portrait",
-        alt: "Neon Accent Portrait",
-        src: "https://images.unsplash.com/photo-1541534401786-2077efa33b15?auto=format&fit=crop&q=80&w=1200",
-        desc: "Portrait cá tính nổi bật dưới ánh đèn neon đường phố mờ ảo.",
-        focal: "85mm F/1.8",
-        iso: "1600",
-      },
-      {
-        title: "Cyber Glow Vibe",
-        alt: "Cyber Glow Vibe",
-        src: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=800",
-        desc: "Sắc màu tương phản rực rỡ giữa không gian ánh sáng đô thị.",
-        focal: "50mm F/1.8",
-        iso: "640",
-      },
-    ],
-  },
-  {
-    id: "freedom-col-2",
-    title: "RETRO CINEMATIC FILM",
-    subtitle: "HỒI ỨC THẬP NIÊN 90",
-    year: "2024",
-    eventType: "Retro Cinematic Film",
-    body: "Những gam màu phim nhựa ấm hạt, ánh sáng tự nhiên và khoảnh khắc xuất thần đậm chất điện ảnh cổ điển. Mỗi khung hình tựa như một thước phim điện ảnh quay chậm của thanh xuân.",
-    coverImageSrc: "https://images.unsplash.com/photo-1541534401786-2077efa33b15?auto=format&fit=crop&q=80&w=800",
-    driveLink: "",
-    images: [
-      {
-        title: "Cinematic Warmth",
-        alt: "Cinematic Warmth",
-        src: "https://images.unsplash.com/photo-1541534401786-2077efa33b15?auto=format&fit=crop&q=80&w=800",
-        desc: "Tone màu ấm áp tái hiện không khí điện ảnh hoài niệm thập niên 90.",
-        focal: "85mm F/1.4",
-        iso: "200",
-      },
-      {
-        title: "Vintage Mood",
-        alt: "Vintage Mood",
-        src: "https://images.unsplash.com/photo-1551855350-13f59ed4111f?auto=format&fit=crop&q=80&w=800",
-        desc: "Bắt trọn chiều sâu cảm xúc trong ánh mắt và thần thái tự nhiên.",
-        focal: "50mm F/1.8",
-        iso: "400",
-      },
-    ],
-  },
-  {
-    id: "freedom-col-3",
-    title: "HIGH-FASHION EDITORIAL",
-    subtitle: "PHONG CÁCH TẠP CHÍ CAO CẤP",
-    year: "2026",
-    eventType: "High-Fashion Editorial",
-    body: "Tạo hình thời trang phá cách, góc máy táo bạo và chỉ đạo tạo dáng chuyên nghiệp chuẩn editorial. Mang đẳng cấp tạp chí thời trang vào bộ ảnh cá nhân của riêng bạn.",
-    coverImageSrc: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=800",
-    driveLink: "",
-    images: [
-      {
-        title: "Editorial Geometry",
-        alt: "Editorial Geometry",
-        src: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=800",
-        desc: "Bố cục hình học ấn tượng tôn vinh đường nét trang phục và phong cách.",
-        focal: "35mm F/2.0",
-        iso: "100",
-      },
-      {
-        title: "Street Edge",
-        alt: "Street Edge",
-        src: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800",
-        desc: "Năng lượng mạnh mẽ và phong thái tự tin trước ống kính.",
-        focal: "85mm F/1.4",
-        iso: "160",
-      },
-    ],
-  },
-  {
-    id: "freedom-col-4",
-    title: "CYBERPUNK NEON NOIR",
-    subtitle: "ÁNH ĐÈN ĐÔ THỊ HUYỀN ẢO",
-    year: "2025",
-    eventType: "Cyberpunk Neon Noir",
-    body: "Hòa mình vào thế giới tương lai với ánh sáng neon xanh tím tương phản cao, phong cách gothic đương đại và những góc máy điện ảnh táo bạo.",
-    coverImageSrc: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        title: "Neon Reflections",
-        alt: "Neon Reflections",
-        src: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=1200",
-        desc: "Phản chiếu ánh sáng neon tím trên nền đường phố ẩm ướt đầy mê hoặc.",
-        focal: "35mm F/1.4",
-        iso: "800",
-      },
-    ],
-  },
-  {
-    id: "freedom-col-5",
-    title: "INDIE VINTAGE NOSTALGIA",
-    subtitle: "HOÀI NIỆM THANH XUÂN DỊU ÊM",
-    year: "2024",
-    eventType: "Indie Vintage & Nostalgia",
-    body: "Bình dị, nhẹ nhàng và ngập tràn chất thơ với phong cách cottagecore giữa thiên nhiên hoa cỏ. Tông màu pastel dịu mát đánh thức những rung cảm tinh khôi.",
-    coverImageSrc: "https://images.unsplash.com/photo-1551855350-13f59ed4111f?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        title: "Cottagecore Portrait",
-        alt: "Cottagecore Portrait",
-        src: "https://images.unsplash.com/photo-1551855350-13f59ed4111f?auto=format&fit=crop&q=80&w=1200",
-        desc: "Chân dung hòa cùng cỏ hoa đón tia nắng ấm sớm mai.",
-        focal: "85mm F/1.4",
-        iso: "100",
-      },
-    ],
-  },
-  {
-    id: "freedom-col-6",
-    title: "ACADEMIA CLASSIC VIBES",
-    subtitle: "TRI THỨC & NGHỆ THUẬT CỔ ĐIỂN",
-    year: "2026",
-    eventType: "Dark Academia Classic",
-    body: "Cảm hứng Dark Academia với sách cổ, áo trench coat và thư viện châu Âu. Tôn vinh nét đẹp tri thức, sự điềm tĩnh và phong thái thanh lịch vượt thời gian.",
-    coverImageSrc: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=1200",
-    driveLink: "",
-    images: [
-      {
-        title: "Library Elegance",
-        alt: "Library Elegance",
-        src: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=1200",
-        desc: "Góc đọc sách cổ điển toát lên vẻ thông tuệ và sâu lắng.",
-        focal: "50mm F/1.4",
-        iso: "400",
-      },
-    ],
-  },
-];
+// Quy tắc 1: Khởi tạo mảng rỗng [] không chứa bất kỳ ảnh mẫu Unsplash nào
+const DEFAULT_COLLECTIONS: CustomCollection[] = [];
+const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [];
+const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [];
 
 interface PortfolioShowcaseProps {
   slide: SlideData;
@@ -697,17 +181,14 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   firestoreCollection = "albums",
   onNavigateSlide,
 }) => {
-  const defaultSeeds =
-    firestoreCollection === "prom_albums"
-      ? DEFAULT_PROM_COLLECTIONS
-      : firestoreCollection === "freedom_albums"
-        ? DEFAULT_FREEDOM_COLLECTIONS
-        : DEFAULT_COLLECTIONS;
+  // Khởi tạo danh sách album rỗng [] theo Quy tắc 1, cấm fallback về ảnh mẫu Unsplash
+  const defaultSeeds: CustomCollection[] = [];
 
   // --- STATE DEFINITIONS ---
   const {
     collectionsData: collections,
     loading,
+    isLoadingData,
     addAlbum,
     updateAlbumMeta,
     addPhotos,
@@ -933,7 +414,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     if (isOptimizingWebP) return;
     try {
       setIsOptimizingWebP(true);
-      showToast("Bắt đầu tự động chuyển đổi & tối ưu ảnh sang WebP...", "info");
 
       let totalImages = 0;
       collections.forEach((col) => {
@@ -999,7 +479,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
               try {
                 await updatePhoto(col.id, img.id, {
                   src: updatedSrc,
-                  ...(updatedGallery ? { galleryImages: updatedGallery } : {}),
                 });
               } catch (err) {
                 console.warn("Failed updating photo in firestore:", err);
@@ -1415,7 +894,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   const toggleFavorite = (e: React.MouseEvent, photoIdx: number) => {
     e.stopPropagation();
     const key = `${activeCollection?.id}-${photoIdx}`;
-    setFavorites((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const currentFavoriteKey = activeCollection
@@ -1448,7 +926,7 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   };
 
   // Preset quick insert helper for quick testing
-  const handleQuickInsertPreset = (preset: (typeof PHOTO_PRESETS)[0]) => {
+  const handleQuickInsertPreset = (preset: { src: string; title: string; focal: string; iso: string; desc: string }) => {
     setNewPhotoSrcs([preset.src]);
     setNewPhotoTitle(preset.title);
     setNewPhotoFocal(preset.focal);
@@ -1715,7 +1193,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
     try {
       if (direction === "drop") {
-        const newCollections = [...collections];
         const [draggedItem] = newCollections.splice(albumIdx, 1);
         newCollections.splice(targetDropIdx!, 0, draggedItem);
         const updates = newCollections.map((col, i) => ({
@@ -2070,8 +1547,10 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         </div>
 
         {/* Horizontal Album Navigation Pills (Zero Grid, Direct Showcase) */}
-        {collections.length > 0 && (
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        {isLoadingData && collections.length === 0 ? (
+          <PortfolioSkeleton />
+        ) : collections.length > 0 ? (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 transition-opacity duration-700 ease-out opacity-100">
             {collections.map((col, idx) => (
               <button
                 key={col.id || idx}
@@ -2091,12 +1570,43 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
               </button>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
 
-      {/* 2. 3D CONTINUOUS FLOW: Chạy hiệu ứng 3D carousel toàn bộ các bộ sưu tập */}
-      {collections.length > 0 && (
-        <div className="w-full">
+      {/* 2. 3D CONTINUOUS FLOW OR LUXURY DARK SKELETON */}
+      {isLoadingData && collections.length === 0 ? (
+        <div className="w-full py-4 space-y-6">
+          {/* Skeleton Album Track */}
+          <div className="flex gap-4 overflow-hidden py-4 px-2">
+            {[1, 2, 3].map((skeletonIdx) => (
+              <div
+                key={`album-skeleton-${skeletonIdx}`}
+                className="luxury-shimmer shrink-0 w-[280px] sm:w-[340px] md:w-[380px] aspect-[16/10] rounded-2xl border border-[#B5945B]/20 flex flex-col justify-between p-5 relative"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-24 h-5 rounded-full bg-white/5 border border-white/10" />
+                  <div className="w-2 h-2 rounded-full bg-[#E5C17C]/40 animate-pulse" />
+                </div>
+                <div className="space-y-2">
+                  <div className="w-3/4 h-5 rounded-md bg-white/10" />
+                  <div className="w-1/2 h-3.5 rounded-md bg-white/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Skeleton Detail Grid Preview */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4 pt-4">
+            {[1, 2, 3, 4].map((gridIdx) => (
+              <div
+                key={`grid-skeleton-${gridIdx}`}
+                className="luxury-shimmer aspect-[3/4] rounded-xl border border-[#B5945B]/15"
+              />
+            ))}
+          </div>
+        </div>
+      ) : collections.length > 0 ? (
+        <div className="w-full transition-opacity duration-700 ease-out opacity-100">
           <Horizontal3DCollectionTrack
             collections={collections as any}
             activeCollectionIdx={activeCollectionIdx}
@@ -2111,10 +1621,11 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
             currentSlideId={slide.id}
           />
         </div>
-      )}
+      ) : null}
 
-      <div className="flex flex-col gap-6">
-        {/* Quick Next/Previous album hops right in header */}
+      {collections.length > 0 && (
+        <div className="flex flex-col gap-6 transition-opacity duration-700 ease-out opacity-100">
+          {/* Quick Next/Previous album hops right in header */}
         <div className="flex items-center justify-between gap-3 pb-2 border-b border-white/5 text-left text-xs sm:text-sm">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-zinc-400 font-sans text-xs shrink-0">Đang xem:</span>
@@ -2419,12 +1930,9 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                 )}
               </div>
             </div>
-          ) : (
-            <div className="p-16 text-center text-zinc-500 font-sans text-sm bg-white/5 rounded-xl animate-pulse">
-              Đang tải...
-            </div>
-          )}
+          ) : null}
         </div>
+      )}
 
       {/* 4. RE-ARCHITECTED ADMIN ACTION DECK: Sleek tabbed workspace panel */}
       <AnimatePresence>
@@ -2581,8 +2089,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                                   files.map((file) => compressImage(file)),
                                 );
                                 setNewPhotoSrcs((prev) => [
-                                  ...prev,
-                                  ...compressedUrls,
                                 ]);
                               } catch (err) {
                                 console.error("Image compression failed", err);
@@ -2600,7 +2106,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       </label>
                       <input
                         type="text"
-                        placeholder="Vd: https://drive.google.com/..."
                         value={newPhotoUrlInput}
                         onChange={(e) => setNewPhotoUrlInput(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 max-w-full placeholder:text-zinc-600 transition-all shadow-inner"
@@ -2619,7 +2124,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       </label>
                       <input
                         type="text"
-                        placeholder="Vd: Toả nắng sân trường..."
                         value={newPhotoTitle}
                         onChange={(e) => setNewPhotoTitle(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2631,7 +2135,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       </label>
                       <input
                         type="text"
-                        placeholder="Mô tả bối cảnh..."
                         value={newPhotoDesc}
                         onChange={(e) => setNewPhotoDesc(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2807,7 +2310,7 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       )}
                       <span>
                         {isAiGenerating
-                          ? "Đang phân tích..."
+                          ? "Đang tạo..."
                           : "AI Gợi ý mô tả ✨"}
                       </span>
                     </button>
@@ -2835,7 +2338,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="Vd: Những Ngày Nắng Đọng, Thanh Xuân Cuối..."
                       value={newColSubtitle}
                       onChange={(e) => setNewColSubtitle(e.target.value)}
                       className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2852,7 +2354,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder="Vd: 2026, 2025, 2024..."
                         value={newColYear}
                         onChange={(e) => setNewColYear(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2883,7 +2384,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="Vd: Kỷ yếu THPT & Cấp 3, Prom Night, Y2K..."
                       value={newColEventType}
                       onChange={(e) => setNewColEventType(e.target.value)}
                       className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2898,7 +2398,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </label>
                     <input
                       type="url"
-                      placeholder="https://drive.google.com/drive/folders/..."
                       required
                       value={newColDrive}
                       onChange={(e) => setNewColDrive(e.target.value)}
@@ -2944,7 +2443,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       </div>
                       <input
                         type="text"
-                        placeholder="Hoặc dán Drive/Imgur Link..."
                         value={newColCoverSrc}
                         onChange={(e) => setNewColCoverSrc(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-2 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2958,7 +2456,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     Lời giới thiệu / Câu chuyện của Album
                   </label>
                   <textarea
-                    placeholder="Viết một đoạn ngắn giới thiệu về concept, tinh thần của bộ kỷ chiếu này..."
                     rows={3}
                     value={newColBody}
                     onChange={(e) => setNewColBody(e.target.value)}
@@ -3005,7 +2502,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                         <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
                       )}
                       <span>
-                        {isAiGenerating ? "Đang gợi ý..." : "AI Gợi ý mô tả ✨"}
                       </span>
                     </button>
                     <button
@@ -3055,7 +2551,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        placeholder="Vd: 2026, 2025, 2024..."
                         value={editColYear}
                         onChange={(e) => setEditColYear(e.target.value)}
                         className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -3086,7 +2581,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="Vd: Kỷ yếu THPT & Cấp 3, Prom Night, Y2K..."
                       value={editColEventType}
                       onChange={(e) => setEditColEventType(e.target.value)}
                       className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -3112,7 +2606,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     Lời giới thiệu / Câu chuyện của Album
                   </label>
                   <textarea
-                    placeholder="Viết một đoạn ngắn giới thiệu về concept, tinh thần của bộ sưu tập này..."
                     rows={3}
                     value={editColBody}
                     onChange={(e) => setEditColBody(e.target.value)}
@@ -3179,7 +2672,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                         </div>
                         <input
                           type="text"
-                          placeholder="Hoặc dán Drive/Imgur Link để cập nhật ảnh bìa..."
                           value={editColCoverSrc}
                           onChange={(e) => setEditColCoverSrc(e.target.value)}
                           className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-2 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -3251,7 +2743,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                     <input
                       type="text"
-                      placeholder="Tìm theo tên khung hình..."
                       value={quickSearchPhotoQuery}
                       onChange={(e) => setQuickSearchPhotoQuery(e.target.value)}
                       className="w-full pl-8 pr-8 py-2 bg-zinc-950 text-zinc-200 text-[11px] rounded-lg border border-white/5 focus:border-amber-500 focus:outline-none transition-all placeholder:text-slate-650"
@@ -3504,7 +2995,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                               </label>
                               <input
                                 title="Tiêu đề"
-                                placeholder="Tiêu đề hiển thị..."
                                 value={editPhotoTitle}
                                 onChange={(e) =>
                                   setEditPhotoTitle(e.target.value)
@@ -3513,7 +3003,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                               />
                               <textarea
                                 title="Mô tả chi tiết"
-                                placeholder="Mô tả phụ chi tiết..."
                                 value={editPhotoDesc}
                                 onChange={(e) =>
                                   setEditPhotoDesc(e.target.value)
@@ -3537,7 +3026,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                               <div className="flex gap-2">
                                 <input
                                   type="text"
-                                  placeholder="Dán link ảnh (Vd: https://drive.google.com/...)"
                                   value={newGalleryUrlInput}
                                   onChange={(e) =>
                                     setNewGalleryUrlInput(e.target.value)
@@ -3549,7 +3037,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                                   onClick={() => {
                                     if (!newGalleryUrlInput.trim()) return;
                                     setEditPhotoGalleryImages((prev) => [
-                                      ...prev,
                                       newGalleryUrlInput.trim(),
                                     ]);
                                     setNewGalleryUrlInput("");
@@ -3586,8 +3073,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                                             ),
                                           );
                                         setEditPhotoGalleryImages((prev) => [
-                                          ...prev,
-                                          ...compressedUrls,
                                         ]);
                                         showToast(
                                           `Đã tải lên và nén thành công ${files.length} ảnh!`,
@@ -3707,7 +3192,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                     <input
                       type="text"
-                      placeholder="Tìm album theo tên..."
                       value={quickSearchAlbumQuery}
                       onChange={(e) => setQuickSearchAlbumQuery(e.target.value)}
                       className="w-full pl-8 pr-8 py-2 bg-zinc-950 text-zinc-200 text-[11px] rounded-lg border border-white/5 focus:border-amber-500 focus:outline-none transition-all placeholder:text-slate-650"
@@ -4003,7 +3487,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       Bạn có thể dùng bất cứ link ảnh trực tiếp nào của Unsplash
                       (vd:{""}
                       <code className="text-amber-200/80 font-sans bg-zinc-950 px-1 py-0.5 rounded text-[12px] break-all border border-white/5 shadow-inner">
-                        https://images.unsplash.com/...
                       </code>
                       ) hoặc liên kết ảnh thô từ máy chủ của bạn để hiển thị
                       hình tức thì với độ nét chuẩn cao nhất.
@@ -4050,7 +3533,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                   fallback={
                     <div className="p-4 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
                       <div className="w-4 h-4 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 animate-spin" />
-                      Đang tải công cụ Google Drive...
                     </div>
                   }
                 >
@@ -4782,9 +4264,7 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         title={confirmDialogState.title}
         message={confirmDialogState.message}
         onConfirm={confirmDialogState.onConfirm}
-        onCancel={() =>
-          setConfirmDialogState((prev) => ({ ...prev, isOpen: false }))
-        }
+        onCancel={() => setConfirmDialogState((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

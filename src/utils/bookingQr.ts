@@ -45,7 +45,15 @@ export const PUBLIC_BOOKING_BASE_URL: string = (() => {
  * - Localhost / 127.0.0.1
  */
 export function getPublicBookingBaseUrl(): string {
-  // Luôn trả về PUBLIC_BOOKING_BASE_URL đã cấu hình chuẩn
+  try {
+    if (typeof window !== "undefined" && window.location && window.location.origin) {
+      const origin = window.location.origin.replace(/\/+$/, "");
+      if (origin && !origin.includes("aistudio.google.com")) {
+        return origin;
+      }
+    }
+  } catch (_) {}
+
   if (PUBLIC_BOOKING_BASE_URL) {
     return PUBLIC_BOOKING_BASE_URL.replace(/\/+$/, "");
   }
@@ -86,14 +94,14 @@ export function ensureValidPublicBookingUrl(
   const code = (bookingCode || "").trim() || "BR-STUDIO";
 
   if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim()) {
-    return `${publicBase}/booking/${code}`;
+    return `${publicBase}/?booking=${code}`;
   }
 
   const trimmed = rawUrl.trim();
 
   // Nếu chứa bất kỳ từ khóa cấm nào (aistudio, localhost, ais-dev-...)
   if (containsUnauthorizedDomainKeywords(trimmed) || !trimmed.includes("/booking/")) {
-    return `${publicBase}/booking/${code}`;
+    return `${publicBase}/?booking=${code}`;
   }
 
   try {
@@ -105,7 +113,7 @@ export function ensureValidPublicBookingUrl(
     }
     return trimmed;
   } catch {
-    return `${publicBase}/booking/${code}`;
+    return `${publicBase}/?booking=${code}`;
   }
 }
 
@@ -327,13 +335,14 @@ export function createGoogleCalendarUrl(booking: {
   address?: string;
   bookingCode?: string;
   id?: string;
+  notes?: string;
 }): string {
   const title = encodeURIComponent(
     `📸 Chụp ảnh ${booking.conceptType || "Kỷ yếu"} - Bergh.Ryker Studio (${booking.schoolName || "Khách hàng"})`
   );
   const location = encodeURIComponent(booking.address || "Hà Nội");
   const details = encodeURIComponent(
-    `Lịch chụp ảnh cùng Bergh.Ryker Studio.\nMã booking: ${booking.bookingCode || booking.id}\nHotline/Zalo hỗ trợ: 0365266204`
+    `Lịch chụp ảnh cùng Bergh.Ryker Studio.\nMã booking: ${booking.bookingCode || booking.id}${booking.timeSlot ? `\nKhung giờ: ${booking.timeSlot}` : ""}${booking.notes ? `\nGhi chú: ${booking.notes}` : ""}\nHotline/Zalo hỗ trợ: 0365266204`
   );
 
   let dateParam = "";

@@ -24,8 +24,8 @@ export interface ImageWithFallbackProps
   showAspectBlurBg?: boolean;
 }
 
-const EMERGENCY_FALLBACK =
-  "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop";
+// Tuyệt đối không dùng ảnh mẫu Unsplash làm fallback
+const EMERGENCY_FALLBACK = "";
 
 const DEFAULT_SIZES = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw";
 
@@ -38,7 +38,7 @@ export const ImageWithFallback: React.FC<ImageWithFallbackProps> = React.memo(({
   targetWidth,
   widths = DEFAULT_RESPONSIVE_WIDTHS,
   sizes,
-  fallbackImageSrc = EMERGENCY_FALLBACK,
+  fallbackImageSrc = "",
   preset = "default",
   quality,
   fitMode = "cover",
@@ -220,67 +220,69 @@ export const ImageWithFallback: React.FC<ImageWithFallbackProps> = React.memo(({
         />
       )}
 
-      {/* ULTRA-FAST CSS SHIMMER PLACEHOLDER (0 extra network roundtrips, pure CSS GPU) */}
+      {/* LUXURY DARK SHIMMER SKELETON (Bergh.Ryker Luxury Metallic Shimmer) */}
       {!isLoaded && (
-        <div className="absolute inset-0 bg-gradient-to-br from-zinc-900/90 via-zinc-950 to-zinc-900/90 pointer-events-none z-0 flex items-center justify-center animate-pulse">
-          <div className="w-2 h-2 rounded-full bg-[#B5945B]/30" />
+        <div className="luxury-shimmer absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#E5C17C]/20 border border-[#B5945B]/30 animate-pulse" />
         </div>
       )}
 
-      <picture
-        className={`${
-          fitMode === "natural"
-            ? "w-full flex items-center justify-center block"
-            : fitMode === "contain"
-            ? "max-w-full max-h-full w-full h-full flex items-center justify-center"
-            : "w-full h-full block"
-        } relative z-10`}
-      >
-        {/* 1. WebP Format Source with Viewport-Adaptive URL Resizing */}
-        {pictureSources?.isOptimizable && pictureSources.webpSrcSet && !hasError && !triedProxy && (
-          <source
-            type="image/webp"
-            srcSet={pictureSources.webpSrcSet}
-            sizes={effectiveSizes}
-          />
-        )}
-
-        {/* 2. Fallback Format (JPEG) Source with Viewport-Adaptive URL Resizing */}
-        {pictureSources?.isOptimizable && pictureSources.fallbackSrcSet && !hasError && !triedProxy && (
-          <source
-            type="image/jpeg"
-            srcSet={pictureSources.fallbackSrcSet}
-            sizes={effectiveSizes}
-          />
-        )}
-
-        {/* 3. Base <img> Element with Native Lazy Loading & Async GPU Decoding */}
-        <img
-          ref={imgRef}
-          src={displaySrc}
-          alt={alt || "Gallery visual"}
-          onLoad={handleLoad}
-          onError={handleError}
-          referrerPolicy="no-referrer"
-          loading={priority ? "eager" : "lazy"}
-          fetchPriority={priority ? "high" : "auto"}
-          decoding="async"
-          sizes={effectiveSizes}
-          style={style}
+      {displaySrc && (
+        <picture
           className={`${
             fitMode === "natural"
-              ? "w-full h-auto max-h-[85vh] object-contain block mx-auto"
+              ? "w-full flex items-center justify-center block"
               : fitMode === "contain"
-              ? "max-w-full max-h-full w-auto h-auto object-contain block"
-              : "w-full h-full object-cover"
-          } ${
-            className || ""
-          } relative z-10 transform-gpu ${
-            isLoaded ? "opacity-100" : "opacity-0"
-          } ${isAlreadyCached ? "" : "transition-opacity duration-300 ease-out"}`}
-          {...props}
-        />
-      </picture>
+              ? "max-w-full max-h-full w-full h-full flex items-center justify-center"
+              : "w-full h-full block"
+          } relative z-10`}
+        >
+          {/* 1. WebP Format Source with Viewport-Adaptive URL Resizing */}
+          {pictureSources?.isOptimizable && pictureSources.webpSrcSet && !hasError && !triedProxy && (
+            <source
+              type="image/webp"
+              srcSet={pictureSources.webpSrcSet}
+              sizes={effectiveSizes}
+            />
+          )}
+
+          {/* 2. Fallback Format (JPEG) Source with Viewport-Adaptive URL Resizing */}
+          {pictureSources?.isOptimizable && pictureSources.fallbackSrcSet && !hasError && !triedProxy && (
+            <source
+              type="image/jpeg"
+              srcSet={pictureSources.fallbackSrcSet}
+              sizes={effectiveSizes}
+            />
+          )}
+
+          {/* 3. Base <img> Element with Native Lazy Loading & Async GPU Decoding */}
+          <img
+            ref={imgRef}
+            src={displaySrc}
+            alt={alt || "Gallery visual"}
+            onLoad={handleLoad}
+            onError={handleError}
+            referrerPolicy="no-referrer"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            sizes={effectiveSizes}
+            style={style}
+            className={`${
+              fitMode === "natural"
+                ? "w-full h-auto max-h-[85vh] object-contain block mx-auto"
+                : fitMode === "contain"
+                ? "max-w-full max-h-full w-auto h-auto object-contain block"
+                : "w-full h-full object-cover"
+            } ${
+              className || ""
+            } relative z-10 transform-gpu ${
+              isLoaded ? "opacity-100" : "opacity-0"
+            } transition-opacity duration-700 ease-out`}
+            {...props}
+          />
+        </picture>
+      )}
     </div>
   );
 });

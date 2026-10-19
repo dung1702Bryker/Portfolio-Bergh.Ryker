@@ -35,6 +35,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { SlideData, Booking } from "../types";
 import { SubtleConfetti } from "./SubtleConfetti";
 import { EventScheduleModal } from "./EventScheduleModal";
+import { DigitalPassCard, DigitalPassBookingInfo } from "./DigitalPassCard";
 import { generateBookingCode, getPublicBookingBaseUrl, ensureValidPublicBookingUrl } from "../utils/bookingQr";
 import { saveCustomerToSheet } from "../services/googleSheetsService";
 import {
@@ -175,14 +176,7 @@ export const BookingContactForm: React.FC<BookingContactFormProps> = ({
   const { toasts, showToast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [successMsg, setSuccessMsg] = useState(false);
-  const [submittedData, setSubmittedData] = useState<{
-    id: string;
-    bookingCode?: string;
-    confirmationLink?: string;
-    concept: string;
-    deposit: number;
-    hasConfirmedPayment: boolean;
-  } | null>(null);
+  const [submittedData, setSubmittedData] = useState<DigitalPassBookingInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isAdminMode, setIsAdminMode] = useState(false);
 
@@ -1598,9 +1592,18 @@ Mã Booking: ${booking.id}`;
         id: bookingId,
         bookingCode: generatedCode,
         confirmationLink: confLink,
-        concept: conceptType,
+        schoolName,
+        classSize,
+        date,
+        timeSlot: finalTimeSlot,
+        conceptType,
         deposit: finalDeposit,
+        address,
+        notes: notes.trim() ? notes : "Đăng ký trực tiếp qua website.",
+        customRequest: conceptType === "Custom" ? customRequest.trim() : "",
         hasConfirmedPayment: false,
+        status: "Chờ duyệt",
+        estimatedCost: estCostText,
       });
 
       setSchoolName("");
@@ -2630,79 +2633,26 @@ Mã Booking: ${booking.id}`;
                 exit={{ opacity: 0, height: 0, marginTop: 0 }}
                 className="overflow-hidden w-full max-w-full"
               >
-                <div className="p-4 sm:p-5 bg-zinc-950 border border-emerald-500/30 rounded-xl text-emerald-50 relative flex flex-col gap-3.5 sm:gap-4 w-full min-w-0 box-border">
+                <div className="relative flex flex-col items-center gap-4 w-full min-w-0 box-border">
                   {/* Subtle success confetti animation */}
                   <SubtleConfetti />
 
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="font-bold text-sm sm:text-base text-white truncate">
-                          {submittedData && submittedData.deposit > 0 && !submittedData.hasConfirmedPayment
-                            ? "Đang chờ thanh toán"
-                            : "Đặt lịch thành công!"}
-                        </h3>
-                        <p className="text-emerald-400/80 text-[11px] sm:text-xs font-mono mt-0.5 uppercase tracking-wide">
-                          Mã Booking: {submittedData?.bookingCode || submittedData?.id || myBookingIds[myBookingIds.length - 1]}
-                        </p>
-                        <p className="text-zinc-300 text-xs mt-1.5 leading-relaxed">
-                          Thông tin của bạn đã được ghi nhận. Bergh.Ryker sẽ liên hệ tư vấn nhanh nhất.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Booking Confirmation & Photo Progress Buttons */}
-                  <div className="pt-0.5 flex flex-col sm:flex-row gap-2">
-                    <a
-                      href={
-                        submittedData?.confirmationLink ||
-                        `/booking/${
-                          submittedData?.bookingCode ||
-                          submittedData?.id ||
-                          myBookingIds[myBookingIds.length - 1]
-                        }`
-                      }
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 py-2.5 px-3 bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 rounded-xl text-xs font-bold font-sans uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-                    >
-                      <QrCode className="w-4 h-4 text-zinc-950" />
-                      <span>Xem Xác Nhận &amp; Mã QR</span>
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetId =
-                          submittedData?.id ||
-                          myBookingIds[myBookingIds.length - 1];
-                        window.dispatchEvent(
-                          new CustomEvent("openPhotoProgressLookup", {
-                            detail: { bookingId: targetId },
-                          })
-                        );
-                      }}
-                      className="py-2.5 px-3 bg-zinc-900/90 hover:bg-zinc-800 text-[#B5945B] hover:text-[#d4af37] border border-[#B5945B]/30 hover:border-[#B5945B]/60 rounded-xl text-xs font-bold font-sans uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
-                    >
-                      <Palette className="w-4 h-4 text-[#B5945B]" />
-                      <span>Tiến Độ Ảnh</span>
-                    </button>
-                  </div>
+                  {/* THẺ VÉ ĐIỆN TỬ VỚI MÃ QR SẮC NÉT (Digital Pass Card) */}
+                  {submittedData && (
+                    <DigitalPassCard booking={submittedData} />
+                  )}
 
                   {submittedData &&
-                    (submittedData.concept === "THPT" || submittedData.concept === "University") &&
+                    (submittedData.conceptType === "THPT" || submittedData.conceptType === "University") &&
+                    submittedData.deposit !== undefined &&
                     submittedData.deposit > 0 &&
                     !submittedData.hasConfirmedPayment && (
-                      <div className="flex flex-col gap-4 bg-emerald-900/10 p-5 rounded-2xl border border-emerald-500/20 items-center text-center mt-2">
-                        <p className="text-emerald-300 font-semibold text-[15px]">
-                            Thông tin chuyển khoản giữ lịch
+                      <div className="flex flex-col gap-4 bg-zinc-950/80 p-5 rounded-3xl border border-emerald-500/30 items-center text-center mt-2 w-full max-w-md liquid-glass">
+                        <p className="text-emerald-300 font-semibold text-sm">
+                          Thông tin chuyển khoản giữ lịch
                         </p>
                         
-                        <div className="bg-white p-3 rounded-2xl shadow-xl w-60 h-60 sm:w-72 sm:h-72">
+                        <div className="bg-white p-3 rounded-2xl shadow-xl w-60 h-60 sm:w-64 sm:h-64">
                           <img
                             src={`https://img.vietqr.io/image/mbbank-9999917022004-compact2.png?amount=${submittedData.deposit}&addInfo=COC%20${submittedData.id}&accountName=NGUYEN%20DUC%20DUNG`}
                             alt="VietQR Tiền cọc"
@@ -2713,45 +2663,39 @@ Mã Booking: ${booking.id}`;
                         <button
                           type="button"
                           onClick={handleDownloadQR}
-                          className="bg-emerald-600 outline-none focus:ring-2 focus:ring-emerald-400 focus:outline-none hover:bg-emerald-500 text-emerald-50 text-xs font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors uppercase tracking-widest mt-1 shadow-lg shadow-emerald-900/30 w-auto"
+                          className="bg-emerald-600 outline-none focus:ring-2 focus:ring-emerald-400 focus:outline-none hover:bg-emerald-500 text-emerald-50 text-xs font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors uppercase tracking-widest shadow-lg shadow-emerald-900/30 w-auto cursor-pointer"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          Tải Ảnh QR
+                          Tải Ảnh VietQR
                         </button>
                         
-                        <div className="flex flex-col gap-2 text-sm text-emerald-100 w-full max-w-sm mt-3">
+                        <div className="flex flex-col gap-2 text-xs text-emerald-100 w-full max-w-sm mt-2">
                           <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
                             <span className="text-emerald-400/80">Số tiền:</span>
-                            <span className="font-mono text-white font-bold text-[15px]">{submittedData.deposit.toLocaleString("vi-VN")}đ</span>
+                            <span className="font-mono text-white font-bold text-sm">{submittedData.deposit.toLocaleString("vi-VN")}đ</span>
                           </div>
                           <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2 gap-3">
                             <span className="text-emerald-400/80 whitespace-nowrap">Nội dung (BẮT BUỘC):</span>
-                            <span className="font-mono text-white text-[15px] font-bold bg-black/50 px-2 py-1 rounded select-all flex-1 text-right truncate">COC {submittedData.id}</span>
+                            <span className="font-mono text-white text-xs font-bold bg-black/50 px-2 py-1 rounded select-all flex-1 text-right truncate">COC {submittedData.id}</span>
                           </div>
                           
-                          <p className="text-xs text-amber-300 mt-3 font-medium flex items-center justify-center gap-1.5 animate-pulse bg-amber-900/20 py-2 px-3 rounded-lg border border-amber-500/20">
+                          <p className="text-[11px] text-amber-300 mt-2 font-medium flex items-center justify-center gap-1.5 animate-pulse bg-amber-900/20 py-2 px-3 rounded-lg border border-amber-500/20">
                             ⏳ Hệ thống đang chờ tự động xác nhận trong vài giây...
                           </p>
                         </div>
                       </div>
                     )}
 
-                  <p className="text-emerald-100/60 text-[11px] leading-relaxed text-center sm:text-left">
-                    {submittedData && submittedData.deposit > 0 && submittedData.hasConfirmedPayment
-                      ? "Cảm ơn bạn đã thanh toán! Lịch trống đã được chốt và tự động đồng bộ trên hệ thống."
-                      : "Bergh.Ryker sẽ liên hệ Zalo/Insta trong 12h. Lịch tự động huỷ nếu chưa nhận cọc sau 24h."}
-                  </p>
-
-                  <div className="pt-2 border-t border-emerald-500/20 text-center sm:text-left">
+                  <div className="pt-2 text-center">
                     <button
                       type="button"
                       onClick={() => {
                         setSuccessMsg(false);
                         setSubmittedData(null);
                       }}
-                      className="text-[12px] font-medium tracking-wide text-emerald-400 hover:text-emerald-300 transition-colors uppercase"
+                      className="px-5 py-2 rounded-full text-xs font-sans text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
                     >
-                      Đóng thông báo
+                      Đóng thông báo &amp; Đặt lịch thêm
                     </button>
                   </div>
                 </div>

@@ -1,55 +1,80 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
-import { IntroConfig, DEFAULT_INTRO_CONFIG } from "../types/introConfig";
+import { IntroConfig, IntroCardConfig, DEFAULT_INTRO_CONFIG } from "../types/introConfig";
 import { optimizeDriveImageUrl } from "../utils/imageMapper";
 
 interface CinematicIntroOverlayProps {
   config: IntroConfig;
+  realAlbumCards?: IntroCardConfig[];
   onComplete: () => void;
 }
 
 export const CinematicIntroOverlay: React.FC<CinematicIntroOverlayProps> = ({
   config,
+  realAlbumCards,
   onComplete,
 }) => {
   const [introFinished, setIntroFinished] = useState(false);
   const [isUnlockingTouch, setIsUnlockingTouch] = useState(false);
 
+  // Quy tắc 4: Khắc phục triệt để độ trễ vuốt trang sau khi Intro kết thúc (Khóa cuộn tức thì)
+  // Thực thi ngay từ mili-giây đầu tiên bắt đầu hiệu ứng fade-out:
+  // (1) Đặt pointer-events: none
+  // (2) Khôi phục ngay document.body.style.overflow = 'auto'
+  // (3) Kích hoạt lại Lenis instance: lenis.start()
+  const unlockScrollAndLenis = () => {
+    document.body.style.removeProperty("overflow");
+    document.documentElement.style.removeProperty("overflow");
+    document.body.style.overflow = "auto";
+    document.documentElement.style.overflow = "auto";
+    setIsUnlockingTouch(true);
+
+    if (typeof window !== "undefined") {
+      try {
+        (window as any).lenis?.start?.();
+      } catch (_) {}
+    }
+  };
+
   useEffect(() => {
-    // Khóa thanh cuộn body khi hiệu ứng bắt đầu
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overflow = "hidden";
+    // Quy tắc: Không khóa cuộn trên thiết bị di động
+    const isMobile = typeof window !== "undefined" && (window.innerWidth < 1024 || "ontouchstart" in window);
+    
+    if (!isMobile) {
+        // Khóa thanh cuộn body khi hiệu ứng Intro bắt đầu (chỉ trên desktop)
+        document.body.style.overflow = "hidden";
+        document.documentElement.style.overflow = "hidden";
+    }
 
-    // Yêu cầu 1 & 2: Mở khóa cuộn trang và cảm ứng TỨC THÌ từ mốc 3.8s
-    // (ngay trước khi lớp Intro bắt đầu mờ dần sang trang chính)
+    if (typeof window !== "undefined") {
+        try {
+            (window as any).lenis?.stop?.();
+        } catch (_) {}
+    }
+
+    // Mili-giây đầu tiên fade-out bắt đầu (3.5 giây): Mở khóa cảm ứng, body overflow & Lenis NGAY LẬP TỨC
     const unlockTimer = setTimeout(() => {
-      document.body.style.overflow = "unset";
-      document.documentElement.style.overflow = "unset";
-      setIsUnlockingTouch(true);
-    }, 3800);
+      unlockScrollAndLenis();
+    }, 3500);
 
-    // Mốc 4600ms (4.6 giây): Hiệu ứng mờ dần kết thúc hoàn toàn, gỡ bỏ DOM
+    // Mốc 4.2 giây: Kết thúc mờ dần, gỡ hoàn toàn DOM của Intro
     const finishTimer = setTimeout(() => {
-      document.body.style.overflow = "unset";
-      document.documentElement.style.overflow = "unset";
+      unlockScrollAndLenis();
       setIntroFinished(true);
       onComplete();
-    }, 4600);
+    }, 4200);
 
     return () => {
       clearTimeout(unlockTimer);
       clearTimeout(finishTimer);
-      document.body.style.overflow = "unset";
-      document.documentElement.style.overflow = "unset";
+      unlockScrollAndLenis();
     };
   }, [onComplete]);
 
   // Nút bỏ qua vào thẳng trang chính ngay lập tức, mở khóa cuộn tức thì
   const handleSkip = () => {
-    document.body.style.overflow = "unset";
-    document.documentElement.style.overflow = "unset";
-    setIsUnlockingTouch(true);
+    unlockScrollAndLenis();
     setIntroFinished(true);
     onComplete();
   };
@@ -59,15 +84,34 @@ export const CinematicIntroOverlay: React.FC<CinematicIntroOverlayProps> = ({
     return null;
   }
 
-  // Chuẩn bị 5 thẻ ảnh tiêu biểu (lấy từ dữ liệu thật của người dùng)
-  const rawCards =
-    config.cards && config.cards.length >= 3
-      ? config.cards
-      : DEFAULT_INTRO_CONFIG.cards;
-  const cardsData = rawCards.slice(0, 5);
+  // Quy tắc 3: Kiểm tra link ảnh thật, tuyệt đối loại bỏ mọi link Unsplash
+  const isRealCard = (c?: IntroCardConfig | null) => {
+    if (!c || !c.src) return false;
+    const s = String(c.src).trim();
+    if (s.includes("images.unsplash.com") || s.includes("unsplash.com") || s.startsWith("[") || s.includes("DÁN_LINK")) {
+      return false;
+    }
+    return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:") || s.startsWith("/");
+  };
+
+  // Ưu tiên ảnh thật từ Firestore (albums/prom_albums/freedom_albums) được pre-fetch ở giây 0.0s
+  const realFromFirestore = (realAlbumCards || []).filter(isRealCard);
+  const realFromConfig = (config.cards || []).filter(isRealCard);
+  const defaultDriveCards = (DEFAULT_INTRO_CONFIG.cards || []).filter(isRealCard);
+
+  const candidateCards = realFromFirestore.length >= 3
+    ? realFromFirestore
+    : (realFromConfig.length >= 3 ? realFromConfig : (realFromFirestore.length > 0 ? [...realFromFirestore, ...defaultDriveCards] : defaultDriveCards));
+
+  const cardsData = candidateCards.slice(0, 5);
   while (cardsData.length < 5) {
     cardsData.push(
-      DEFAULT_INTRO_CONFIG.cards[cardsData.length % DEFAULT_INTRO_CONFIG.cards.length]
+      candidateCards[cardsData.length % Math.max(1, candidateCards.length)] || {
+        id: `card-fallback-${cardsData.length}`,
+        title: "Bergh.Ryker Portfolio",
+        category: "Cinematic",
+        src: "",
+      }
     );
   }
 
@@ -86,15 +130,15 @@ export const CinematicIntroOverlay: React.FC<CinematicIntroOverlayProps> = ({
   const smoothEase = [0.22, 1, 0.36, 1];
 
   return (
-    // Tổng thời gian: 4.6 giây
-    // Giai đoạn 4 (3.9s -> 4.6s): Làm mờ dần lớp Intro (opacity 1 -> 0 trong 0.7s)
-    // Kích hoạt pointer-events: none ngay từ mốc 3.8s để người dùng vuốt chạm cuộn trang tức thì
+    // Tổng thời gian: 4.2 giây
+    // Giai đoạn 4 (3.5s -> 4.2s): Làm mờ dần lớp Intro (opacity 1 -> 0)
+    // Kích hoạt pointer-events: none và mở khóa cuộn tức thì ngay tại 3.5s (mili-giây đầu tiên của fade-out)
     <motion.div
       initial={{ opacity: 1 }}
       animate={{ opacity: [1, 1, 1, 0] }}
       transition={{
-        duration: 4.6,
-        times: [0, 0.457, 0.848, 1.0], // 0s -> 3.9s: 1 | 3.9s -> 4.6s: mờ dần về 0
+        duration: 4.2,
+        times: [0, 0.45, 0.833, 1.0], // 0s -> 3.5s: 1 | 3.5s -> 4.2s: mờ dần về 0
         ease: "easeInOut",
       }}
       className={`fixed inset-0 z-[9999] bg-[#0A0A0C] text-white overflow-hidden flex flex-col justify-between selection:bg-[#B5945B]/30 select-none ${
@@ -265,18 +309,24 @@ export const CinematicIntroOverlay: React.FC<CinematicIntroOverlayProps> = ({
                   boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
                 }}
               >
-                <img
-                  src={optimizeDriveImageUrl(cardItem.src, 600)}
-                  alt={cardItem.title}
-                  className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
-                  loading="eager"
-                  decoding="async"
-                  onError={(e) => {
-                    // Tuyệt đối không fallback về bất kỳ link ảnh mẫu nào khác
-                    // Giữ nguyên nền tối đồng bộ với giao diện
-                    e.currentTarget.style.opacity = "0";
-                  }}
-                />
+                {cardItem.src ? (
+                  <img
+                    src={optimizeDriveImageUrl(cardItem.src, 600)}
+                    alt={cardItem.title}
+                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ease-out"
+                    loading="eager"
+                    decoding="async"
+                    onError={(e) => {
+                      // Tuyệt đối không fallback về bất kỳ link ảnh mẫu nào khác
+                      e.currentTarget.style.opacity = "0";
+                    }}
+                  />
+                ) : (
+                  <div className="luxury-shimmer absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                    <span className="text-xl font-bold font-serif text-[#E5C17C] tracking-wider mb-1">BR</span>
+                    <span className="text-[8px] font-sans text-zinc-400 uppercase tracking-widest">STUDIO</span>
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
 
                 {conf.isCenter && (
@@ -306,7 +356,7 @@ export const CinematicIntroOverlay: React.FC<CinematicIntroOverlayProps> = ({
         <button
           type="button"
           onClick={handleSkip}
-          className="group px-4 py-2 rounded-full text-xs font-sans font-medium text-zinc-300 hover:text-white bg-black/85 hover:bg-black/95 border border-white/20 hover:border-[#E5C17C]/70 transition-all duration-200 flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer"
+          className="group px-4 py-2 rounded-full text-xs font-sans font-medium text-zinc-300 hover:text-white liquid-glass hover:border-[#E5C17C]/70 transition-all duration-200 flex items-center gap-2 active:scale-95 cursor-pointer"
           title="Bỏ qua Intro và vào thẳng trang chính"
         >
           <span>Bỏ qua Intro</span>
