@@ -37,6 +37,19 @@
           "type": "string",
           "enum": ["Chờ duyệt", "Đã duyệt", "Từ chối", "Đã khoá lịch", "Đang xử lý"]
         },
+        "confirmationStatus": {
+          "type": "string",
+          "enum": ["not_sent", "link_created", "viewed"]
+        },
+        "bookingCode": {
+          "type": "string"
+        },
+        "confirmedAt": {
+          "type": "string"
+        },
+        "confirmationLink": {
+          "type": "string"
+        },
         "createdAt": {
           "type": "string"
         }

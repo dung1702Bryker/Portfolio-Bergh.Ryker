@@ -192,20 +192,19 @@ export const HourlyAnalyticsChart: React.FC<HourlyAnalyticsChartProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 max-w-full">
           {/* Filter Source Selector */}
-          <div className="flex items-center gap-2 bg-zinc-900/90 border border-white/15 rounded-xl px-3 py-2 text-xs text-zinc-300 shadow-inner">
+          <div className="flex items-center gap-2 bg-zinc-900/90 border border-white/15 rounded-xl px-2.5 py-1.5 text-xs text-zinc-300 shadow-inner max-w-full">
             <Layers className="w-3.5 h-3.5 text-[#B5945B] shrink-0" />
-            <span className="text-zinc-400 hidden sm:inline text-[11px] font-medium">Lọc mục:</span>
             <select
               value={selectedSource}
               onChange={(e) => {
                 onSourceChange(e.target.value);
               }}
-              className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-2 max-w-[170px] truncate"
+              className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1 max-w-[140px] sm:max-w-[180px] truncate text-xs"
             >
               <option value="all" className="bg-zinc-900 text-white">
-                Toàn Bộ Portfolio (Tổng Hợp)
+                Toàn Bộ Portfolio
               </option>
               {availableSources.map((s, sIdx) => (
                 <option key={`source-${s.id || sIdx}-${sIdx}`} value={s.id} className="bg-zinc-900 text-white">
@@ -215,57 +214,57 @@ export const HourlyAnalyticsChart: React.FC<HourlyAnalyticsChartProps> = ({
             </select>
           </div>
 
-          {/* View Modes */}
-          <div className="flex items-center bg-zinc-900/90 p-1 rounded-xl border border-white/15">
+          {/* View Modes Segmented Control */}
+          <div className="flex items-center bg-zinc-900/90 p-0.5 rounded-xl border border-white/15 overflow-x-auto scrollbar-none max-w-full shrink-0">
             <button
               onClick={() => setChartViewMode("bars24")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                 viewMode === "bars24"
-                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300"
+                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300 font-extrabold"
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Biểu đồ cột 24 giờ"
             >
-              <BarChart3 className="w-3.5 h-3.5" />
+              <BarChart3 className="w-3.5 h-3.5 shrink-0" />
               <span>Cột 24h</span>
             </button>
 
             <button
               onClick={() => setChartViewMode("timeline")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                 viewMode === "timeline"
-                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300"
+                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300 font-extrabold"
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Biểu đồ sóng liên tục 24h gần nhất"
             >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Đường Sóng</span>
+              <Activity className="w-3.5 h-3.5 shrink-0" />
+              <span>Sóng</span>
             </button>
 
             <button
               onClick={() => setChartViewMode("ranking")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                 viewMode === "ranking"
-                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300"
+                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300 font-extrabold"
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Xếp hạng các giờ có nhiều lượt xem nhất"
             >
-              <Trophy className="w-3.5 h-3.5" />
+              <Trophy className="w-3.5 h-3.5 shrink-0" />
               <span>Xếp Hạng</span>
             </button>
 
             <button
               onClick={() => setChartViewMode("segments")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 ${
                 viewMode === "segments"
-                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300"
+                  ? "bg-[#B5945B] text-zinc-950 shadow-md ring-1 ring-amber-300 font-extrabold"
                   : "text-zinc-400 hover:text-white"
               }`}
               title="Tổng hợp 4 buổi trong ngày"
             >
-              <Sun className="w-3.5 h-3.5" />
+              <Sun className="w-3.5 h-3.5 shrink-0" />
               <span>4 Buổi</span>
             </button>
           </div>

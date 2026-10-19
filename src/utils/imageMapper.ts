@@ -29,30 +29,16 @@ const imageMap: Record<string, string> = {
 export function resolveImage(path: string | undefined): string | undefined {
   if (!path) return undefined;
 
-  // 1. Unwrap if mistakenly wrapped by weserv.nl or proxy
-  if (path.includes("images.weserv.nl")) {
-    const driveMatch =
-      path.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
-      path.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
-      path.match(/%2Fd%2F([a-zA-Z0-9_-]+)/) ||
-      path.match(/%3Fid%3D([a-zA-Z0-9_-]+)/) ||
-      path.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
-    if (driveMatch && driveMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
-    }
-  }
-
-  // 2. Support converting Google Drive URLs directly to Google's high-speed edge CDN
+  // Support converting Google Drive URLs directly to Google's direct thumbnail format
   if (path.includes("drive.google.com")) {
     const driveIdMatch =
       path.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
       path.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (driveIdMatch && driveIdMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${driveIdMatch[1]}`;
+      return `https://drive.google.com/thumbnail?id=${driveIdMatch[1]}&sz=w1200`;
     }
   }
 
-  // 3. Google Usercontent CDN: ensure clean ID without invalid trailing params
   if (path.includes("googleusercontent.com/d/")) {
     const lh3Match = path.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/);
     if (lh3Match && lh3Match[1]) {
@@ -60,7 +46,7 @@ export function resolveImage(path: string | undefined): string | undefined {
     }
   }
 
-  // 4. Extract filename if paths are formatted like /src/assets/images/xxx...
+  // Extract filename if paths are formatted like /src/assets/images/xxx...
   if (
     path.startsWith("/src/assets/images/") ||
     path.startsWith("src/assets/images/") ||
@@ -69,11 +55,6 @@ export function resolveImage(path: string | undefined): string | undefined {
     const filename = path.substring(path.lastIndexOf("/") + 1);
     return imageMap[filename] || path;
   }
-
-  if (imageMap[path]) {
-    return imageMap[path];
-  }
-
   return path;
 }
 
@@ -112,4 +93,8 @@ export function buildLightboxSources(originalSrc: string, minWidth = LIGHTBOX_MI
     lightboxSrcSet: sources.webpLightboxSrcSet,
     fallbackSrcSet: sources.fallbackLightboxSrcSet,
   };
+}
+
+export function optimizeDriveImageUrl(url: string | undefined, ..._args: any[]): string | undefined {
+  return resolveImage(url);
 }

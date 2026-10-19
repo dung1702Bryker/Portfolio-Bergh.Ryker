@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Coins,
   Download,
-  Mail,
   Palette,
   Search,
   ExternalLink,
@@ -28,11 +27,16 @@ import {
   User,
   Phone,
   FileText,
+  QrCode,
+  Mail,
+  ChevronDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SlideData, Booking } from "../types";
 import { SubtleConfetti } from "./SubtleConfetti";
 import { EventScheduleModal } from "./EventScheduleModal";
+import { generateBookingCode, getPublicBookingBaseUrl, ensureValidPublicBookingUrl } from "../utils/bookingQr";
+import { saveCustomerToSheet } from "../services/googleSheetsService";
 import {
   getBookedIntervalsForDate,
   timeToMinutes,
@@ -52,6 +56,7 @@ import {
   initAuth,
   markFirestoreQuotaExceeded,
   isFirestoreQuotaExceeded,
+  isQuotaError,
 } from "../firebase";
 import { resolveImage } from "../utils/imageMapper";
 import { useToast } from "../hooks/useToast";
@@ -170,7 +175,14 @@ export const BookingContactForm: React.FC<BookingContactFormProps> = ({
   const { toasts, showToast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [successMsg, setSuccessMsg] = useState(false);
-  const [submittedData, setSubmittedData] = useState<{ id: string; concept: string; deposit: number; hasConfirmedPayment: boolean; customerEmail?: string } | null>(null);
+  const [submittedData, setSubmittedData] = useState<{
+    id: string;
+    bookingCode?: string;
+    confirmationLink?: string;
+    concept: string;
+    deposit: number;
+    hasConfirmedPayment: boolean;
+  } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [isAdminMode, setIsAdminMode] = useState(false);
 
@@ -301,7 +313,8 @@ export const BookingContactForm: React.FC<BookingContactFormProps> = ({
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [availableDatesMap, setAvailableDatesMap] = useState<Record<string, any>>({});
   const [contactHandle, setContactHandle] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [email, setEmail] = useState("");
+  const [referralSource, setReferralSource] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [customRequest, setCustomRequest] = useState("");
@@ -312,15 +325,72 @@ export const BookingContactForm: React.FC<BookingContactFormProps> = ({
 
   // Subscribe to availableDates in real-time
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "availableDates"), (snap) => {
-      const m: Record<string, any> = {};
-      snap.forEach((d) => {
-        m[d.id] = d.data();
-      });
-      setAvailableDatesMap(m);
-    });
+    if (isFirestoreQuotaExceeded()) {
+      return;
+    }
+    const unsub = onSnapshot(
+      collection(db, "availableDates"),
+      (snap) => {
+        const m: Record<string, any> = {};
+        snap.forEach((d) => {
+          m[d.id] = d.data();
+        });
+        setAvailableDatesMap(m);
+      },
+      (err) => {
+        if (isQuotaError(err)) {
+          markFirestoreQuotaExceeded();
+        } else {
+          console.warn("availableDates listener warning:", err);
+        }
+      }
+    );
     return () => unsub();
   }, []);
+
+  // Remaining available slots in target / current month for prominent display
+  const monthAvailabilitySummary = useMemo(() => {
+    let targetYear: number;
+    let targetMonth: number;
+    if (date && date.includes("-")) {
+      const parts = date.split("-");
+      targetYear = parseInt(parts[0], 10);
+      targetMonth = parseInt(parts[1], 10) - 1;
+    } else {
+      const today = new Date();
+      targetYear = today.getFullYear();
+      targetMonth = today.getMonth();
+    }
+
+    const daysInM = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let available = 0;
+    let booked = 0;
+    for (let day = 1; day <= daysInM; day++) {
+      const d = new Date(targetYear, targetMonth, day);
+      if (d >= today) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dayStr = String(d.getDate()).padStart(2, "0");
+        const key = `${y}-${m}-${dayStr}`;
+        const status = availableDatesMap[key]?.status;
+        if (status === "booked") {
+          booked++;
+        } else if (status !== "unavailable") {
+          available++;
+        }
+      }
+    }
+
+    return {
+      month: targetMonth + 1,
+      year: targetYear,
+      available,
+      booked,
+    };
+  }, [date, availableDatesMap]);
 
   const eventBookedIntervals = useMemo(() => {
     if (conceptType !== "Event" || !date) return [];
@@ -737,49 +807,6 @@ Mã Booking: ${booking.id}`;
     updatedGoogleTaskId?: string,
   ) => {
     try {
-      if (newStatus === "Đã duyệt" && !(target as any).emailSent) {
-         let estCostText = (target as any).estimatedCost;
-         if (!estCostText) {
-           if (target.conceptType === "THPT" || target.conceptType === "University") {
-             const isFull = target.timeSlot?.toLowerCase().includes("cả ngày") || false;
-             const uPrice = getActivePrice(target.classSize || 1, isFull);
-             const tPrice = (target.classSize || 1) * uPrice;
-             estCostText = `${tPrice.toLocaleString("vi-VN")}đ (Đơn giá: ${(uPrice / 1000).toLocaleString("vi-VN")}k/người cho nhóm ${target.classSize || 1} người)`;
-           } else if (target.conceptType === "Event") {
-             estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên quy mô sự kiện";
-           } else {
-             estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên yêu cầu concept riêng";
-           }
-         }
-
-         const mailPayload: Record<string, any> = {
-           _captcha: "false",
-           _subject: `✅ ĐÃ DUYỆT & KHOÁ LỊCH - ĐƠN ĐẶT LỊCH TỪ: ${target.schoolName || id}`,
-           _template: "box",
-           id: id,
-           bookingId: id,
-           email: target.email || undefined,
-           customerEmail: target.email || undefined,
-           _isPaymentApproved: true,
-           "✨ Trạng thái": "HỆ THỐNG ĐÃ DUYỆT VÀ TẠO LỊCH",
-           "🎟️ Mã Booking": id,
-           "💰 5b. TẠM TÍNH CHI PHÍ": estCostText,
-           "✨ 1. TÊN KHÁCH HÀNG / TỔ CHỨC": target.schoolName || "(Chưa rõ)",
-           "🎯 2. CONCEPT MONG MUỐN": target.conceptType || "(Chưa rõ)",
-           "🔥 3. SỐ LƯỢNG NGƯỜI": target.conceptType === "Event" ? "(Không áp dụng)" : `${target.classSize || 0} người`,
-           "📅 4. NGÀY CHỤP (Dự kiến)": target.date ? `${target.date.split("-").reverse().join("/")}` : "(Chưa chọn ngày)",
-           "⏰ 5. CA CHỤP / THỜI GIAN": target.timeSlot || "Cả ngày",
-           "📱 6. INFO LIÊN HỆ (Zalo / Instagram)": target.instagramOrZalo || "(Không có)",
-           "📍 6b. ĐỊA CHỈ LIÊN HỆ": target.address || "(Không có)",
-           "💌 7. LỊCH TRÌNH / LỜI NHẮN": target.notes?.trim() ? target.notes : "(Trống)",
-         };
-         fetch("/api/send-email", {
-           method: "POST",
-           headers: { "Content-Type": "application/json", Accept: "application/json" },
-           body: JSON.stringify(mailPayload),
-         }).catch(err => console.warn("[Email Notification] Could not dispatch email via proxy:", err));
-      }
-
       await setDoc(doc(db, "bookings", id), {
         ...target,
         status: newStatus,
@@ -787,7 +814,7 @@ Mã Booking: ${booking.id}`;
         ...(updatedGoogleTaskId !== undefined
           ? { googleTaskId: updatedGoogleTaskId }
           : {}),
-        ...(newStatus === "Đã duyệt" ? { emailSent: true } : {})
+        ...(newStatus === "Đã duyệt" ? { confirmationStatus: "not_sent" } : {})
       });
 
       if (
@@ -1364,6 +1391,14 @@ Mã Booking: ${booking.id}`;
       return;
     }
 
+    if (email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        setErrorMsg("Email không đúng định dạng. Vui lòng kiểm tra lại hoặc để trống!");
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     let finalTimeSlot = "";
     if (conceptType === "Custom") {
@@ -1425,28 +1460,80 @@ Mã Booking: ${booking.id}`;
         "Sẽ tư vấn & báo giá chi tiết dựa trên yêu cầu concept riêng";
     }
 
+    const generatedCode = generateBookingCode();
+    const origin = getPublicBookingBaseUrl();
+    const confLink = ensureValidPublicBookingUrl(
+      `${origin}/booking/${generatedCode}`,
+      generatedCode
+    );
+
     const newBooking: Booking = {
       id: bookingId,
+      bookingCode: generatedCode,
+      confirmationLink: confLink,
       schoolName,
       classSize,
       date,
       timeSlot: finalTimeSlot,
       conceptType,
       instagramOrZalo: contactHandle,
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(referralSource.trim() ? { referralSource: referralSource.trim() } : {}),
       address,
       notes: notes.trim() ? notes : "Đăng ký trực tiếp qua website.",
       customRequest: conceptType === "Custom" ? customRequest.trim() : "",
       status: "Chờ duyệt",
       source: bookingSource,
       createdAt: serverTimestamp(),
-      emailSent: false,
+      confirmationStatus: "not_sent",
       estimatedCost: estCostText,
       ...(conceptType === "Event" ? { eventStartTime, eventEndTime } : {}),
-      ...(customerEmail.trim() ? { email: customerEmail.trim() } : {}),
     };
 
     try {
       await setDoc(doc(db, "bookings", bookingId), newBooking);
+
+      // Đồng thời đẩy dữ liệu sang Google Sheets song song với Firestore (Non-blocking)
+      const now = new Date();
+      const pkgName =
+        conceptType === "THPT"
+          ? "Kỷ yếu"
+          : conceptType === "University"
+            ? "Tốt nghiệp"
+            : conceptType === "Event"
+              ? "Sự kiện"
+              : "Cá nhân";
+
+      const custType =
+        conceptType === "THPT"
+          ? "Kỷ yếu THPT"
+          : conceptType === "University"
+            ? "Cử nhân & Tốt nghiệp"
+            : conceptType === "Event"
+              ? "Sự kiện"
+              : "Cá nhân & Yêu cầu";
+
+      saveCustomerToSheet({
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        fullName: schoolName.trim(),
+        phone: contactHandle.trim(),
+        email: email.trim(),
+        customerType: custType,
+        package: pkgName,
+        peopleCount: classSize || 1,
+        shootDate: date,
+        session: finalTimeSlot,
+        location: address.trim(),
+        source: referralSource.trim() || "Website",
+        note: [customRequest.trim(), notes.trim()].filter(Boolean).join(" - ") || "",
+        bookingCode: generatedCode,
+        status: "Mới",
+        device: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        pageUrl: typeof window !== "undefined" ? window.location.href : "",
+      }).catch((err) => {
+        console.warn("[GoogleSheets] Lỗi background sync:", err);
+      });
 
       // Trigger server-side background web push to admin devices (lock screen alert)
       try {
@@ -1500,69 +1587,6 @@ Mã Booking: ${booking.id}`;
       setMyBookingIds(updatedIds);
       localStorage.setItem("my_booking_ids", JSON.stringify(updatedIds));
 
-      // Auto-send email notification to admin via backend proxy
-      // Gói THPT và Cử nhân/ĐH chỉ gửi mail xác nhận cho khách khi chuyển khoản thành công hoặc admin duyệt
-      const isDepositPackage = conceptType === "THPT" || conceptType === "University";
-      const mailPayload: Record<string, any> = {
-        _captcha: "false",
-        _subject: `📸 YAYYY! BẠN CÓ 1 ĐƠN ĐẶT LỊCH TỪ: ${schoolName?.toUpperCase() || ""}`,
-        _template: "box",
-        email: customerEmail.trim() || undefined,
-        customerEmail: customerEmail.trim() || undefined,
-        skipCustomerConfirmation: isDepositPackage,
-        "✨ 1. TÊN KHÁCH HÀNG / TỔ CHỨC": schoolName || "(Chưa rõ)",
-        "📧 EMAIL LIÊN HỆ": customerEmail.trim() || "(Không cung cấp)",
-        "🎯 2. CONCEPT MONG MUỐN":
-          conceptType === "Custom"
-            ? `Làm Theo Yêu Cầu: ${customRequest || "(Chưa ghi cụ thể)"}`
-            : conceptType === "University"
-              ? "Gói PRE-GRADUATION"
-              : conceptType === "THPT"
-                ? "Gói KỶ YẾU THPT"
-                : "Event & Prom Night",
-        "🔥 3. SỐ LƯỢNG NGƯỜI":
-          conceptType === "Event" ? "(Không áp dụng)" : `${classSize} người`,
-        "📅 4. NGÀY CHỤP (Dự kiến)": date
-          ? `${date.split("-").reverse().join("/")}`
-          : "(Chưa chọn ngày)",
-      };
-
-      if (conceptType === "THPT") {
-        mailPayload["⏰ 5. CA CHỤP"] = thptShift;
-      } else if (conceptType === "University") {
-        mailPayload["⏰ 5. THỜI GIAN CHỤP"] = gradTime;
-      } else if (conceptType === "Custom") {
-        mailPayload["⏰ 5. THỜI GIAN"] = "Cả ngày (Không hẹn giờ cụ thể)";
-      } else {
-        mailPayload["⏰ 5. THỜI GIAN/CA CHỤP"] = finalTimeSlot;
-      }
-
-      mailPayload["💰 5b. TẠM TÍNH CHI PHÍ"] = estCostText;
-
-      mailPayload["📱 6. INFO LIÊN HỆ (Zalo / Instagram)"] =
-        contactHandle || "(Không có thông tin)";
-      mailPayload["📍 6b. ĐỊA CHỈ LIÊN HỆ"] = address;
-      mailPayload["💌 7. LỊCH TRÌNH / LỜI NHẮN"] = notes.trim()
-        ? notes
-        : "(Trống - Khách không dặn dò gì thêm)";
-      mailPayload["🎟️ 8. MÃ SỐ TICKET"] = bookingId;
-      mailPayload["id"] = bookingId;
-      mailPayload["bookingId"] = bookingId;
-
-      // Always dispatch email notification to admin & confirmation to customer
-      try {
-        await fetch("/api/send-email", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(mailPayload),
-        });
-      } catch (err: any) {
-        console.warn("[Email Notification] Could not send email notification via proxy:", err?.message || err);
-      }
-
       // Reset Form fields
       let finalDeposit = 0;
       if (conceptType === "THPT" || conceptType === "University") {
@@ -1572,18 +1596,20 @@ Mã Booking: ${booking.id}`;
       }
       setSubmittedData({
         id: bookingId,
+        bookingCode: generatedCode,
+        confirmationLink: confLink,
         concept: conceptType,
         deposit: finalDeposit,
         hasConfirmedPayment: false,
-        customerEmail: customerEmail.trim() || undefined,
       });
 
       setSchoolName("");
       setContactHandle("");
-      setCustomerEmail("");
       setAddress("");
       setNotes("");
       setCustomRequest("");
+      setEmail("");
+      setReferralSource("");
       setTimeSlots([]);
       setDate("");
       setIsSubmitting(false);
@@ -1901,57 +1927,11 @@ Mã Booking: ${booking.id}`;
 
             // Always proceed to approve booking status and lock date in database!
             try {
-              if (!(bookingData as any)?.emailSent) {
-                const targetCustomerEmail = bookingData?.email || (submittedData as any)?.customerEmail;
-                let estCostText = (bookingData as any)?.estimatedCost;
-                if (!estCostText) {
-                  const bConcept = bookingData?.conceptType || submittedData?.concept;
-                  const bSize = bookingData?.classSize || 1;
-                  const isFull = bookingData?.timeSlot?.toLowerCase().includes("cả ngày") || false;
-                  if (bConcept === "THPT" || bConcept === "University") {
-                    const uPrice = getActivePrice(bSize, isFull);
-                    const tPrice = bSize * uPrice;
-                    estCostText = `${tPrice.toLocaleString("vi-VN")}đ (Đơn giá: ${(uPrice / 1000).toLocaleString("vi-VN")}k/người cho nhóm ${bSize} người)`;
-                  } else if (bConcept === "Event") {
-                    estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên quy mô sự kiện";
-                  } else {
-                    estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên yêu cầu concept riêng";
-                  }
-                }
-                const mailPayload: Record<string, any> = {
-                  _captcha: "false",
-                  _subject: `✅ ĐÃ THANH TOÁN CỌC - ĐƠN ĐẶT LỊCH TỪ: ${bookingData?.schoolName || submittedData.id}`,
-                  _template: "box",
-                  id: submittedData.id,
-                  bookingId: submittedData.id,
-                  email: targetCustomerEmail || undefined,
-                  customerEmail: targetCustomerEmail || undefined,
-                  _isPaymentApproved: true,
-                  "✨ Trạng thái": "HỆ THỐNG ĐÃ TỰ ĐỘNG CHẤP NHẬN & ĐỒNG BỘ",
-                  "🎟️ Mã Booking": submittedData.id,
-                  "💰 Số tiền cọc đã nhận từ SePay": `${data.amount?.toLocaleString('vi-VN') || data.amount} VNĐ`,
-                  "💰 5b. TẠM TÍNH CHI PHÍ": estCostText,
-                  "✨ 1. TÊN KHÁCH HÀNG / TỔ CHỨC": bookingData?.schoolName || "(Chưa rõ)",
-                  "🎯 2. CONCEPT MONG MUỐN": bookingData?.conceptType || "(Chưa rõ)",
-                  "🔥 3. SỐ LƯỢNG NGƯỜI": bookingData?.conceptType === "Event" ? "(Không áp dụng)" : `${bookingData?.classSize || 0} người`,
-                  "📅 4. NGÀY CHỤP (Dự kiến)": bookingData?.date ? `${bookingData.date.split("-").reverse().join("/")}` : "(Chưa chọn ngày)",
-                  "⏰ 5. CA CHỤP / THỜI GIAN": bookingData?.timeSlot || "Cả ngày",
-                  "📱 6. INFO LIÊN HỆ (Zalo / Instagram)": bookingData?.instagramOrZalo || "(Không có)",
-                  "📍 6b. ĐỊA CHỈ LIÊN HỆ": bookingData?.address || "(Không có)",
-                  "💌 7. LỊCH TRÌNH / LỜI NHẮN": bookingData?.notes?.trim() ? bookingData.notes : "(Trống)",
-                };
-                fetch("/api/send-email", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", Accept: "application/json" },
-                  body: JSON.stringify(mailPayload),
-                }).catch(err => console.warn("[Email Notification] Auto approval mail handled:", err?.message || err));
-              }
-
               await setDoc(doc(db, "bookings", submittedData.id), {
                  hasConfirmedPayment: true,
                  amountPaid: data.amount,
                  status: "Đã duyệt",
-                 emailSent: true,
+                 confirmationStatus: "not_sent",
                  ...(updatedEventId ? { googleEventId: updatedEventId } : {}),
                  ...(updatedTaskId ? { googleTaskId: updatedTaskId } : {})
               }, { merge: true });
@@ -2029,56 +2009,11 @@ Mã Booking: ${booking.id}`;
                  } catch(e) {}
                }
                
-               if (!(b as any).emailSent) {
-                   let estCostText = (b as any).estimatedCost;
-                   if (!estCostText) {
-                     const isFull = b.timeSlot?.toLowerCase().includes("cả ngày") || false;
-                     const sizeNum = b.classSize || 1;
-                     if (b.conceptType === "THPT" || b.conceptType === "University") {
-                       const uPrice = getActivePrice(sizeNum, isFull);
-                       const tPrice = sizeNum * uPrice;
-                       estCostText = `${tPrice.toLocaleString("vi-VN")}đ (Đơn giá: ${(uPrice / 1000).toLocaleString("vi-VN")}k/người cho nhóm ${sizeNum} người)`;
-                     } else if (b.conceptType === "Event") {
-                       estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên quy mô sự kiện";
-                     } else {
-                       estCostText = "Sẽ tư vấn & báo giá chi tiết dựa trên yêu cầu concept riêng";
-                     }
-                   }
-
-                   const mailPayload: Record<string, any> = {
-                     _captcha: "false",
-                     _subject: `✅ ĐÃ THANH TOÁN CỌC - ĐƠN ĐẶT LỊCH TỪ: ${b.schoolName || b.id}`,
-                     _template: "box",
-                     id: b.id,
-                     bookingId: b.id,
-                     email: b.email || undefined,
-                     customerEmail: b.email || undefined,
-                     _isPaymentApproved: true,
-                     "✨ Trạng thái": "HỆ THỐNG ĐÃ TỰ ĐỘNG CHẤP NHẬN & ĐỒNG BỘ",
-                     "🎟️ Mã Booking": b.id,
-                     "💰 Số tiền cọc đã nhận từ SePay": `${data.amount?.toLocaleString('vi-VN') || data.amount} VNĐ`,
-                     "💰 5b. TẠM TÍNH CHI PHÍ": estCostText,
-                     "✨ 1. TÊN KHÁCH HÀNG / TỔ CHỨC": b.schoolName || "(Chưa rõ)",
-                     "🎯 2. CONCEPT MONG MUỐN": b.conceptType || "(Chưa rõ)",
-                     "🔥 3. SỐ LƯỢNG NGƯỜI": b.conceptType === "Event" ? "(Không áp dụng)" : `${b.classSize || 0} người`,
-                     "📅 4. NGÀY CHỤP (Dự kiến)": b.date ? `${b.date.split("-").reverse().join("/")}` : "(Chưa chọn ngày)",
-                     "⏰ 5. CA CHỤP / THỜI GIAN": b.timeSlot || "Cả ngày",
-                     "📱 6. INFO LIÊN HỆ (Zalo / Instagram)": b.instagramOrZalo || "(Không có)",
-                     "📍 6b. ĐỊA CHỈ LIÊN HỆ": b.address || "(Không có)",
-                     "💌 7. LỊCH TRÌNH / LỜI NHẮN": b.notes?.trim() ? b.notes : "(Trống)",
-                   };
-                   fetch("/api/send-email", {
-                     method: "POST",
-                     headers: { "Content-Type": "application/json", Accept: "application/json" },
-                     body: JSON.stringify(mailPayload),
-                   }).catch(err => console.warn("[Email Notification] Auto approval mail handled in filter block:", err));
-               }
-
                await setDoc(doc(db, "bookings", b.id), {
                   status: "Đã duyệt",
                   hasConfirmedPayment: true,
                   amountPaid: data.amount,
-                  emailSent: true,
+                  confirmationStatus: "not_sent",
                   ...(updatedEventId ? { googleEventId: updatedEventId } : {}),
                   ...(updatedTaskId ? { googleTaskId: updatedTaskId } : {})
                }, { merge: true });
@@ -2136,7 +2071,7 @@ Mã Booking: ${booking.id}`;
           )}
           <div className="flex-1 text-xs">
             <span className="font-bold text-gray-950 uppercase block mb-1 tracking-wide font-sans text-[12px]">
-              Cổng Đồng Bộ Quản Trị Viên (Email Phê Duyệt)
+              Cổng Đồng Bộ Quản Trị Viên (Lịch Trình & Tác Vụ)
             </span>
             <p className="leading-relaxed text-gray-750">
               {adminNotification.message}
@@ -2457,32 +2392,63 @@ Mã Booking: ${booking.id}`;
                 </button>
               ) : (
                 <div>
-                  {/* Nút bấm chọn ngày to rõ ràng - Apple Liquid Glass */}
+                  {/* Nút bấm chọn ngày tinh gọn, đẳng cấp, không bị tràn viền trên máy tính & điện thoại */}
                   <button
                     type="button"
                     onClick={() => setIsCalendarOpen(true)}
-                    className={`w-full flex items-center justify-between rounded-2xl p-4 sm:p-5 text-left cursor-pointer transition-all duration-300 border ${
+                    className={`w-full rounded-2xl p-3.5 sm:p-4 text-left cursor-pointer transition-all duration-300 border select-none ${
                       date
-                        ? "liquid-glass-btn border-[#B5945B] text-white ring-1 ring-[#B5945B]/50"
-                        : "liquid-glass-card border-white/10 text-zinc-200 hover:text-white"
+                        ? "liquid-glass-btn border-[#B5945B]/80 text-white ring-1 ring-[#B5945B]/40 shadow-lg shadow-amber-500/10"
+                        : "liquid-glass-card border-white/10 text-zinc-200 hover:border-[#B5945B]/50 hover:text-white"
                     }`}
                   >
-                    <div className="flex items-center gap-3.5 truncate">
-                      <div className="w-10 h-10 rounded-xl liquid-glass-btn flex items-center justify-center shrink-0">
-                        <Calendar className={`w-5 h-5 ${date ? "text-[#B5945B]" : "text-zinc-300"}`} />
-                      </div>
-                      <div>
-                        <span className="text-xs sm:text-sm text-zinc-300 block uppercase tracking-wider font-semibold">
-                          Ngày chụp dự kiến:
+                    {/* Hàng trên: Nhãn & Badge số lịch trống trong tháng */}
+                    <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-white/[0.08]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-[#B5945B]/15 text-[#B5945B] flex items-center justify-center shrink-0 border border-[#B5945B]/30">
+                          <Calendar className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs sm:text-sm text-zinc-300 font-bold uppercase tracking-wider">
+                          Ngày chụp dự kiến
                         </span>
-                        <span className="text-base sm:text-lg font-bold text-white truncate block">
-                          {date ? date.split("-").reverse().join("/") : "Chạm vào đây để chọn ngày chụp trên lịch"}
+                      </div>
+
+                      {/* Badge tình trạng lịch tháng */}
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 text-[11px] font-bold shrink-0 shadow-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                        <span>
+                          {monthAvailabilitySummary.available > 0
+                            ? `T${monthAvailabilitySummary.month}/${monthAvailabilitySummary.year}: Còn ${monthAvailabilitySummary.available} ngày trống`
+                            : `T${monthAvailabilitySummary.month}/${monthAvailabilitySummary.year}: Đã kín lịch`}
+                        </span>
+                      </span>
+                    </div>
+
+                    {/* Hàng dưới: Ngày đã chọn hoặc Gợi ý chọn ngày + Nút bấm hành động */}
+                    <div className="flex items-center justify-between gap-3 pt-2.5">
+                      <div className="min-w-0 flex-1">
+                        {date ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-base sm:text-lg font-extrabold text-white tracking-wide">
+                              {date.split("-").reverse().join("/")}
+                            </span>
+                            <span className="text-[11px] font-semibold text-[#B5945B] bg-[#B5945B]/15 px-2 py-0.5 rounded-md border border-[#B5945B]/30">
+                              Đã chọn ngày
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs sm:text-sm font-medium text-zinc-300 block">
+                            Chạm vào đây để chọn ngày chụp trên lịch
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="shrink-0">
+                        <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#B5945B] bg-[#B5945B]/10 hover:bg-[#B5945B]/20 border border-[#B5945B]/35 px-3 py-1.5 rounded-xl transition-all">
+                          {date ? "Đổi ngày ↻" : "Mở lịch →"}
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs sm:text-sm font-bold text-[#B5945B] liquid-glass-btn border-[#B5945B]/30 px-3.5 py-2 rounded-xl shrink-0 ml-2">
-                      {date ? "Đổi ngày" : "Mở lịch →"}
-                    </span>
                   </button>
                 </div>
               )}
@@ -2557,26 +2523,10 @@ Mã Booking: ${booking.id}`;
                   </div>
                 </div>
 
-                {/* 4. Email */}
-                <div>
-                  <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-[#E5C17C] shrink-0" />
-                    <span>Email nhận bản sao hợp đồng (Tùy chọn)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      placeholder="email@example.com"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      className="w-full liquid-glass-input rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base text-white placeholder:text-zinc-400 focus:outline-none transition-all"
-                    />
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B5945B]" />
-                  </div>
-                </div>
 
-                {/* 5. Ghi chú thêm */}
-                <div>
+
+                {/* 6. Ghi chú thêm (Tùy chọn) */}
+                <div className="sm:col-span-2">
                   <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
                     <FileText className="w-4 h-4 text-[#E5C17C] shrink-0" />
                     <span>Ghi chú thêm (Tùy chọn)</span>
@@ -2696,60 +2646,50 @@ Mã Booking: ${booking.id}`;
                             : "Đặt lịch thành công!"}
                         </h3>
                         <p className="text-emerald-400/80 text-[11px] sm:text-xs font-mono mt-0.5 uppercase tracking-wide">
-                          Ticket: {myBookingIds[myBookingIds.length - 1]}
+                          Mã Booking: {submittedData?.bookingCode || submittedData?.id || myBookingIds[myBookingIds.length - 1]}
+                        </p>
+                        <p className="text-zinc-300 text-xs mt-1.5 leading-relaxed">
+                          Thông tin của bạn đã được ghi nhận. Bergh.Ryker sẽ liên hệ tư vấn nhanh nhất.
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  {submittedData?.customerEmail && (
-                    <div className="flex items-start gap-2.5 text-xs sm:text-[13px] leading-relaxed text-emerald-300 bg-emerald-950/60 border border-emerald-500/25 p-3 sm:px-3.5 sm:py-3 rounded-xl w-full min-w-0 box-border">
-                      <Mail className="w-4 h-4 text-[#B5945B] shrink-0 mt-0.5" />
-                      <div className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
-                        {submittedData.concept === "THPT" || submittedData.concept === "University" ? (
-                          submittedData.hasConfirmedPayment ? (
-                            <>
-                              Đã xác nhận cọc &amp; gửi Gmail duyệt đơn thành công tới:{" "}
-                              <strong className="text-white underline font-mono font-medium break-all [overflow-wrap:anywhere] underline-offset-2 decoration-emerald-500/60">
-                                {submittedData.customerEmail}
-                              </strong>
-                            </>
-                          ) : (
-                            <>
-                              Sau khi chuyển khoản cọc thành công hoặc Studio duyệt đơn, hệ thống sẽ tự động gửi Gmail xác nhận đặt đơn tới:{" "}
-                              <strong className="text-white underline font-mono font-medium break-all [overflow-wrap:anywhere] underline-offset-2 decoration-emerald-500/60">
-                                {submittedData.customerEmail}
-                              </strong>
-                            </>
-                          )
-                        ) : (
-                          <>
-                            Đã tự động gửi Gmail xác nhận đặt lịch &amp; mã vé tới:{" "}
-                            <strong className="text-white underline font-mono font-medium break-all [overflow-wrap:anywhere] underline-offset-2 decoration-emerald-500/60">
-                              {submittedData.customerEmail}
-                            </strong>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* Booking Confirmation & Photo Progress Buttons */}
+                  <div className="pt-0.5 flex flex-col sm:flex-row gap-2">
+                    <a
+                      href={
+                        submittedData?.confirmationLink ||
+                        `/booking/${
+                          submittedData?.bookingCode ||
+                          submittedData?.id ||
+                          myBookingIds[myBookingIds.length - 1]
+                        }`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 py-2.5 px-3 bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 rounded-xl text-xs font-bold font-sans uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                    >
+                      <QrCode className="w-4 h-4 text-zinc-950" />
+                      <span>Xem Xác Nhận &amp; Mã QR</span>
+                    </a>
 
-                  {/* Photo Progress Direct Tracking Button */}
-                  <div className="pt-0.5">
                     <button
                       type="button"
                       onClick={() => {
-                        const targetId = submittedData?.id || myBookingIds[myBookingIds.length - 1];
+                        const targetId =
+                          submittedData?.id ||
+                          myBookingIds[myBookingIds.length - 1];
                         window.dispatchEvent(
                           new CustomEvent("openPhotoProgressLookup", {
                             detail: { bookingId: targetId },
                           })
                         );
                       }}
-                      className="w-full py-2.5 px-3 bg-zinc-900/90 hover:bg-zinc-800 text-[#B5945B] hover:text-[#d4af37] border border-[#B5945B]/30 hover:border-[#B5945B]/60 rounded-xl text-xs font-bold font-sans uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
+                      className="py-2.5 px-3 bg-zinc-900/90 hover:bg-zinc-800 text-[#B5945B] hover:text-[#d4af37] border border-[#B5945B]/30 hover:border-[#B5945B]/60 rounded-xl text-xs font-bold font-sans uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                     >
                       <Palette className="w-4 h-4 text-[#B5945B]" />
-                      <span>Xem Tiến Độ Chỉnh Sửa &amp; Nhận File Đơn Này</span>
+                      <span>Tiến Độ Ảnh</span>
                     </button>
                   </div>
 

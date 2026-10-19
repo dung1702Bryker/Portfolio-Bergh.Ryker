@@ -1,7 +1,15 @@
 import React, { useState, useRef, useEffect } from"react";
 import { MessageCircle, X, Send, Loader2, Bot } from"lucide-react";
 import { motion, AnimatePresence } from"motion/react";
-import { db, auth, handleFirestoreError, OperationType } from"../firebase";
+import {
+  db,
+  auth,
+  handleFirestoreError,
+  OperationType,
+  isFirestoreQuotaExceeded,
+  isQuotaError,
+  markFirestoreQuotaExceeded,
+} from"../firebase";
 import { onAuthStateChanged } from"firebase/auth";
 import { 
  doc, 
@@ -66,6 +74,10 @@ export const Chatbot = () => {
  const chatScrollContainerRef = useRef<HTMLDivElement>(null);
 
  useEffect(() => {
+ if (isFirestoreQuotaExceeded()) {
+   setIsContextLoading(false);
+   return;
+ }
  const unsubConfig = onSnapshot(doc(db, "appStore", "chatbotConfig"), (docSnap) => {
  if (docSnap.exists()) {
  setBusinessContext(docSnap.data().knowledge || "");
@@ -74,7 +86,11 @@ export const Chatbot = () => {
  }
  setIsContextLoading(false);
  }, (err) => {
- console.error("Context load error", err);
+ if (isQuotaError(err)) {
+   markFirestoreQuotaExceeded();
+ } else {
+   console.warn("Context load warning", err?.message || err);
+ }
  setBusinessContext("");
  setIsContextLoading(false);
  });
@@ -83,6 +99,10 @@ export const Chatbot = () => {
 
  
   useEffect(() => {
+    if (isFirestoreQuotaExceeded()) {
+      setIsAvailabilityLoading(false);
+      return;
+    }
     const q = query(collection(db, "availableDates"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const booked: string[] = [];
@@ -94,7 +114,14 @@ export const Chatbot = () => {
       });
       setBookedDates(booked);
       setIsAvailabilityLoading(false);
-    }, (err) => { console.error(err); setIsAvailabilityLoading(false); });
+    }, (err) => {
+      if (isQuotaError(err)) {
+        markFirestoreQuotaExceeded();
+      } else {
+        console.warn("Available dates load warning", err?.message || err);
+      }
+      setIsAvailabilityLoading(false);
+    });
     return () => unsubscribe();
   }, []);
 

@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import {
   db,
+  cleanFirestoreData,
   handleFirestoreError,
   OperationType,
   isFirestoreQuotaExceeded,
@@ -149,11 +150,27 @@ export function startLivePresence(options: {
   // Purge any poisoned caches from previous bugs
   purgeStaleLocationCache();
 
-  let visitorLocation = "Hà Nội";
+  let visitorLocation = "";
   try {
     const cached = sessionStorage.getItem("visitor_location");
-    if (cached && !cached.includes("Mạng ") && !cached.includes(" • ") && cached !== "Việt Nam") {
+    if (
+      cached &&
+      !cached.includes("Mạng ") &&
+      !cached.includes(" • ") &&
+      !cached.includes("Phan Tây Nhạc") &&
+      cached !== "Việt Nam"
+    ) {
       visitorLocation = stripIspFromName(cached);
+    }
+  } catch (_) {}
+
+  let visitorIp = "";
+  let visitorRawIp = "";
+  try {
+    const cachedIp = sessionStorage.getItem("visitor_detected_ip");
+    if (cachedIp) {
+      visitorRawIp = cachedIp;
+      visitorIp = cachedIp;
     }
   } catch (_) {}
 
@@ -168,6 +185,14 @@ export function startLivePresence(options: {
   let lastWriteTime = 0;
   const MIN_WRITE_INTERVAL_MS = 8000; // Throttle to at most 1 write every 8s to conserve quota
 
+  const browserVersion = devInfo.browserVersion || "";
+  const netInfo = devInfo.network;
+  const connectionType = netInfo?.connectionType;
+  const effectiveType = netInfo?.effectiveType;
+  const downlink = netInfo?.downlink;
+  const rtt = netInfo?.rtt;
+  const saveData = netInfo?.saveData;
+
   const pingServerPresence = (page: string) => {
     try {
       fetch("/api/presence/ping", {
@@ -179,29 +204,66 @@ export function startLivePresence(options: {
           role,
           device,
           browser,
+          browserVersion,
+          connectionType,
+          effectiveType,
+          downlink,
+          rtt,
+          saveData,
           screenResolution: devInfo.screenResolution,
           isReturning: devInfo.isReturning,
           visitCount: devInfo.visitCount,
           page,
           isAdminDevice: Boolean(isAdminDevice || options.isAdmin),
           clientLocation:
-            visitorLocation !== "Việt Nam"
+            visitorLocation && visitorLocation !== "Việt Nam"
               ? stripIspFromName(visitorLocation)
               : undefined,
+          clientIp: (() => {
+            try {
+              return sessionStorage.getItem("visitor_detected_ip") || undefined;
+            } catch (_) {
+              return undefined;
+            }
+          })(),
         }),
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data && data.location && data.location !== "Việt Nam") {
-            const cleanDataLoc = stripIspFromName(data.location);
-            if (cleanDataLoc && cleanDataLoc !== "Việt Nam" && cleanDataLoc !== visitorLocation) {
-              visitorLocation = cleanDataLoc;
-              try {
-                sessionStorage.setItem("visitor_location", cleanDataLoc);
-              } catch (_) {}
-              if (!isFirestoreQuotaExceeded()) {
-                setDoc(docRef, { location: cleanDataLoc }, { merge: true }).catch(() => {});
+          if (data) {
+            let hasNewInfo = false;
+            const updateDocPayload: any = {};
+
+            if (data.ip || data.rawIp) {
+              visitorIp = data.ip || visitorIp;
+              visitorRawIp = data.rawIp || visitorRawIp;
+              if (data.rawIp) {
+                try {
+                  sessionStorage.setItem("visitor_detected_ip", data.rawIp);
+                } catch (_) {}
               }
+              if (visitorIp) updateDocPayload.ip = visitorIp;
+              if (visitorRawIp) updateDocPayload.rawIp = visitorRawIp;
+              hasNewInfo = true;
+            }
+
+            if (data.location && data.location !== "Việt Nam") {
+              const cleanDataLoc = stripIspFromName(data.location);
+              if (cleanDataLoc && cleanDataLoc !== "Việt Nam" && cleanDataLoc !== visitorLocation) {
+                visitorLocation = cleanDataLoc;
+                try {
+                  sessionStorage.setItem("visitor_location", cleanDataLoc);
+                } catch (_) {}
+                updateDocPayload.location = cleanDataLoc;
+                hasNewInfo = true;
+              }
+            }
+
+            if (hasNewInfo && !isFirestoreQuotaExceeded()) {
+              setDoc(docRef, cleanFirestoreData(updateDocPayload), { merge: true }).catch(() => {});
+            }
+
+            if (hasNewInfo) {
               logVisitorHistory({
                 visitorId,
                 deviceId: devInfo.deviceId,
@@ -210,8 +272,16 @@ export function startLivePresence(options: {
                 isAdminDevice,
                 device,
                 browser,
+                browserVersion,
+                connectionType,
+                effectiveType,
+                downlink,
+                rtt,
+                saveData,
                 screenResolution: devInfo.screenResolution,
-                location: cleanDataLoc,
+                location: visitorLocation,
+                ip: visitorIp || undefined,
+                rawIp: visitorRawIp || undefined,
                 page,
                 detail: currentViewDetail,
                 isReturning: devInfo.isReturning,
@@ -237,7 +307,7 @@ export function startLivePresence(options: {
     lastWriteTime = Date.now();
 
     try {
-      const payload: ActiveVisitor = {
+      const payload: any = {
         id: visitorId,
         deviceId: devInfo.deviceId,
         visitorName,
@@ -251,14 +321,23 @@ export function startLivePresence(options: {
         isOnline: true,
         avatarColor,
         isAdminDevice,
-        location: visitorLocation,
+        location: visitorLocation || "Việt Nam",
         isReturning: devInfo.isReturning,
         visitCount: devInfo.visitCount,
         firstSeenAt: devInfo.firstSeenAt,
         screenResolution: devInfo.screenResolution,
       };
 
-      await setDoc(docRef, payload, { merge: true });
+      if (visitorIp) payload.ip = visitorIp;
+      if (visitorRawIp) payload.rawIp = visitorRawIp;
+      if (browserVersion) payload.browserVersion = browserVersion;
+      if (connectionType) payload.connectionType = connectionType;
+      if (effectiveType) payload.effectiveType = effectiveType;
+      if (typeof downlink === "number") payload.downlink = downlink;
+      if (typeof rtt === "number") payload.rtt = rtt;
+      if (typeof saveData === "boolean") payload.saveData = saveData;
+
+      await setDoc(docRef, cleanFirestoreData(payload), { merge: true });
       pingServerPresence(page);
 
       // Persistently record visitor history
@@ -270,8 +349,16 @@ export function startLivePresence(options: {
         isAdminDevice,
         device,
         browser,
+        browserVersion,
+        connectionType,
+        effectiveType,
+        downlink,
+        rtt,
+        saveData,
         screenResolution: devInfo.screenResolution,
         location: visitorLocation,
+        ip: visitorIp || undefined,
+        rawIp: visitorRawIp || undefined,
         page,
         detail,
         isReturning: devInfo.isReturning,

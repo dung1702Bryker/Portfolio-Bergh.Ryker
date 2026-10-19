@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import {
   db,
+  cleanFirestoreData,
   handleFirestoreError,
   OperationType,
   isFirestoreQuotaExceeded,
@@ -22,53 +23,85 @@ import { stripIspFromName } from "./geoService";
 import { getDetailedDeviceLabel } from "./deviceFingerprintService";
 
 /**
- * Sanitize and correct any previous faulty Intel macOS or ambiguous iPhone labels
+ * Sanitize and correct any previous faulty Intel macOS or ambiguous iPhone / iPad labels
  */
 export function sanitizeDeviceLabel(rawDevice = "", screenResolution = ""): string {
   if (!rawDevice) return "Thiết bị di động";
   const trimmed = rawDevice.trim();
 
-  // If screen resolution is 430x932, this is unambiguously an iPhone 15 Pro Max
-  if (screenResolution === "430x932" || trimmed.includes("430x932")) {
+  let scrW = 0;
+  let scrH = 0;
+  if (screenResolution && screenResolution.includes("x")) {
+    const parts = screenResolution.split("x").map(Number);
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+      scrW = Math.min(parts[0], parts[1]);
+      scrH = Math.max(parts[0], parts[1]);
+    }
+  }
+
+  // 1. CRITICAL: If a mobile phone was mistakenly tagged as Apple iPad or iPadOS
+  if (trimmed.includes("iPad") || trimmed.includes("iPadOS")) {
+    // If screen dimensions indicate a phone (< 700px width)
+    if (scrW > 0 && scrW < 700) {
+      if ((scrW === 440 && scrH === 956) || (scrW >= 438 && scrW <= 442 && scrH >= 950 && scrH <= 960)) return "iPhone 16 Pro Max";
+      if ((scrW === 402 && scrH === 874) || (scrW >= 400 && scrW <= 405 && scrH >= 870 && scrH <= 878)) return "iPhone 16 Pro";
+      if ((scrW === 430 && scrH === 932) || (scrW >= 428 && scrW <= 433 && scrH >= 930 && scrH <= 936)) return "iPhone 15 Pro Max";
+      if ((scrW === 393 && scrH === 852) || (scrW >= 390 && scrW <= 395 && scrH >= 850 && scrH <= 856)) return "iPhone 15 Pro";
+      if ((scrW === 428 && scrH === 926) || (scrW >= 426 && scrW <= 430 && scrH >= 922 && scrH <= 928)) return "iPhone 14 Plus / 13 Pro Max";
+      if ((scrW === 390 && scrH === 844) || (scrW >= 388 && scrW <= 392 && scrH >= 840 && scrH <= 848)) return "iPhone 14 / 13 / 12";
+      if ((scrW === 375 && scrH === 812) || (scrW >= 373 && scrW <= 378 && scrH >= 808 && scrH <= 816)) return "iPhone 13 mini / 12 mini / 11 Pro";
+      if (scrW === 414 && scrH === 896) return "iPhone 11 Pro Max / XR";
+      if (scrW === 414 && scrH === 736) return "iPhone 8 Plus / 7 Plus";
+      if (scrW === 375 && scrH === 667) return "iPhone SE / 8";
+      if (scrW === 320 && scrH === 568) return "iPhone SE 1st gen";
+      if (scrW >= 420) return "iPhone Pro Max";
+      if (scrW >= 390) return "iPhone Pro";
+      return "Apple iPhone";
+    }
+    // If on client side we can check current window if screenResolution wasn't stored
+    if (typeof window !== "undefined") {
+      const curW = Math.min(window.screen?.width || window.innerWidth, window.screen?.height || window.innerHeight);
+      if (curW < 700) {
+        return getDetailedDeviceLabel();
+      }
+    }
+  }
+
+  // 2. If a mobile device was mistakenly tagged with a MacBook desktop label due to Safari Desktop mode
+  if (trimmed.includes("MacBook") || trimmed === "Macintosh" || trimmed === "Mac OS X") {
+    if (scrW > 0 && scrW < 700) {
+      if ((scrW === 440 && scrH === 956) || (scrW >= 438 && scrW <= 442 && scrH >= 950 && scrH <= 960)) return "iPhone 16 Pro Max";
+      if ((scrW === 402 && scrH === 874) || (scrW >= 400 && scrW <= 405 && scrH >= 870 && scrH <= 878)) return "iPhone 16 Pro";
+      if ((scrW === 430 && scrH === 932) || (scrW >= 428 && scrW <= 433 && scrH >= 930 && scrH <= 936)) return "iPhone 15 Pro Max";
+      if ((scrW === 393 && scrH === 852) || (scrW >= 390 && scrW <= 395 && scrH >= 850 && scrH <= 856)) return "iPhone 15 Pro";
+      if ((scrW === 428 && scrH === 926) || (scrW >= 426 && scrW <= 430 && scrH >= 922 && scrH <= 928)) return "iPhone 14 Plus / 13 Pro Max";
+      if ((scrW === 390 && scrH === 844) || (scrW >= 388 && scrW <= 392 && scrH >= 840 && scrH <= 848)) return "iPhone 14 / 13 / 12";
+      if ((scrW === 375 && scrH === 812) || (scrW >= 373 && scrW <= 378 && scrH >= 808 && scrH <= 816)) return "iPhone 13 mini / 12 mini / 11 Pro";
+      if (scrW === 414 && scrH === 896) return "iPhone 11 Pro Max / XR";
+      if (scrW === 375 && scrH === 667) return "iPhone SE / 8";
+      return "Apple iPhone";
+    }
+  }
+
+  // Preserve distinct iPhone models and prioritize iPhone 15 Pro Max over iPhone 16 Plus
+  if (trimmed.includes("15 Pro Max") || trimmed.includes("15prm") || trimmed.includes("iPhone 15 Pro Max")) {
     return "iPhone 15 Pro Max";
   }
-
-  // If a mobile device was mistakenly tagged with a MacBook desktop label due to Safari Desktop mode
-  if (trimmed.includes("MacBook") && (screenResolution === "430x932" || screenResolution.includes("430x"))) {
+  if (trimmed.includes("iPhone 16 Plus / 15 Pro Max") || trimmed.includes("16 Plus / 15 Pro Max")) {
     return "iPhone 15 Pro Max";
   }
-
-  // Clean ambiguous or misleading iPhone labels from previous logs
-  if (
-    trimmed === "iPhone 16 Pro" ||
-    trimmed.includes("iPhone 16 Pro") ||
-    trimmed.includes("iPhone 16 Plus / 15 Pro Max") ||
-    trimmed.includes("iPhone 16 / 15 Pro Max") ||
-    trimmed.includes("iPhone 15 Pro Max / 14 Pro Max") ||
-    trimmed === "iPhone 16 / 15 Pro Max"
-  ) {
+  if (trimmed.includes("iPhone 16 Plus") && (scrW === 430 || scrW === 0)) {
     return "iPhone 15 Pro Max";
   }
+  if (trimmed.includes("iPhone 16 Pro Max")) return "iPhone 16 Pro Max";
+  if (trimmed.includes("iPhone 16 Pro")) return "iPhone 16 Pro";
+  if (trimmed.includes("iPhone 16 Plus")) return "iPhone 16 Plus";
+  if (trimmed.includes("iPhone 16")) return "iPhone 16";
+  if (trimmed.includes("iPhone 15 Pro")) return "iPhone 15 Pro";
 
-  if (trimmed.includes("iPhone 16 / 15 Pro / 15")) {
-    return "iPhone 15 Pro";
-  }
-
-  // Strip all legacy faulty Intel labels for Mac computers
-  if (
-    trimmed.includes("Mac (Intel") ||
-    trimmed.includes("Mac (Intel macOS)") ||
-    trimmed.includes("MacBook (Intel") ||
-    trimmed.includes("Intel Core") ||
-    trimmed === "Macintosh (Intel)" ||
-    trimmed === "Mac (Intel)"
-  ) {
-    return "MacBook / Mac (Chip Apple M1)";
-  }
-
-  // If label is generic Mac without chip info, enrich it
+  // If label is generic Mac without detail
   if (trimmed === "Macintosh" || trimmed === "Mac OS X" || trimmed === "Mac") {
-    return "MacBook / Mac (Chip Apple M1)";
+    return "Mac (Apple Silicon)";
   }
 
   return trimmed;
@@ -86,6 +119,8 @@ export interface VisitorHistoryItem {
   device: string;
   browser: string;
   screenResolution?: string;
+  ip?: string;
+  rawIp?: string;
   location?: string;
   city?: string;
   region?: string;
@@ -96,6 +131,12 @@ export interface VisitorHistoryItem {
   lastViewDetail?: string;
   visitedPages: string[];
   pageViews: number;
+  browserVersion?: string;
+  connectionType?: string;
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
 }
 
 const LOCAL_STORAGE_KEY = "bergh_ryker_visitor_history_cache_v2";
@@ -164,8 +205,16 @@ export async function logVisitorHistory(visitor: {
   isAdminDevice?: boolean;
   device: string;
   browser: string;
+  browserVersion?: string;
+  connectionType?: string;
+  effectiveType?: string;
+  downlink?: number;
+  rtt?: number;
+  saveData?: boolean;
   screenResolution?: string;
   location?: string;
+  ip?: string;
+  rawIp?: string;
   page: string;
   detail?: string;
   isReturning?: boolean;
@@ -180,8 +229,16 @@ export async function logVisitorHistory(visitor: {
     isAdminDevice,
     device,
     browser,
+    browserVersion,
+    connectionType,
+    effectiveType,
+    downlink,
+    rtt,
+    saveData,
     screenResolution,
     location,
+    ip,
+    rawIp,
     page,
     detail,
     isReturning,
@@ -225,8 +282,16 @@ export async function logVisitorHistory(visitor: {
         visitCount: effectiveVisitCount,
         device: cleanDevice,
         browser: browser || existing.browser,
+        browserVersion: browserVersion || existing.browserVersion,
+        connectionType: connectionType || existing.connectionType,
+        effectiveType: effectiveType || existing.effectiveType,
+        downlink: downlink !== undefined ? downlink : existing.downlink,
+        rtt: rtt !== undefined ? rtt : existing.rtt,
+        saveData: saveData !== undefined ? saveData : existing.saveData,
         screenResolution: screenResolution || existing.screenResolution,
         location: cleanLoc !== "Việt Nam" ? cleanLoc : existing.location || "Việt Nam",
+        ip: ip || existing.ip,
+        rawIp: rawIp || existing.rawIp,
         lastPage: page || existing.lastPage,
         lastViewDetail: detail || existing.lastViewDetail,
         lastSeenAt: nowIso,
@@ -249,8 +314,16 @@ export async function logVisitorHistory(visitor: {
         visitCount: effectiveVisitCount,
         device: cleanDevice,
         browser: browser || "Trình duyệt",
+        browserVersion,
+        connectionType,
+        effectiveType,
+        downlink,
+        rtt,
+        saveData,
         screenResolution: screenResolution || "",
         location: cleanLoc,
+        ip,
+        rawIp,
         firstSeenAt: initialFirstSeen || nowIso,
         lastSeenAt: nowIso,
         entryPage: page || "Trang chủ Portfolio",
@@ -293,6 +366,25 @@ export async function logVisitorHistory(visitor: {
       pageViews: increment(1),
     };
 
+    if (browserVersion) {
+      updatePayload.browserVersion = browserVersion;
+    }
+    if (connectionType) {
+      updatePayload.connectionType = connectionType;
+    }
+    if (effectiveType) {
+      updatePayload.effectiveType = effectiveType;
+    }
+    if (downlink !== undefined) {
+      updatePayload.downlink = downlink;
+    }
+    if (rtt !== undefined) {
+      updatePayload.rtt = rtt;
+    }
+    if (saveData !== undefined) {
+      updatePayload.saveData = saveData;
+    }
+
     if (screenResolution) {
       updatePayload.screenResolution = screenResolution;
     }
@@ -306,7 +398,14 @@ export async function logVisitorHistory(visitor: {
       updatePayload.location = cleanLoc;
     }
 
-    await setDoc(docRef, updatePayload, { merge: true });
+    if (ip) {
+      updatePayload.ip = ip;
+    }
+    if (rawIp) {
+      updatePayload.rawIp = rawIp;
+    }
+
+    await setDoc(docRef, cleanFirestoreData(updatePayload), { merge: true });
   } catch (error: any) {
     if (
       error?.code === "resource-exhausted" ||
@@ -387,7 +486,11 @@ export function subscribeToVisitorHistory(
             device: sanitizeDeviceLabel(data.device || "Thiết bị di động", data.screenResolution || ""),
             browser: data.browser || "Trình duyệt",
             screenResolution: data.screenResolution || "",
+            ip: data.ip || (data.rawIp ? data.rawIp : undefined),
+            rawIp: data.rawIp,
             location: stripIspFromName(data.location || "Việt Nam"),
+            city: data.city,
+            region: data.region,
             firstSeenAt: data.firstSeenAt || data.lastSeenAt || new Date().toISOString(),
             lastSeenAt: data.lastSeenAt || new Date().toISOString(),
             entryPage: data.entryPage || "Trang chủ",

@@ -22,15 +22,22 @@ service cloud.firestore {
         && data.id == bookingId
         && data.schoolName is string
         && data.schoolName.size() > 0
-        && data.classSize is int
-        && data.classSize > 0
+        && (data.classSize is int || data.classSize is float)
+        && data.classSize >= 0
         && data.date is string
         && data.conceptType in ['THPT', 'University', 'Event', 'Custom']
         && data.instagramOrZalo is string
-        && data.status in ['Chờ duyệt', 'Đã duyệt', 'Từ chối', 'Đã khoá lịch', 'Đang xử lý', 'Đã hoàn thành']
-        && (!('source' in data) || data.source in ['website', 'chatbot'])
+        && data.status in ['Chờ duyệt', 'Đã duyệt', 'Từ chối', 'Đã khoá lịch', 'Đang xử lý', 'Đã hoàn thành', 'confirmed', 'Đã xác nhận', 'Đã hủy']
+        && (!('confirmationStatus' in data) || data.confirmationStatus in ['not_sent', 'link_created', 'viewed'])
+        && (!('bookingCode' in data) || (data.bookingCode is string && data.bookingCode.size() <= 64))
+        && (!('confirmedAt' in data) || (data.confirmedAt is string && data.confirmedAt.size() <= 100))
+        && (!('confirmationLink' in data) || (data.confirmationLink is string && data.confirmationLink.size() <= 500))
+        && (!('qrCodeUrl' in data) || (data.qrCodeUrl is string && data.qrCodeUrl.size() <= 150000))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 200))
+        && (!('source' in data) || (data.source is string && data.source.size() <= 100))
+        && (!('referralSource' in data) || (data.referralSource is string && data.referralSource.size() <= 100))
         && (!('editingStatus' in data) || data.editingStatus in ['pending', 'shooting_done', 'editing', 'reviewing', 'completed'])
-        && (!('editingProgress' in data) || (data.editingProgress is number && data.editingProgress >= 0 && data.editingProgress <= 100))
+        && (!('editingProgress' in data) || ((data.editingProgress is int || data.editingProgress is float) && data.editingProgress >= 0 && data.editingProgress <= 100))
         && (!('finalPhotosUrl' in data) || (data.finalPhotosUrl is string && data.finalPhotosUrl.size() <= 2000))
         && (!('rawPhotosUrl' in data) || (data.rawPhotosUrl is string && data.rawPhotosUrl.size() <= 2000))
         && (!('editingNotes' in data) || (data.editingNotes is string && data.editingNotes.size() <= 2000))

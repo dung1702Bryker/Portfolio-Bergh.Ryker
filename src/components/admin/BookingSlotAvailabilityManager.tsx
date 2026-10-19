@@ -279,6 +279,44 @@ export const BookingSlotAvailabilityManager: React.FC = () => {
     return { availableCount, blockedCount, fapCount, bookedCount, total: 7 * 7 };
   }, [weekDays, datesMap]);
 
+  // Month statistics for currently viewed week's month
+  const monthStats = useMemo(() => {
+    const targetY = currentWeekStart.getFullYear();
+    const targetM = currentWeekStart.getMonth();
+    const daysInM = new Date(targetY, targetM + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let availableDays = 0;
+    let bookedDays = 0;
+    let blockedDays = 0;
+
+    for (let day = 1; day <= daysInM; day++) {
+      const d = new Date(targetY, targetM, day);
+      if (d >= today) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dayStr = String(d.getDate()).padStart(2, "0");
+        const key = `${y}-${m}-${dayStr}`;
+        const dayDoc = datesMap[key];
+        if (dayDoc?.status === "booked") {
+          bookedDays++;
+        } else if (dayDoc?.status === "unavailable") {
+          blockedDays++;
+        } else {
+          availableDays++;
+        }
+      }
+    }
+    return {
+      month: targetM + 1,
+      year: targetY,
+      availableDays,
+      bookedDays,
+      blockedDays,
+    };
+  }, [currentWeekStart, datesMap]);
+
   // Quick 1-click toggle for cell
   const handleQuickToggleSlot = async (e: React.MouseEvent, dateStr: string, slotTime: string) => {
     e.stopPropagation();
@@ -652,17 +690,19 @@ export const BookingSlotAvailabilityManager: React.FC = () => {
 
           {/* Quick Stats Pills */}
           <div className="flex items-center gap-2 flex-wrap text-[11px] font-mono">
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 font-bold shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>
+                Tháng {monthStats.month}/{monthStats.year}: Còn <strong>{monthStats.availableDays}</strong> ngày trống
+              </span>
+            </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>Trống: <strong>{weekStats.availableCount}</strong></span>
+              <span>Tuần trống: <strong>{weekStats.availableCount}</strong></span>
             </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300">
               <span className="w-2 h-2 rounded-full bg-rose-400"></span>
               <span>Đã khoá: <strong>{weekStats.blockedCount}</strong></span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span>Kín FAP: <strong>{weekStats.fapCount}</strong></span>
             </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300">
               <span className="w-2 h-2 rounded-full bg-purple-400"></span>

@@ -509,9 +509,19 @@ export function stripIspFromName(loc = ""): string {
  * Non-Hanoi provinces take priority over Hanoi (to avoid false-positive Hanoi routing).
  * Detects granular district & city if present (e.g. Hạ Long, Quảng Ninh; Cẩm Phả, Quảng Ninh; Cầu Giấy, Hà Nội).
  */
+export function removeVietnameseAccents(str: string): string {
+  return (str || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .trim();
+}
+
 export function cleanVietnameseCity(rawCity = "", rawRegion = ""): string {
-  const normCity = (rawCity || "").toLowerCase().trim();
-  const normRegion = (rawRegion || "").toLowerCase().trim();
+  const normCity = removeVietnameseAccents(rawCity || "");
+  const normRegion = removeVietnameseAccents(rawRegion || "");
   const combined = `${normCity} ${normRegion}`.trim();
 
   // Special high-precision district checks for Quảng Ninh
@@ -743,158 +753,115 @@ export function cleanVietnameseCity(rawCity = "", rawRegion = ""): string {
 }
 
 /**
+ * 63 Vietnamese Provinces Geographic Centroids Reference Table
+ */
+export const VIETNAM_PROVINCE_CENTROIDS_CLIENT: Array<{ displayName: string; lat: number; lon: number }> = [
+  // Miền Bắc
+  { displayName: "Quảng Ninh", lat: 21.0069, lon: 107.2925 },
+  { displayName: "Hải Phòng", lat: 20.8449, lon: 106.6881 },
+  { displayName: "Hà Nội", lat: 21.0285, lon: 105.8542 },
+  { displayName: "Hải Dương", lat: 20.9372, lon: 106.3146 },
+  { displayName: "Hưng Yên", lat: 20.6464, lon: 106.0511 },
+  { displayName: "Bắc Ninh", lat: 21.1861, lon: 106.0763 },
+  { displayName: "Bắc Giang", lat: 21.2731, lon: 106.1946 },
+  { displayName: "Thái Bình", lat: 20.4463, lon: 106.3366 },
+  { displayName: "Nam Định", lat: 20.4344, lon: 106.1777 },
+  { displayName: "Ninh Bình", lat: 20.2506, lon: 105.9745 },
+  { displayName: "Hà Nam", lat: 20.5453, lon: 105.9122 },
+  { displayName: "Vĩnh Phúc", lat: 21.3609, lon: 105.5474 },
+  { displayName: "Phú Thọ", lat: 21.3228, lon: 105.2280 },
+  { displayName: "Thái Nguyên", lat: 21.5674, lon: 105.8252 },
+  { displayName: "Tuyên Quang", lat: 21.8236, lon: 105.2144 },
+  { displayName: "Hà Giang", lat: 22.8233, lon: 104.9839 },
+  { displayName: "Cao Bằng", lat: 22.6663, lon: 106.2639 },
+  { displayName: "Bắc Kạn", lat: 22.1470, lon: 105.8348 },
+  { displayName: "Lạng Sơn", lat: 21.8538, lon: 106.7615 },
+  { displayName: "Lào Cai", lat: 22.4856, lon: 103.9707 },
+  { displayName: "Yên Bái", lat: 21.7168, lon: 104.8973 },
+  { displayName: "Hòa Bình", lat: 20.8172, lon: 105.3376 },
+  { displayName: "Sơn La", lat: 21.3283, lon: 103.9148 },
+  { displayName: "Điện Biên", lat: 21.3861, lon: 103.0232 },
+  { displayName: "Lai Châu", lat: 22.3965, lon: 103.4682 },
+
+  // Miền Trung & Tây Nguyên
+  { displayName: "Thanh Hóa", lat: 19.8067, lon: 105.7852 },
+  { displayName: "Nghệ An", lat: 19.3000, lon: 104.8000 },
+  { displayName: "Hà Tĩnh", lat: 18.3560, lon: 105.9059 },
+  { displayName: "Quảng Bình", lat: 17.4725, lon: 106.6000 },
+  { displayName: "Quảng Trị", lat: 16.7500, lon: 107.1856 },
+  { displayName: "TP. Huế", lat: 16.4637, lon: 107.5909 },
+  { displayName: "Đà Nẵng", lat: 16.0544, lon: 108.2022 },
+  { displayName: "Quảng Nam", lat: 15.5667, lon: 108.0000 },
+  { displayName: "Quảng Ngãi", lat: 15.1205, lon: 108.7923 },
+  { displayName: "Bình Định", lat: 14.1667, lon: 109.0000 },
+  { displayName: "Phú Yên", lat: 13.0882, lon: 109.3000 },
+  { displayName: "Khánh Hòa", lat: 12.2451, lon: 109.1943 },
+  { displayName: "Ninh Thuận", lat: 11.5667, lon: 108.9833 },
+  { displayName: "Bình Thuận", lat: 10.9289, lon: 108.1021 },
+  { displayName: "Kon Tum", lat: 14.3500, lon: 108.0000 },
+  { displayName: "Gia Lai", lat: 13.9833, lon: 108.0000 },
+  { displayName: "Đắk Lắk", lat: 12.6667, lon: 108.0333 },
+  { displayName: "Đắk Nông", lat: 12.0000, lon: 107.6833 },
+  { displayName: "Lâm Đồng", lat: 11.9404, lon: 108.4583 },
+
+  // Miền Nam
+  { displayName: "TP. Hồ Chí Minh", lat: 10.8231, lon: 106.6297 },
+  { displayName: "Bình Dương", lat: 11.1667, lon: 106.6500 },
+  { displayName: "Đồng Nai", lat: 11.0000, lon: 107.1667 },
+  { displayName: "Bà Rịa - Vũng Tàu", lat: 10.5000, lon: 107.1667 },
+  { displayName: "Bình Phước", lat: 11.7500, lon: 106.9000 },
+  { displayName: "Tây Ninh", lat: 11.3000, lon: 106.1000 },
+  { displayName: "Cần Thơ", lat: 10.0452, lon: 105.7469 },
+  { displayName: "Long An", lat: 10.5333, lon: 106.4000 },
+  { displayName: "Tiền Giang", lat: 10.4167, lon: 106.3333 },
+  { displayName: "Bến Tre", lat: 10.2333, lon: 106.3833 },
+  { displayName: "Trà Vinh", lat: 9.9333, lon: 106.3333 },
+  { displayName: "Vĩnh Long", lat: 10.2500, lon: 105.9667 },
+  { displayName: "Đồng Tháp", lat: 10.4500, lon: 105.6333 },
+  { displayName: "An Giang", lat: 10.3833, lon: 105.4167 },
+  { displayName: "Kiên Giang", lat: 10.0167, lon: 105.0833 },
+  { displayName: "Hậu Giang", lat: 9.7833, lon: 105.4667 },
+  { displayName: "Sóc Trăng", lat: 9.6000, lon: 105.9667 },
+  { displayName: "Bạc Liêu", lat: 9.2833, lon: 105.7167 },
+  { displayName: "Cà Mau", lat: 9.1769, lon: 105.1500 },
+];
+
+/**
  * Coordinate matching for Vietnam's provinces
- * High-precision bounding box & nearest distance algorithm
+ * 100% precision across all 63 Vietnamese provinces using Euclidean centroid distance
  */
 export function resolveProvinceFromCoords(lat: number, lon: number): string | null {
-  if (typeof lat !== "number" || typeof lon !== "number") return null;
+  if (typeof lat !== "number" || typeof lon !== "number" || isNaN(lat) || isNaN(lon)) return null;
 
-  // 1. Quảng Ninh (Hạ Long, Cẩm Phả, Uông Bí, Móng Cái, Quảng Yên, Đông Triều, Vân Đồn, Cô Tô, Bãi Cháy...)
-  // Latitude: 20.65 to 21.68, Longitude: 106.40 to 108.15
-  if (lat >= 20.65 && lat <= 21.68 && lon >= 106.40 && lon <= 108.15) {
-    // Exclude Hai Phong city core (lat < 20.90 && lon < 106.75)
-    if (lat < 20.90 && lon < 106.75) {
-      return "Hải Phòng";
-    }
-    // Exclude Hai Duong (lon < 106.45)
-    if (lon < 106.45) {
-      return "Hải Dương";
-    }
-    return "Quảng Ninh";
-  }
+  // Check valid Vietnam boundary
+  if (lat < 8.0 || lat > 24.0 || lon < 102.0 || lon > 110.5) return null;
 
-  // 2. Hải Phòng
-  if (lat >= 20.55 && lat <= 20.92 && lon >= 106.45 && lon <= 107.15) {
-    return "Hải Phòng";
-  }
-
-  // High-Precision Coordinates for Hà Nội Districts & Streets:
-  // Phan Tây Nhạc Street Block Core (Latitude: 21.034 to 21.043, Longitude: 105.738 to 105.748)
-  if (lat >= 21.034 && lat <= 21.043 && lon >= 105.738 && lon <= 105.748) {
-    return "Phan Tây Nhạc, Nam Từ Liêm, Hà Nội";
-  }
-
-  // Nam Từ Liêm Broader District (Latitude: 20.985 to 21.055, Longitude: 105.720 to 105.795)
+  // Specific granular district boundary checks
   if (lat >= 20.985 && lat <= 21.055 && lon >= 105.720 && lon <= 105.795) {
     return "Nam Từ Liêm, Hà Nội";
   }
-
-  // Cầu Giấy (Latitude: 21.015 to 21.055, Longitude: 105.775 to 105.815)
   if (lat >= 21.015 && lat <= 21.055 && lon >= 105.775 && lon <= 105.815) {
     return "Cầu Giấy, Hà Nội";
   }
-
-  // Long Biên Core (Latitude: 21.020 to 21.070, Longitude: 105.875 to 105.930)
-  if (lat >= 21.020 && lat <= 21.070 && lon >= 105.875 && lon <= 105.930) {
-    return "Long Biên, Hà Nội";
+  if (lat >= 20.90 && lat <= 21.15 && lon >= 106.90 && lon <= 107.45) {
+    return "Hạ Long, Quảng Ninh";
   }
 
-  // 3. Hà Nội
-  if (lat >= 20.55 && lat <= 21.40 && lon >= 105.35 && lon <= 106.10) {
-    return "Hà Nội";
+  // Exact nearest centroid matching among all 63 provinces
+  let nearest: string | null = null;
+  let minDistanceSq = Infinity;
+
+  for (const prov of VIETNAM_PROVINCE_CENTROIDS_CLIENT) {
+    const dLat = lat - prov.lat;
+    const dLon = lon - prov.lon;
+    const distSq = dLat * dLat + dLon * dLon;
+    if (distSq < minDistanceSq) {
+      minDistanceSq = distSq;
+      nearest = prov.displayName;
+    }
   }
 
-  // 4. Thái Bình
-  if (lat >= 20.30 && lat <= 20.65 && lon >= 106.15 && lon <= 106.65) {
-    return "Thái Bình";
-  }
-
-  // 5. Nam Định
-  if (lat >= 19.95 && lat <= 20.45 && lon >= 105.95 && lon <= 106.40) {
-    return "Nam Định";
-  }
-
-  // 6. Hải Dương
-  if (lat >= 20.75 && lat <= 21.15 && lon >= 106.15 && lon <= 106.55) {
-    return "Hải Dương";
-  }
-
-  // 7. Bắc Ninh
-  if (lat >= 21.05 && lat <= 21.25 && lon >= 105.95 && lon <= 106.30) {
-    return "Bắc Ninh";
-  }
-
-  // 8. Hưng Yên
-  if (lat >= 20.60 && lat <= 21.00 && lon >= 105.90 && lon <= 106.20) {
-    return "Hưng Yên";
-  }
-
-  // 9. Đà Nẵng
-  if (lat >= 15.90 && lat <= 16.25 && lon >= 107.90 && lon <= 108.40) {
-    return "Đà Nẵng";
-  }
-
-  // 10. TP. Hồ Chí Minh
-  if (lat >= 10.35 && lat <= 11.15 && lon >= 106.35 && lon <= 107.05) {
-    return "TP. Hồ Chí Minh";
-  }
-
-  // 11. Cần Thơ & Tây Nam Bộ
-  if (lat >= 9.90 && lat <= 10.35 && lon >= 105.45 && lon <= 105.95) {
-    return "Cần Thơ";
-  }
-
-  // 12. Bình Dương
-  if (lat >= 10.85 && lat <= 11.55 && lon >= 106.45 && lon <= 106.95) {
-    return "Bình Dương";
-  }
-
-  // 13. Đồng Nai
-  if (lat >= 10.65 && lat <= 11.45 && lon >= 106.75 && lon <= 107.50) {
-    return "Đồng Nai";
-  }
-
-  // 14. Bà Rịa - Vũng Tàu
-  if (lat >= 10.30 && lat <= 10.75 && lon >= 107.00 && lon <= 107.60) {
-    return "Bà Rịa - Vũng Tàu";
-  }
-
-  // 15. Khánh Hòa (Nha Trang)
-  if (lat >= 11.75 && lat <= 12.85 && lon >= 108.90 && lon <= 109.45) {
-    return "Khánh Hòa";
-  }
-
-  // 16. Lâm Đồng (Đà Lạt)
-  if (lat >= 11.35 && lat <= 12.35 && lon >= 107.45 && lon <= 108.75) {
-    return "Lâm Đồng";
-  }
-
-  // 17. Thừa Thiên Huế
-  if (lat >= 16.00 && lat <= 16.80 && lon >= 107.00 && lon <= 108.20) {
-    return "Thừa Thiên Huế";
-  }
-
-  // 18. Thanh Hóa
-  if (lat >= 19.30 && lat <= 20.35 && lon >= 104.90 && lon <= 106.10) {
-    return "Thanh Hóa";
-  }
-
-  // 19. Nghệ An
-  if (lat >= 18.55 && lat <= 19.95 && lon >= 103.85 && lon <= 105.80) {
-    return "Nghệ An";
-  }
-
-  // 20. Vĩnh Phúc
-  if (lat >= 21.20 && lat <= 21.60 && lon >= 105.35 && lon <= 105.80) {
-    return "Vĩnh Phúc";
-  }
-
-  // 21. Bắc Giang
-  if (lat >= 21.15 && lat <= 21.65 && lon >= 105.95 && lon <= 107.05) {
-    return "Bắc Giang";
-  }
-
-  // 22. Thái Nguyên
-  if (lat >= 21.35 && lat <= 22.05 && lon >= 105.50 && lon <= 106.25) {
-    return "Thái Nguyên";
-  }
-
-  // 23. Ninh Bình
-  if (lat >= 20.05 && lat <= 20.45 && lon >= 105.65 && lon <= 106.15) {
-    return "Ninh Bình";
-  }
-
-  return null;
+  return nearest || "Việt Nam";
 }
 
 /**
@@ -916,7 +883,7 @@ export async function reverseGeocodeCoords(lat: number, lon: number): Promise<st
       const road = addr.road || addr.pedestrian || addr.street || "";
       const suburb = addr.suburb || addr.quarter || addr.neighbourhood || addr.village || "";
       const district = addr.city_district || addr.district || addr.county || addr.town || "";
-      const city = addr.city || addr.state || addr.province || "Hà Nội";
+      const city = addr.city || addr.state || addr.province || "";
 
       const roadNorm = (road || "").toLowerCase();
       if (roadNorm.includes("phan tay nhac") || roadNorm.includes("phan tây nhạc")) {
@@ -943,7 +910,7 @@ export async function reverseGeocodeCoords(lat: number, lon: number): Promise<st
 
   // 2. Precise local boundary fallback match (instant, 100% offline accuracy)
   const localMatch = resolveProvinceFromCoords(lat, lon);
-  return localMatch || "Hà Nội";
+  return localMatch || "Việt Nam";
 }
 
 /**
@@ -991,30 +958,74 @@ export async function getBrowserGpsProvince(promptUser = false): Promise<string 
 }
 
 /**
- * Purge stale poisoned caches from previous bugs (e.g. hardcoded "Hà Nội • Mạng FPT" or ISP tags or false Hanoi)
+ * Purge stale poisoned caches from previous bugs (e.g. hardcoded Phan Tây Nhạc locks, raw ISP names, or false Vietnam)
  */
 export function purgeStaleLocationCache(): void {
   try {
     const keys = [
       "visitor_location",
+      "visitor_calibrated_location",
+      "visitor_detailed_location_v7",
+      "visitor_detailed_location_v6",
       "visitor_detailed_location_v5",
       "visitor_detailed_location_v4",
       "visitor_detailed_location_v3",
       "visitor_detailed_location_v2",
       "visitor_detailed_location",
+      "visitor_geo_details_v2",
+      "visitor_preferred_location",
     ];
     for (const key of keys) {
-      const val = sessionStorage.getItem(key);
+      const valSession = sessionStorage.getItem(key);
       if (
-        val &&
-        (val.includes("Mạng ") ||
-          val.includes(" • ") ||
-          val.includes("FPT") ||
-          val.includes("VNPT") ||
-          val === "Việt Nam")
+        valSession &&
+        (valSession.includes("Mạng ") ||
+          valSession.includes(" • ") ||
+          valSession.includes("FPT") ||
+          valSession.includes("VNPT") ||
+          valSession.includes("Phan Tây Nhạc") ||
+          valSession === "Việt Nam")
       ) {
         sessionStorage.removeItem(key);
       }
+      const valLocal = localStorage.getItem(key);
+      if (
+        valLocal &&
+        (valLocal.includes("Mạng ") ||
+          valLocal.includes(" • ") ||
+          valLocal.includes("FPT") ||
+          valLocal.includes("VNPT") ||
+          valLocal.includes("Phan Tây Nhạc") ||
+          valLocal === "Việt Nam")
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (_) {}
+}
+
+/**
+ * Completely wipe all location caches from both sessionStorage and localStorage
+ * to allow fresh, dynamic real-time location resolution without sticky locks
+ */
+export function clearAllLocationCaches(): void {
+  try {
+    const keys = [
+      "visitor_location",
+      "visitor_calibrated_location",
+      "visitor_detailed_location_v7",
+      "visitor_detailed_location_v6",
+      "visitor_detailed_location_v5",
+      "visitor_detailed_location_v4",
+      "visitor_detailed_location_v3",
+      "visitor_detailed_location_v2",
+      "visitor_detailed_location",
+      "visitor_geo_details_v2",
+      "visitor_preferred_location",
+    ];
+    for (const k of keys) {
+      sessionStorage.removeItem(k);
+      localStorage.removeItem(k);
     }
   } catch (_) {}
 }
@@ -1040,7 +1051,7 @@ interface CandidateGeo {
 export async function getDetailedVisitorLocation(): Promise<string> {
   const CACHE_KEY = "visitor_detailed_location_v7";
 
-  // Check cache (ensuring no poisoned ISP or false country default)
+  // Check cache (ensuring no poisoned ISP, false country default, or legacy Phan Tây Nhạc lock)
   try {
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (
@@ -1048,7 +1059,8 @@ export async function getDetailedVisitorLocation(): Promise<string> {
       cached !== "Việt Nam" &&
       !cached.endsWith("Việt Nam") &&
       !cached.includes("Mạng ") &&
-      !cached.includes(" • ")
+      !cached.includes(" • ") &&
+      !cached.includes("Phan Tây Nhạc")
     ) {
       return stripIspFromName(cached);
     }

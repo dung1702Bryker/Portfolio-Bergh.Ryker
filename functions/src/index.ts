@@ -21,71 +21,14 @@ export const handleNewChatbotBooking = async (event: any) => {
   
   // Only process bookings that came from the chatbot
   if (data.source !== "chatbot") {
-    logger.info(`Booking ${event.params.bookingId} has source "${data.source}". Not a chatbot booking, skipping email.`);
     return;
   }
 
-  const adminEmail = process.env.ADMIN_EMAIL || "berghryker2@gmail.com";
-  logger.info(`Processing new chatbot booking ${event.params.bookingId}. Scheduling email to ${adminEmail}...`);
-
-  try {
-    const db = admin.firestore();
-    
-    // format date to something readable
-    const createdDate = data.createdAt 
-      ? (data.createdAt.toDate ? data.createdAt.toDate().toLocaleString("vi-VN") : data.createdAt.toString())
-      : new Date().toLocaleString("vi-VN");
-
-    const htmlBody = `
-      <h2>Khách hàng mới đặt lịch qua Chatbot</h2>
-      <p><strong>Mã Booking:</strong> ${event.params.bookingId}</p>
-      <p><strong>Khách hàng / Tên trường:</strong> ${data.schoolName || 'N/A'}</p>
-      <p><strong>Số lượng:</strong> ${data.classSize || 'N/A'}</p>
-      <p><strong>Ngày chụp:</strong> ${data.date || 'N/A'}</p>
-      <p><strong>Ca chụp:</strong> ${data.timeSlot || 'N/A'}</p>
-      <p><strong>Gói / Concept:</strong> ${data.conceptType || 'N/A'}</p>
-      <p><strong>Custom Request:</strong> ${data.customRequest || 'N/A'}</p>
-      <p><strong>Liên hệ (IG/Zalo):</strong> ${data.instagramOrZalo || 'N/A'}</p>
-      <p><strong>Số điện thoại:</strong> ${data.phone || 'N/A'}</p>
-      <p><strong>Ghi chú:</strong> ${data.notes || 'N/A'}</p>
-      <p><strong>Trạng thái:</strong> ${data.status || 'N/A'}</p>
-      <p><strong>Nguồn:</strong> ${data.source}</p>
-      <p><strong>Tạo lúc:</strong> ${createdDate}</p>
-      <br />
-      <p><a href="https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app/?admin=1&bookingId=${event.params.bookingId}" target="_blank">Mở booking trong Trung Tâm Quản Trị</a></p>
-      <p>Link trực tiếp: https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app/?admin=1&bookingId=${event.params.bookingId}</p>
-    `;
-
-    const textBody = `
-      Khách hàng mới đặt lịch qua Chatbot
-      Mã Booking: ${event.params.bookingId}
-      Khách hàng / Tên trường: ${data.schoolName || 'N/A'}
-      Ngày chụp: ${data.date || 'N/A'}
-      Liên hệ: ${data.instagramOrZalo || 'N/A'}
-      
-      Link mở trong hệ thống quản trị: https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app/?admin=1&bookingId=${event.params.bookingId}
-    `;
-
-    // Use the emailTasks collection for the "Trigger Email from Firestore" extension
-    await db.collection("emailTasks").add({
-      to: adminEmail,
-      message: {
-        subject: `[Chatbot] Booking mới: ${data.schoolName || 'Khách hàng'} - ${data.date || ''}`,
-        text: textBody,
-        html: htmlBody,
-      },
-      _bookingRef: event.params.bookingId // Reference ID for debugging
-    });
-
-    logger.info(`Successfully scheduled email task for booking ${event.params.bookingId}`);
-  } catch (error) {
-    logger.error(`Error scheduling email task for booking ${event.params.bookingId}:`, error);
-    // Wait, we shouldn't throw error back since it stops here anyway, but just log it and the booking remains intact.
-  }
+  logger.info(`New chatbot booking received: ${event.params.bookingId} (${data.schoolName || "N/A"}).`);
 };
 
 /**
- * Trigger to send email notification for new chatbot bookings
+ * Trigger on new chatbot booking document creation
  */
 export const notifyAdminOnNewChatbotBooking = onDocumentCreated(
   "bookings/{bookingId}",

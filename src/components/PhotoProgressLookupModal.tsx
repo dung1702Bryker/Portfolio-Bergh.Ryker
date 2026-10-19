@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -12,18 +12,29 @@ import {
   Copy,
   Check,
   Calendar,
-  User,
-  Users,
   MessageCircle,
   FileCheck,
   AlertCircle,
   FolderDown,
   RefreshCw,
   Share2,
+  HelpCircle,
+  PhoneCall,
+  RotateCcw,
+  PlusCircle,
 } from "lucide-react";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { Booking, PhotoEditingStatus } from "../types";
+import { decodeBookingIdentifier } from "../utils/bookingQr";
 
 interface PhotoProgressLookupModalProps {
   isOpen: boolean;
@@ -95,59 +106,295 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastSearchedCode, setLastSearchedCode] = useState<string>("");
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedTicket, setCopiedTicket] = useState(false);
+  const [localBookings, setLocalBookings] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync initial code
-  useEffect(() => {
-    if (initialBookingId) {
-      setSearchCode(initialBookingId);
-      handleLookup(initialBookingId);
-    }
-  }, [initialBookingId, isOpen]);
-
-  // Lookup function with real-time listener if found
-  const handleLookup = async (codeToSearch: string) => {
-    const trimmed = codeToSearch.trim().toUpperCase();
-    if (!trimmed) {
-      setError("Vui lòng nhập mã Ticket / Mã Booking của bạn");
-      setBooking(null);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
+  // Đồng bộ danh sách đơn đặt lịch từ localStorage trên thiết bị
+  const syncLocalBookings = useCallback(() => {
     try {
-      const docRef = doc(db, "bookings", trimmed);
-      const snap = await getDoc(docRef);
-
-      if (snap.exists()) {
-        const data = snap.data() as Booking;
-        setBooking(data);
-
-        // Update URL query parameter without reloading
-        const url = new URL(window.location.href);
-        url.searchParams.set("ticket", trimmed);
-        window.history.replaceState({}, "", url.toString());
-      } else {
-        setBooking(null);
-        setError(`Không tìm thấy đơn đặt lịch nào với mã "${trimmed}". Quý khách vui lòng kiểm tra lại mã trên Gmail xác nhận hoặc vé điện tử.`);
-      }
-    } catch (err: any) {
-      console.error("[PhotoProgress] Lookup error:", err);
-      setError("Không thể tải thông tin lúc này. Vui lòng thử lại sau.");
-    } finally {
-      setLoading(false);
+      const saved = localStorage.getItem("my_booking_ids");
+      const list: string[] = saved ? JSON.parse(saved) : [];
+      const combined = Array.from(new Set([...myBookingIds, ...list])).filter(Boolean);
+      setLocalBookings(combined);
+      return combined;
+    } catch (_) {
+      setLocalBookings(myBookingIds);
+      return myBookingIds;
     }
-  };
+  }, [myBookingIds]);
 
-  // Realtime subscription when booking is loaded
+  useEffect(() => {
+    if (isOpen) {
+      syncLocalBookings();
+    }
+  }, [isOpen, syncLocalBookings]);
+
+  // Bộ giải mã và tra cứu dữ liệu đa tầng kết nối Firestore
+  const executeSearch = useCallback(
+    async (rawInput: string) => {
+      const decoded = decodeBookingIdentifier(rawInput);
+      const cleanInput = decoded.trim();
+
+      if (!cleanInput) {
+        setError(
+          "Vui lòng nhập Mã booking (VD: BR-2026-6721), Số điện thoại hoặc dán link xác nhận đặt lịch."
+        );
+        setBooking(null);
+        setLastSearchedCode("");
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      setLastSearchedCode(cleanInput);
+
+      try {
+        let foundBooking: Booking | null = null;
+        const upper = cleanInput.toUpperCase();
+        const cleanSearch = upper.replace(/[^A-Z0-9]/g, "");
+
+        // TẦNG 1: Truy vấn Firestore trực tiếp theo trường `bookingCode`
+        try {
+          const qUpper = query(
+            collection(db, "bookings"),
+            where("bookingCode", "==", upper)
+          );
+          const snapUpper = await getDocs(qUpper);
+          if (!snapUpper.empty) {
+            const d = snapUpper.docs[0];
+            foundBooking = { id: d.id, ...(d.data() as any) };
+          } else if (cleanInput !== upper) {
+            const qRaw = query(
+              collection(db, "bookings"),
+              where("bookingCode", "==", cleanInput)
+            );
+            const snapRaw = await getDocs(qRaw);
+            if (!snapRaw.empty) {
+              const d = snapRaw.docs[0];
+              foundBooking = { id: d.id, ...(d.data() as any) };
+            }
+          }
+        } catch (e1) {
+          console.warn("[PhotoProgress] Tầng 1 query error:", e1);
+        }
+
+        // TẦNG 2: Tìm theo Document ID (VD: BRBK_016721 hoặc 016721)
+        if (!foundBooking) {
+          try {
+            const docSnap = await getDoc(doc(db, "bookings", upper));
+            if (docSnap.exists()) {
+              foundBooking = { id: docSnap.id, ...(docSnap.data() as any) };
+            } else if (!upper.startsWith("BRBK_")) {
+              const docSnapPrefixed = await getDoc(
+                doc(db, "bookings", `BRBK_${upper}`)
+              );
+              if (docSnapPrefixed.exists()) {
+                foundBooking = {
+                  id: docSnapPrefixed.id,
+                  ...(docSnapPrefixed.data() as any),
+                };
+              }
+            }
+          } catch (e2) {
+            console.warn("[PhotoProgress] Tầng 2 doc error:", e2);
+          }
+        }
+
+        // TẦNG 3: Tìm theo trường `id` trong document
+        if (!foundBooking) {
+          try {
+            const qId = query(
+              collection(db, "bookings"),
+              where("id", "==", upper)
+            );
+            const snapId = await getDocs(qId);
+            if (!snapId.empty) {
+              const d = snapId.docs[0];
+              foundBooking = { id: d.id, ...(d.data() as any) };
+            }
+          } catch (_) {}
+        }
+
+        // TẦNG 4: Tìm kiếm theo tiền tố năm nếu người dùng chỉ nhập 4 ký tự đuôi
+        if (!foundBooking && !upper.startsWith("BR-") && cleanSearch.length >= 3) {
+          const currentYear = new Date().getFullYear();
+          const candidateYears = [currentYear, currentYear - 1, currentYear + 1];
+          for (const yr of candidateYears) {
+            try {
+              const candCode = `BR-${yr}-${upper}`;
+              const qCand = query(
+                collection(db, "bookings"),
+                where("bookingCode", "==", candCode)
+              );
+              const snapCand = await getDocs(qCand);
+              if (!snapCand.empty) {
+                const d = snapCand.docs[0];
+                foundBooking = { id: d.id, ...(d.data() as any) };
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+
+        // TẦNG 5: Quét toàn bộ collection 'bookings' trong Firestore (Bảo đảm tìm thấy 100%)
+        // Xử lý triệt để: confirmationLink chứa mã khác bookingCode, số điện thoại, tên trường, v.v.
+        if (!foundBooking) {
+          try {
+            const allSnap = await getDocs(collection(db, "bookings"));
+            for (const d of allSnap.docs) {
+              const data = d.data() as any;
+              const bCode = (data.bookingCode || "").trim().toUpperCase();
+              const bConf = (data.confirmationLink || "").trim().toUpperCase();
+              const bId = (data.id || d.id || "").trim().toUpperCase();
+              const bPhone = (data.phone || data.instagramOrZalo || "").replace(
+                /[^0-9]/g,
+                ""
+              );
+              const cleanBCode = bCode.replace(/[^A-Z0-9]/g, "");
+
+              // 5.1 Khớp với đường dẫn confirmationLink (chứa mã được click trong link)
+              if (
+                bConf &&
+                (bConf.includes(upper) ||
+                  (cleanSearch.length >= 4 &&
+                    bConf.replace(/[^A-Z0-9]/g, "").includes(cleanSearch)))
+              ) {
+                foundBooking = { id: d.id, ...data };
+                break;
+              }
+
+              // 5.2 Khớp với bookingCode (kể cả không dấu gạch nối)
+              if (
+                bCode === upper ||
+                (cleanSearch.length >= 4 && cleanBCode === cleanSearch)
+              ) {
+                foundBooking = { id: d.id, ...data };
+                break;
+              }
+
+              // 5.3 Khớp với Doc ID
+              if (
+                bId === upper ||
+                (cleanSearch.length >= 4 &&
+                  bId.replace(/[^A-Z0-9]/g, "") === cleanSearch)
+              ) {
+                foundBooking = { id: d.id, ...data };
+                break;
+              }
+
+              // 5.4 Khớp 4 ký tự đuôi
+              if (upper.length >= 4) {
+                if (bCode.endsWith(upper) || bConf.endsWith(upper)) {
+                  foundBooking = { id: d.id, ...data };
+                  break;
+                }
+              }
+
+              // 5.5 Khớp số điện thoại nếu nhập SĐT
+              const searchDigits = cleanInput.replace(/[^0-9]/g, "");
+              if (searchDigits.length >= 8 && bPhone.includes(searchDigits)) {
+                foundBooking = { id: d.id, ...data };
+                break;
+              }
+
+              // 5.6 Khớp tên trường / tên lớp / người liên hệ
+              if (
+                cleanInput.length >= 3 &&
+                ((data.schoolName &&
+                  data.schoolName.toLowerCase().includes(cleanInput.toLowerCase())) ||
+                  (data.instagramOrZalo &&
+                    data.instagramOrZalo
+                      .toLowerCase()
+                      .includes(cleanInput.toLowerCase())))
+              ) {
+                foundBooking = { id: d.id, ...data };
+                break;
+              }
+            }
+          } catch (scanErr) {
+            console.warn("[PhotoProgress] Tầng 5 scan error:", scanErr);
+          }
+        }
+
+        // TẦNG 6: Fallback bộ nhớ cache thiết bị (LocalStorage)
+        if (!foundBooking) {
+          try {
+            const localSaved = localStorage.getItem(`booking_details_${cleanInput}`);
+            if (localSaved) {
+              const parsed = JSON.parse(localSaved);
+              if (parsed) foundBooking = parsed;
+            }
+          } catch (_) {}
+        }
+
+        // XỬ LÝ KẾT QUẢ TÌM KIẾM
+        if (foundBooking) {
+          setBooking(foundBooking);
+          setError(null);
+
+          // Tự động lưu mã vào localStorage thiết bị để khách tiện tra cứu lần sau
+          const activeCode = foundBooking.bookingCode || foundBooking.id;
+          try {
+            const currentList = syncLocalBookings();
+            if (!currentList.includes(activeCode)) {
+              const updated = [...currentList, activeCode];
+              localStorage.setItem("my_booking_ids", JSON.stringify(updated));
+              setLocalBookings(updated);
+            }
+          } catch (_) {}
+
+          // Cập nhật URL sạch trên thanh địa chỉ mà không reload trang
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("ticket", activeCode);
+            window.history.replaceState({}, "", url.toString());
+          } catch (_) {}
+        } else {
+          setBooking(null);
+          setError(
+            `Không tìm thấy thông tin đơn đặt lịch khớp với "${cleanInput}".`
+          );
+        }
+      } catch (err) {
+        console.error("[PhotoProgress] General search exception:", err);
+        setBooking(null);
+        setError(
+          "Không thể kết nối đến máy chủ để lấy thông tin. Vui lòng kiểm tra kết nối mạng và thử lại."
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [syncLocalBookings]
+  );
+
+  // Khởi tạo tra cứu tự động khi mở modal hoặc có mã truyền vào
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let targetCode = initialBookingId;
+
+    // Nếu không truyền initialBookingId, tự động đọc URL trên trình duyệt
+    if (!targetCode && typeof window !== "undefined") {
+      targetCode = decodeBookingIdentifier(window.location.href);
+    }
+
+    if (targetCode && targetCode.trim()) {
+      const clean = targetCode.trim();
+      setSearchCode(clean);
+      executeSearch(clean);
+    }
+  }, [isOpen, initialBookingId, executeSearch]);
+
+  // Lắng nghe dữ liệu thời gian thực (Real-time Firestore) khi đã tìm thấy đơn
   useEffect(() => {
     if (!booking?.id || !isOpen) return;
     const unsub = onSnapshot(doc(db, "bookings", booking.id), (snap) => {
       if (snap.exists()) {
-        setBooking(snap.data() as Booking);
+        setBooking({ id: snap.id, ...(snap.data() as any) });
       }
     });
     return () => unsub();
@@ -169,8 +416,9 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
 
   const handleCopyShareLink = () => {
     if (!booking) return;
+    const activeCode = booking.bookingCode || booking.id;
     const url = new URL(window.location.origin);
-    url.searchParams.set("ticket", booking.id);
+    url.searchParams.set("ticket", activeCode);
     navigator.clipboard.writeText(url.toString()).then(() => {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
@@ -179,10 +427,26 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
 
   const handleCopyTicket = () => {
     if (!booking) return;
-    navigator.clipboard.writeText(booking.id).then(() => {
+    const activeCode = booking.bookingCode || booking.id;
+    navigator.clipboard.writeText(activeCode).then(() => {
       setCopiedTicket(true);
       setTimeout(() => setCopiedTicket(false), 2000);
     });
+  };
+
+  const handleResetSearch = () => {
+    setSearchCode("");
+    setBooking(null);
+    setError(null);
+    setLastSearchedCode("");
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleSelectRecent = (code: string) => {
+    setSearchCode(code);
+    executeSearch(code);
   };
 
   if (!isOpen) return null;
@@ -206,6 +470,7 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
             type="button"
             onClick={onClose}
             className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors z-20 cursor-pointer"
+            aria-label="Đóng"
           >
             <X className="w-5 h-5" />
           </button>
@@ -223,8 +488,8 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
               Tiến Độ Chỉnh Sửa & Bàn Giao Ảnh
             </h2>
-            <p className="text-zinc-400 text-xs sm:text-sm mt-1">
-              Nhập mã vé đặt lịch để theo dõi tiến độ hậu kỳ và nhận link tải trọn bộ ảnh đã hoàn thiện.
+            <p className="text-zinc-400 text-xs sm:text-sm mt-1 leading-relaxed">
+              Nhập Mã booking (VD: <span className="text-[#E5C17C] font-mono">BR-2026-6721</span>), Số điện thoại hoặc dán link xác nhận để theo dõi tiến độ hậu kỳ và nhận link tải file ảnh.
             </p>
           </div>
 
@@ -232,17 +497,18 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              handleLookup(searchCode);
+              executeSearch(searchCode);
             }}
             className="space-y-2 mb-5"
           >
             <div className="relative flex items-center">
               <input
+                ref={inputRef}
                 type="text"
                 value={searchCode}
-                onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
-                placeholder="Nhập mã Ticket (Ví dụ: BRBK_420362)..."
-                className="w-full liquid-glass-input rounded-2xl pl-11 pr-24 py-3.5 text-sm text-white placeholder:text-zinc-400 font-mono tracking-wider transition-all uppercase"
+                onChange={(e) => setSearchCode(e.target.value)}
+                placeholder="Nhập Mã booking (VD: BR-2026-6721) hoặc dán link xác nhận..."
+                className="w-full liquid-glass-input rounded-2xl pl-11 pr-24 py-3.5 text-xs sm:text-sm text-white placeholder:text-zinc-400 font-mono tracking-wider transition-all focus:border-[#B5945B]/70"
               />
               <Search className="w-5 h-5 text-zinc-400 absolute left-3.5 pointer-events-none" />
               <button
@@ -250,27 +516,27 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                 disabled={loading}
                 className="absolute right-1.5 px-4 py-2 liquid-glass-gold-btn font-extrabold text-xs uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-50 shadow-md"
               >
-                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Tra cứu"}
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                ) : (
+                  "Tra cứu"
+                )}
               </button>
             </div>
 
-            {/* Quick Chips for local bookings */}
-            {myBookingIds.length > 0 && (
+            {/* Quick Chips for local bookings on device */}
+            {localBookings.length > 0 && !booking && (
               <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-400 pt-1">
-                <span className="text-[11px] text-zinc-500">Đơn của bạn:</span>
-                {myBookingIds.slice(-4).reverse().map((bid) => (
+                <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-[#B5945B]" />
+                  Đơn gần đây:
+                </span>
+                {localBookings.slice(-4).reverse().map((bid) => (
                   <button
                     key={bid}
                     type="button"
-                    onClick={() => {
-                      setSearchCode(bid);
-                      handleLookup(bid);
-                    }}
-                    className={`font-mono text-[11px] px-2 py-0.5 rounded border transition-colors cursor-pointer ${
-                      booking?.id === bid
-                        ? "bg-[#B5945B]/20 text-[#B5945B] border-[#B5945B]/40 font-bold"
-                        : "bg-white/5 text-zinc-300 border-white/10 hover:border-[#B5945B]/50 hover:text-white"
-                    }`}
+                    onClick={() => handleSelectRecent(bid)}
+                    className="font-mono text-[11px] px-2.5 py-1 rounded-lg border bg-white/5 text-zinc-300 border-white/10 hover:border-[#B5945B]/50 hover:text-white transition-colors cursor-pointer"
                   >
                     {bid}
                   </button>
@@ -279,12 +545,79 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
             )}
           </form>
 
-          {/* Error notice */}
-          {error && (
-            <div className="p-3.5 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-xs flex items-start gap-2.5 mb-5 text-left">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <div className="leading-relaxed">{error}</div>
-            </div>
+          {/* Missing Data Feedback UI (Khi không tìm thấy thông tin) */}
+          {error && !booking && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 sm:p-5 bg-gradient-to-b from-amber-950/30 via-zinc-900/60 to-zinc-950/80 border border-amber-500/30 rounded-2xl text-left mb-5 shadow-xl"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-400 mt-0.5">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-amber-300 tracking-wide mb-1">
+                    Không tìm thấy thông tin đơn đặt lịch
+                  </h4>
+                  <p className="text-xs text-zinc-300 leading-relaxed mb-3">
+                    {error}
+                  </p>
+
+                  {lastSearchedCode && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-[11px] font-mono text-zinc-300 mb-3">
+                      <span className="text-zinc-500">Mã/từ khóa đã tra cứu:</span>
+                      <span className="text-[#E5C17C] font-bold truncate max-w-[200px] sm:max-w-[320px]">
+                        {lastSearchedCode}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Hướng dẫn gợi ý hữu ích */}
+                  <div className="bg-black/30 border border-white/5 rounded-xl p-3 space-y-2 text-xs text-zinc-300 mb-4">
+                    <div className="font-semibold text-[11px] text-[#B5945B] uppercase tracking-wider flex items-center gap-1.5">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      Gợi ý tra cứu nhanh:
+                    </div>
+                    <ul className="space-y-1.5 text-[11.5px] text-zinc-300 list-disc list-inside">
+                      <li>
+                        <strong className="text-white">Tìm bằng Số điện thoại:</strong> Nhập số điện thoại người đại diện đặt lịch chụp.
+                      </li>
+                      <li>
+                        <strong className="text-white">Tìm bằng Tên trường/Lớp:</strong> Nhập tên trường (VD: Kim Liên, BTEC, FPT...) để quét đơn.
+                      </li>
+                      <li>
+                        <strong className="text-white">Dán link xác nhận đầy đủ:</strong> Nếu mở từ Zalo hoặc Messenger, hãy copy toàn bộ link dán vào ô tìm kiếm.
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Nút thao tác tương tác trực tiếp */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <a
+                      href={`https://zalo.me/0365266204?text=${encodeURIComponent(
+                        `Chào Studio Bergh Ryker, mình cần hỗ trợ tra cứu thông tin đặt lịch với mã: ${lastSearchedCode || "chưa rõ"}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#DFB779] to-[#CFA25E] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all hover:brightness-110 shadow-md cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Hỗ Trợ Zalo (0365266204)</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleResetSearch}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-zinc-200 text-xs font-semibold transition-all cursor-pointer border border-white/10"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Nhập lại</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           )}
 
           {/* Booking Content Found */}
@@ -294,14 +627,19 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 relative overflow-hidden">
                 <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm sm:text-base font-bold text-white tracking-wide">
-                        {booking.id}
+                        {booking.bookingCode || booking.id}
                       </span>
+                      {booking.bookingCode && (
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-[#B5945B]/20 text-[#E5C17C] border border-[#B5945B]/40 font-mono font-bold">
+                          MÃ BOOKING
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={handleCopyTicket}
-                        className="text-zinc-400 hover:text-[#B5945B] transition-colors p-1"
+                        className="text-zinc-400 hover:text-[#B5945B] transition-colors p-1 cursor-pointer"
                         title="Sao chép mã"
                       >
                         {copiedTicket ? (
@@ -310,6 +648,14 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                           <Copy className="w-3.5 h-3.5" />
                         )}
                       </button>
+                      <a
+                        href={`/booking/${booking.bookingCode || booking.id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white border border-white/20 transition-all font-sans font-medium ml-1"
+                        title="Mở trang xác nhận booking & QR"
+                      >
+                        <ExternalLink className="w-3 h-3 text-[#B5945B]" />
+                        <span>Xem trang xác nhận & QR</span>
+                      </a>
                     </div>
                     <h3 className="text-base sm:text-lg font-bold text-[#B5945B] mt-0.5">
                       {booking.schoolName}
@@ -360,57 +706,50 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                 </div>
               </div>
 
-              {/* Progress Stepper */}
-              <div className="bg-zinc-900/70 border border-white/10 rounded-xl p-4 sm:p-5">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                    Quy Trình Thực Hiện
+              {/* Progress Bar Container */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#B5945B]" />
+                    Quy Trình Xử Lý Ảnh
                   </span>
-                  <span className="text-xs font-mono font-bold text-[#B5945B]">
-                    {progressPercent}% HOÀN TẤT
+                  <span className="font-mono text-xs font-bold text-[#B5945B]">
+                    {progressPercent}% Hoàn Tất
                   </span>
                 </div>
 
-                {/* Progress bar line */}
-                <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden mb-5">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPercent}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className={`h-full rounded-full ${
-                      progressPercent === 100
-                        ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-                        : "bg-gradient-to-r from-[#B5945B] to-amber-300"
-                    }`}
+                <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden p-0.5 border border-white/10">
+                  <div
+                    className="bg-gradient-to-r from-[#DFB779] via-[#F4E1B5] to-[#DFB779] h-full rounded-full transition-all duration-700 shadow-[0_0_12px_rgba(223,183,121,0.5)]"
+                    style={{ width: `${progressPercent}%` }}
                   />
                 </div>
 
-                {/* Step items */}
-                <div className="grid grid-cols-5 gap-1 text-center">
+                {/* Step Indicators */}
+                <div className="grid grid-cols-5 gap-1 mt-4 pt-3 border-t border-white/5">
                   {STEPS.map((step, idx) => {
-                    const isPassed = idx <= currentStepIdx;
-                    const isCurrent = idx === currentStepIdx;
-                    const IconComp = step.icon;
-
+                    const StepIcon = step.icon;
+                    const isDone = currentStepIdx > idx;
+                    const isCurrent = currentStepIdx === idx;
                     return (
-                      <div key={step.status} className="flex flex-col items-center">
+                      <div key={step.status} className="flex flex-col items-center text-center">
                         <div
-                          className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all ${
-                            isCurrent
-                              ? "bg-[#B5945B] text-black font-bold ring-4 ring-[#B5945B]/25 scale-110 shadow-lg"
-                              : isPassed
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                                : "bg-zinc-800/80 text-zinc-500 border border-white/5"
+                          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mb-1 text-xs transition-all ${
+                            isDone
+                              ? "bg-emerald-500 text-black font-bold shadow-md shadow-emerald-500/20"
+                              : isCurrent
+                                ? "bg-[#B5945B] text-black font-bold ring-2 ring-[#B5945B]/40 animate-pulse shadow-md shadow-[#B5945B]/30"
+                                : "bg-zinc-800 text-zinc-500 border border-zinc-700"
                           }`}
                         >
-                          <IconComp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <StepIcon className="w-3.5 h-3.5" />
                         </div>
                         <span
-                          className={`text-[10px] sm:text-[11px] font-sans mt-2 tracking-tight ${
+                          className={`text-[9.5px] sm:text-[10.5px] font-medium leading-tight hidden min-[400px]:block ${
                             isCurrent
-                              ? "text-[#B5945B] font-bold"
-                              : isPassed
-                                ? "text-zinc-300 font-medium"
+                              ? "text-[#E5C17C] font-bold"
+                              : isDone
+                                ? "text-zinc-300"
                                 : "text-zinc-600"
                           }`}
                         >
@@ -420,69 +759,33 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                     );
                   })}
                 </div>
-
-                {/* Current Stage Description */}
-                <div className="mt-4 p-3 bg-black/40 border border-white/5 rounded-lg text-xs flex items-start gap-2.5">
-                  <div className="w-2 h-2 rounded-full bg-[#B5945B] mt-1 shrink-0 animate-ping" />
-                  <div className="flex-1">
-                    <strong className="text-white block font-medium">
-                      {STEPS[currentStepIdx].label}
-                    </strong>
-                    <span className="text-zinc-400 text-[11px] sm:text-xs">
-                      {STEPS[currentStepIdx].description}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Estimated Delivery Date & Studio Notes */}
-                {(booking.estimatedDeliveryDate || booking.editingNotes) && (
-                  <div className="mt-3 pt-3 border-t border-white/5 space-y-1.5 text-xs">
-                    {booking.estimatedDeliveryDate && (
-                      <div className="flex items-center gap-2 text-amber-300">
-                        <Clock className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          Dự kiến bàn giao: <strong>{booking.estimatedDeliveryDate}</strong>
-                        </span>
-                      </div>
-                    )}
-                    {booking.editingNotes && (
-                      <div className="flex items-start gap-2 text-zinc-300 text-[12px] bg-white/5 p-2.5 rounded-lg">
-                        <span className="text-[#B5945B] font-bold shrink-0">Studio ghi chú:</span>
-                        <span>{booking.editingNotes}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {/* DELIVERABLES & DOWNLOAD SECTION */}
-              {booking.finalPhotosUrl ? (
-                /* Completed Photos Available */
+              {/* Delivery Download Section */}
+              {booking.editingStatus === "completed" && booking.finalPhotosUrl ? (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-gradient-to-br from-emerald-950/80 via-zinc-950 to-zinc-900 border-2 border-emerald-500/50 p-5 rounded-2xl shadow-xl shadow-emerald-950/30 text-center relative overflow-hidden"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-gradient-to-br from-emerald-950/40 via-zinc-900 to-zinc-950 border border-emerald-500/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden"
                 >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
-
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mb-3">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    File Đã Hoàn Thiện & Sẵn Sàng Tải
-                  </span>
-
-                  <h3 className="text-lg sm:text-xl font-bold text-white mb-1.5 font-sans">
-                    Bộ Ảnh Của Bạn Đã Được Retouch Hoàn Tất! 🎉
-                  </h3>
-                  <p className="text-zinc-300 text-xs sm:text-sm max-w-md mx-auto mb-4 leading-relaxed">
-                    Studio đã tải toàn bộ ảnh độ phân giải gốc cao nhất lên bộ nhớ lưu trữ an toàn. Bạn có thể mở link Google Drive dưới đây để tải về máy hoặc lưu trữ.
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400">
+                      <FolderDown className="w-5 h-5" />
+                    </span>
+                    <h4 className="text-base font-bold text-white tracking-wide">
+                      Bộ Ảnh Đã Sẵn Sàng Bàn Giao!
+                    </h4>
+                  </div>
+                  <p className="text-zinc-300 text-xs sm:text-sm mb-4 leading-relaxed">
+                    Đội ngũ Studio đã hoàn tất toàn bộ quá trình chỉnh sửa màu và kiểm duyệt chất lượng. Bạn có thể mở link bên dưới để tải về trọn bộ file chất lượng gốc cao nhất:
                   </p>
 
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                     <a
                       href={booking.finalPhotosUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-sm uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/25 active:scale-95 transition-all cursor-pointer"
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
                     >
                       <FolderDown className="w-5 h-5" />
                       Mở Thư Mục Ảnh Hoàn Thiện
@@ -557,7 +860,9 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                 </button>
 
                 <a
-                  href="https://zalo.me/0365266204"
+                  href={`https://zalo.me/0365266204?text=${encodeURIComponent(
+                    `Chào Studio Bergh Ryker, mình cần hỗ trợ về tiến độ ảnh đơn booking ${booking.bookingCode || booking.id}`
+                  )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-amber-400/90 hover:text-amber-300 font-medium py-1 px-2 transition-colors"

@@ -433,16 +433,12 @@ async function startServer() {
   const serverActiveVisitors = new Map<
     string,
     {
-      deviceId?: string;
       role: string;
       device?: string;
       browser?: string;
-      screenResolution?: string;
       page?: string;
       location?: string;
       isAdminDevice: boolean;
-      isReturning?: boolean;
-      visitCount?: number;
       lastSeen: number;
     }
   >();
@@ -598,21 +594,14 @@ async function startServer() {
       if (clean && !isPrivateIp(clean)) return clean;
     }
 
-    // 2. Google Cloud Run / Google Front End (GFE) direct client IP
-    const xClientIp = req.headers["x-client-ip"];
-    if (typeof xClientIp === "string") {
-      const clean = xClientIp.trim().replace(/^::ffff:/, "");
-      if (clean && !isPrivateIp(clean)) return clean;
-    }
-
-    // 3. Standard X-Real-IP
+    // 2. Standard X-Real-IP
     const realIp = req.headers["x-real-ip"];
     if (typeof realIp === "string") {
       const clean = realIp.trim().replace(/^::ffff:/, "");
       if (clean && !isPrivateIp(clean)) return clean;
     }
 
-    // 4. X-Forwarded-For: Client IP is strictly the FIRST non-private IP from the LEFT
+    // 3. X-Forwarded-For: Client IP is strictly the FIRST non-private IP from the LEFT
     // Format: <client-ip>, <proxy1-ip>, <proxy2-ip>
     const forwarded = req.headers["x-forwarded-for"];
     if (typeof forwarded === "string") {
@@ -632,7 +621,7 @@ async function startServer() {
       }
     }
 
-    // 5. req.ips (populated by Express when app.set('trust proxy', true) is active)
+    // 4. req.ips (populated by Express when app.set('trust proxy', true) is active)
     if (Array.isArray(req.ips) && req.ips.length > 0) {
       for (const ip of req.ips) {
         const clean = ip.replace(/^::ffff:/, "").trim();
@@ -640,97 +629,19 @@ async function startServer() {
       }
     }
 
-    // 6. req.ip
+    // 5. req.ip
     if (req.ip) {
       const clean = req.ip.replace(/^::ffff:/, "").trim();
       if (!isPrivateIp(clean)) return clean;
     }
 
-    // 7. req.socket.remoteAddress
+    // 6. req.socket.remoteAddress
     if (req.socket && req.socket.remoteAddress) {
       const clean = req.socket.remoteAddress.replace(/^::ffff:/, "").trim();
       if (!isPrivateIp(clean)) return clean;
     }
 
     return null;
-  }
-
-  // Extract Edge Geolocation headers provided automatically by Google Cloud Run / GFE
-  function extractGoogleEdgeGeo(req: express.Request): {
-    city?: string;
-    region?: string;
-    country?: string;
-    lat?: number;
-    lon?: number;
-  } | null {
-    const rawCity = typeof req.headers["x-appengine-city"] === "string" ? req.headers["x-appengine-city"].trim() : "";
-    const rawRegion = typeof req.headers["x-appengine-region"] === "string" ? req.headers["x-appengine-region"].trim() : "";
-    const rawCountry = typeof req.headers["x-appengine-country"] === "string" ? req.headers["x-appengine-country"].trim() : "";
-    const latLong = typeof req.headers["x-appengine-citylatlong"] === "string" ? req.headers["x-appengine-citylatlong"].trim() : "";
-
-    let lat: number | undefined;
-    let lon: number | undefined;
-    if (latLong && latLong.includes(",")) {
-      const [latStr, lonStr] = latLong.split(",");
-      const parsedLat = parseFloat(latStr);
-      const parsedLon = parseFloat(lonStr);
-      if (!isNaN(parsedLat) && !isNaN(parsedLon)) {
-        lat = parsedLat;
-        lon = parsedLon;
-      }
-    }
-
-    if (rawCity || rawRegion || (lat !== undefined && lon !== undefined)) {
-      return { city: rawCity, region: rawRegion, country: rawCountry, lat, lon };
-    }
-    return null;
-  }
-
-  // Server-side Device Label sanitizer: strictly converts any faulty Mac Intel labels to Apple M1 and clarifies iPhone labels
-  function sanitizeDeviceLabelServer(rawDevice = "", screenResolution = ""): string {
-    if (!rawDevice) return "Thiết bị di động";
-    const trimmed = rawDevice.trim();
-
-    // If screen resolution is 430x932, this is strictly iPhone 15 Pro Max
-    if (screenResolution === "430x932" || screenResolution.includes("430x") || trimmed.includes("430x932")) {
-      return "iPhone 15 Pro Max";
-    }
-
-    // If a mobile device was mistakenly labeled MacBook due to desktop user-agent
-    if (trimmed.includes("MacBook") && (screenResolution === "430x932" || screenResolution.includes("430x"))) {
-      return "iPhone 15 Pro Max";
-    }
-
-    // Correct previous misleading or ambiguous iPhone labels
-    if (
-      trimmed === "iPhone 16 Pro" ||
-      trimmed.includes("iPhone 16 Pro") ||
-      trimmed.includes("iPhone 16 Plus / 15 Pro Max") ||
-      trimmed.includes("iPhone 16 / 15 Pro Max") ||
-      trimmed.includes("iPhone 15 Pro Max / 14 Pro Max") ||
-      trimmed === "iPhone 16 / 15 Pro Max"
-    ) {
-      return "iPhone 15 Pro Max";
-    }
-
-    if (trimmed.includes("iPhone 16 / 15 Pro / 15")) {
-      return "iPhone 15 Pro";
-    }
-
-    if (
-      trimmed.includes("Mac (Intel") ||
-      trimmed.includes("Mac (Intel macOS)") ||
-      trimmed.includes("MacBook (Intel") ||
-      trimmed.includes("Intel Core") ||
-      trimmed === "Macintosh (Intel)" ||
-      trimmed === "Mac (Intel)"
-    ) {
-      return "MacBook / Mac (Chip Apple M1)";
-    }
-    if (trimmed === "Macintosh" || trimmed === "Mac OS X" || trimmed === "Mac") {
-      return "MacBook / Mac (Chip Apple M1)";
-    }
-    return trimmed;
   }
 
   // Mask IP for privacy (GDPR / Personal Data Protection compliance)
@@ -835,192 +746,33 @@ async function startServer() {
     { names: ["ca mau", "cà mau", "năm căn"], displayName: "Cà Mau" },
   ];
 
-  // Standardize Vietnamese province and prevent false Hanoi mappings with granular districts
+  // Standardize Vietnamese province and prevent false Hanoi mappings
   function standardizeVietnamProvince(cityRaw = "", regionRaw = "", lat?: number, lon?: number): string {
     const c = (cityRaw || "").toLowerCase().trim();
     const r = (regionRaw || "").toLowerCase().trim();
-    const comb = `${c} ${r}`.trim();
 
-    // Specific granular districts and wards for Quảng Ninh
-    if (
-      comb.includes("ha long") ||
-      comb.includes("hạ long") ||
-      comb.includes("halong") ||
-      comb.includes("bai chay") ||
-      comb.includes("bãi cháy") ||
-      comb.includes("hon gai") ||
-      comb.includes("hòn gai") ||
-      comb.includes("gieng day") ||
-      comb.includes("giếng đáy") ||
-      comb.includes("tuan chau") ||
-      comb.includes("tuần châu") ||
-      comb.includes("hung thang") ||
-      comb.includes("hùng thắng") ||
-      comb.includes("hong gai") ||
-      comb.includes("hồng gai") ||
-      comb.includes("hong ha") ||
-      comb.includes("hồng hà")
-    ) {
-      return "Hạ Long, Quảng Ninh";
-    }
-    if (
-      comb.includes("cam pha") ||
-      comb.includes("cẩm phả") ||
-      comb.includes("campha") ||
-      comb.includes("cua ong") ||
-      comb.includes("cửa ông") ||
-      comb.includes("quang hanh") ||
-      comb.includes("quang hanh") ||
-      comb.includes("mong duong") ||
-      comb.includes("mông dương")
-    ) {
-      return "Cẩm Phả, Quảng Ninh";
-    }
-    if (comb.includes("uong bi") || comb.includes("uông bí") || comb.includes("vang danh") || comb.includes("vàng danh")) {
-      return "Uông Bí, Quảng Ninh";
-    }
-    if (comb.includes("mong cai") || comb.includes("móng cái") || comb.includes("tra co") || comb.includes("trà cổ")) {
-      return "Móng Cái, Quảng Ninh";
-    }
-    if (comb.includes("quang yen") || comb.includes("quảng yên") || comb.includes("minh thanh") || comb.includes("minh thành")) {
-      return "Quảng Yên, Quảng Ninh";
-    }
-    if (comb.includes("van don") || comb.includes("vân đồn") || comb.includes("cai rong") || comb.includes("cái rồng") || comb.includes("quan lan") || comb.includes("quan lạn")) {
-      return "Vân Đồn, Quảng Ninh";
-    }
-    if (comb.includes("dong trieu") || comb.includes("đông triều") || comb.includes("mao khe") || comb.includes("mạo khê")) {
-      return "Đông Triều, Quảng Ninh";
-    }
-    if (comb.includes("tien yen") || comb.includes("tiên yên")) return "Tiên Yên, Quảng Ninh";
-    if (comb.includes("ba che") || comb.includes("ba chẽ")) return "Ba Chẽ, Quảng Ninh";
-    if (comb.includes("binh lieu") || comb.includes("bình liêu")) return "Bình Liêu, Quảng Ninh";
-    if (comb.includes("dam ha") || comb.includes("đầm hà")) return "Đầm Hà, Quảng Ninh";
-    if (comb.includes("hai ha") || comb.includes("hải hà")) return "Hải Hà, Quảng Ninh";
-    if (comb.includes("co to") || comb.includes("cô tô")) return "Cô Tô, Quảng Ninh";
-
-    // Specific granular districts for Hải Phòng
-    if (comb.includes("do son") || comb.includes("đồ sơn")) return "Đồ Sơn, Hải Phòng";
-    if (comb.includes("cat ba") || comb.includes("cát bà") || comb.includes("cat hai") || comb.includes("cát hải")) return "Cát Bà, Hải Phòng";
-    if (comb.includes("thuy nguyen") || comb.includes("thủy nguyên")) return "Thủy Nguyên, Hải Phòng";
-    if (comb.includes("kien an") || comb.includes("kiến an")) return "Kiến An, Hải Phòng";
-    if (comb.includes("an duong") || comb.includes("an dương")) return "An Dương, Hải Phòng";
-    if (comb.includes("hong bang") || comb.includes("hồng bàng")) return "Hồng Bàng, Hải Phòng";
-    if (comb.includes("ngo quyen") || comb.includes("ngô quyền")) return "Ngô Quyền, Hải Phòng";
-    if (comb.includes("le chan") || comb.includes("lê chân")) return "Lê Chân, Hải Phòng";
-    if (comb.includes("hai an") || comb.includes("hải an")) return "Hải An, Hải Phòng";
-
-    // Specific granular districts & streets for Hà Nội
-    if (comb.includes("phan tay nhac") || comb.includes("phan tây nhạc")) {
-      return "Phan Tây Nhạc, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("trinh van bo") || comb.includes("trịnh văn bô")) {
-      return "Trịnh Văn Bô, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("phuong canh") || comb.includes("phương canh")) {
-      return "Phương Canh, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("xuan phuong") || comb.includes("xuân phương")) {
-      return "Xuân Phương, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("fpt polytechnic")) {
-      return "Trịnh Văn Bô, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("my dinh") || comb.includes("mỹ đình")) {
-      return "Mỹ Đình, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("me tri") || comb.includes("mễ trì")) {
-      return "Mễ Trì, Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("nam tu liem") || comb.includes("nam từ liêm")) {
-      return "Nam Từ Liêm, Hà Nội";
-    }
-    if (comb.includes("bac tu liem") || comb.includes("bắc từ liêm") || comb.includes("co nhue") || comb.includes("cổ nhuế")) {
-      return "Bắc Từ Liêm, Hà Nội";
-    }
-
-    if (comb.includes("cau giay") || comb.includes("cầu giấy")) return "Cầu Giấy, Hà Nội";
-    if (comb.includes("dong da") || comb.includes("đống đa")) return "Đống Đa, Hà Nội";
-    if (comb.includes("ba dinh") || comb.includes("ba đình")) return "Ba Đình, Hà Nội";
-    if (comb.includes("hoan kiem") || comb.includes("hoàn kiếm")) return "Hoàn Kiếm, Hà Nội";
-    if (comb.includes("tay ho") || comb.includes("tây hồ")) return "Tây Hồ, Hà Nội";
-    if (comb.includes("thanh xuan") || comb.includes("thanh xuân")) return "Thanh Xuân, Hà Nội";
-    if (comb.includes("ha dong") || comb.includes("hà đông")) return "Hà Đông, Hà Nội";
-    if (comb.includes("long bien") || comb.includes("long biên")) {
-      // Prevent false Long Biên mappings when ISP datacenter is in Long Biên (Sài Đồng)
-      return "Hà Nội";
-    }
-    if (comb.includes("hoang mai") || comb.includes("hoàng mai")) return "Hoàng Mai, Hà Nội";
-    if (comb.includes("hai ba trung") || comb.includes("hai bà trưng")) return "Hai Bà Trưng, Hà Nội";
-    if (comb.includes("son tay") || comb.includes("sơn tây")) return "Sơn Tây, Hà Nội";
-    if (comb.includes("gia lam") || comb.includes("gia lâm")) return "Gia Lâm, Hà Nội";
-    if (comb.includes("dong anh") || comb.includes("đông anh")) return "Đông Anh, Hà Nội";
-    if (comb.includes("soc son") || comb.includes("sóc sơn")) return "Sóc Sơn, Hà Nội";
-    if (comb.includes("thanh tri") || comb.includes("thanh trì")) return "Thanh Trì, Hà Nội";
-
-    // Specific granular districts for TP. Hồ Chí Minh
-    if (comb.includes("thu duc") || comb.includes("thủ đức")) return "Thủ Đức, TP. Hồ Chí Minh";
-    if (comb.includes("quan 1") || comb.includes("quận 1") || comb.includes("district 1")) return "Quận 1, TP. Hồ Chí Minh";
-    if (comb.includes("quan 3") || comb.includes("quận 3") || comb.includes("district 3")) return "Quận 3, TP. Hồ Chí Minh";
-    if (comb.includes("quan 7") || comb.includes("quận 7") || comb.includes("district 7")) return "Quận 7, TP. Hồ Chí Minh";
-    if (comb.includes("binh thanh") || comb.includes("bình thạnh")) return "Bình Thạnh, TP. Hồ Chí Minh";
-    if (comb.includes("go vap") || comb.includes("gò vấp")) return "Gò Vấp, TP. Hồ Chí Minh";
-    if (comb.includes("tan binh") || comb.includes("tân bình")) return "Tân Bình, TP. Hồ Chí Minh";
-
-    // 1. Check for specific provinces by region string first (region in GeoIP is far more reliable)
+    // 1. Check for specific non-Hanoi provinces by region string first (region in GeoIP is far more reliable)
     for (const entry of VIETNAM_PROVINCES_SERVER) {
-      if (entry.names.some((n) => r.includes(n))) {
-        return entry.displayName;
-      }
-    }
-
-    // 2. Check for specific provinces by city string
-    for (const entry of VIETNAM_PROVINCES_SERVER) {
-      if (entry.names.some((n) => c.includes(n))) {
-        return entry.displayName;
-      }
-    }
-
-    // 3. Coordinate-boundary validation (covers Vietnam's key regions with high accuracy):
-    if (typeof lat === "number" && typeof lon === "number" && lat !== 0 && lon !== 0) {
-      // Phan Tây Nhạc Street Block Core (Latitude: 21.034 to 21.043, Longitude: 105.738 to 105.748)
-      if (lat >= 21.034 && lat <= 21.043 && lon >= 105.738 && lon <= 105.748) {
-        return "Phan Tây Nhạc, Nam Từ Liêm, Hà Nội";
-      }
-
-      // Nam Từ Liêm Broader District (Latitude: 20.985 to 21.055, Longitude: 105.720 to 105.795)
-      if (lat >= 20.985 && lat <= 21.055 && lon >= 105.720 && lon <= 105.795) {
-        return "Nam Từ Liêm, Hà Nội";
-      }
-
-      // Cầu Giấy (Latitude: 21.015 to 21.055, Longitude: 105.775 to 105.815)
-      if (lat >= 21.015 && lat <= 21.055 && lon >= 105.775 && lon <= 105.815) {
-        return "Cầu Giấy, Hà Nội";
-      }
-
-      // Long Biên Core (Latitude: 21.020 to 21.070, Longitude: 105.875 to 105.930)
-      if (lat >= 21.020 && lat <= 21.070 && lon >= 105.875 && lon <= 105.930) {
-        return "Long Biên, Hà Nội";
-      }
-
-      // Hà Nội Core & Metropolitan Area (Latitude: 20.55 to 21.40, Longitude: 105.35 to 106.10)
-      if (lat >= 20.55 && lat <= 21.40 && lon >= 105.35 && lon <= 106.10) {
-        return "Hà Nội";
-      }
-
-      // Quảng Ninh check (Bounding Box: lat 20.65 to 21.75, lon 106.4 to 108.2)
-      if (lat >= 20.65 && lat <= 21.75 && lon >= 106.4 && lon <= 108.2) {
-        // Exclude Hai Phong core if coordinates are strictly within Hai Phong
-        if (lat < 20.90 && lon < 106.75) {
-          return "Hải Phòng";
+      if (entry.displayName !== "Hà Nội") {
+        if (entry.names.some((n) => r.includes(n))) {
+          return entry.displayName;
         }
-        return "Quảng Ninh";
       }
+    }
 
-      // Hải Phòng check
-      if (lat >= 20.55 && lat <= 20.95 && lon >= 106.45 && lon <= 107.15) {
-        return "Hải Phòng";
+    // 2. Check for specific non-Hanoi provinces by city string
+    for (const entry of VIETNAM_PROVINCES_SERVER) {
+      if (entry.displayName !== "Hà Nội") {
+        if (entry.names.some((n) => c.includes(n))) {
+          return entry.displayName;
+        }
       }
+    }
 
+    // 3. Coordinate-boundary validation:
+    // If ISP database said "Hanoi" due to ISP HQ in Hanoi (e.g. 4G Viettel/VNPT/Mobifone),
+    // check if latitude/longitude indicates Southern, Central, or Western Vietnam:
+    if (typeof lat === "number" && typeof lon === "number" && lat !== 0 && lon !== 0) {
       // Southern Vietnam (TP. Hồ Chí Minh, Bình Dương, Đồng Nai, Tiền Giang...)
       if (lat >= 9.2 && lat <= 12.0 && lon >= 104.5 && lon <= 108.5) {
         if (c.includes("can tho") || r.includes("can tho")) return "Cần Thơ";
@@ -1034,10 +786,24 @@ async function startServer() {
         if (c.includes("hue") || r.includes("hue")) return "TP. Huế";
         return "Đà Nẵng";
       }
+
+      // Quảng Ninh check
+      if (lat >= 20.65 && lat <= 21.75 && lon >= 106.4 && lon <= 108.2) {
+        return "Quảng Ninh";
+      }
+
+      // Hải Phòng check
+      if (lat >= 20.55 && lat <= 20.95 && lon >= 106.45 && lon <= 107.15) {
+        return "Hải Phòng";
+      }
     }
 
-    // 4. If text explicitly indicates Hanoi
+    // 4. Only if text explicitly indicates Hanoi AND coordinates (if available) do NOT contradict Northern Vietnam
     if (c.includes("hanoi") || c.includes("ha noi") || r.includes("hanoi") || r.includes("ha noi")) {
+      if (typeof lat === "number" && lat > 0 && lat < 18.0) {
+        // Contradiction: coordinates are in Central or Southern Vietnam, but ISP database said Hanoi
+        return lat < 13.0 ? "TP. Hồ Chí Minh" : "Đà Nẵng";
+      }
       return "Hà Nội";
     }
 
@@ -1069,11 +835,8 @@ async function startServer() {
   }
   const geoMemoryCache = new Map<string, GeoCacheEntry>();
 
-  // High-precision GeoIP resolver (integrates Google Edge headers, ipwho.is, ipinfo.io, and ip-api.com)
-  async function resolveGeoFromIp(
-    ip: string,
-    edgeGeo?: { city?: string; region?: string; country?: string; lat?: number; lon?: number } | null
-  ): Promise<GeoCacheEntry["data"]> {
+  // High-precision GeoIP resolver (primary: ipwho.is, fallback: ip-api.com)
+  async function resolveGeoFromIp(ip: string): Promise<GeoCacheEntry["data"]> {
     const masked = maskIp(ip);
     const now = Date.now();
 
@@ -1102,7 +865,7 @@ async function startServer() {
     }
 
     // Helper with abort signal timeout
-    const fetchWithTimeout = async (url: string, ms = 2200): Promise<any> => {
+    const fetchWithTimeout = async (url: string, ms = 2500): Promise<any> => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), ms);
       try {
@@ -1122,144 +885,30 @@ async function startServer() {
     let lon: number | null = null;
     let providerSource = "ipwho.is";
 
-    interface Cand {
-      city: string;
-      region: string;
-      country: string;
-      lat: number | null;
-      lon: number | null;
-      source: string;
-    }
-    const candidates: Cand[] = [];
-
-    // Check Cloud Run / GFE edge headers first (direct Google peering)
-    if (edgeGeo && (edgeGeo.city || edgeGeo.region || (edgeGeo.lat && edgeGeo.lon))) {
-      candidates.push({
-        city: edgeGeo.city || "",
-        region: edgeGeo.region || "",
-        country: edgeGeo.country || "Việt Nam",
-        lat: edgeGeo.lat ?? null,
-        lon: edgeGeo.lon ?? null,
-        source: "google-edge",
-      });
-    }
-
     try {
-      const [resWhois, resIpInfo, resIpApi] = await Promise.allSettled([
-        fetchWithTimeout(`https://ipwho.is/${ip}`, 2200),
-        fetchWithTimeout(`https://ipinfo.io/${ip}/json`, 2200),
-        fetchWithTimeout(`http://ip-api.com/json/${ip}?fields=status,country,region,regionName,city,district,lat,lon,zip`, 2200),
-      ]);
-
-      if (resWhois.status === "fulfilled" && resWhois.value && resWhois.value.success !== false) {
-        const d = resWhois.value;
-        candidates.push({
-          city: d.city || "",
-          region: d.region || "",
-          country: d.country || "Việt Nam",
-          lat: typeof d.latitude === "number" ? d.latitude : null,
-          lon: typeof d.longitude === "number" ? d.longitude : null,
-          source: "ipwho.is",
-        });
-      }
-
-      if (resIpInfo.status === "fulfilled" && resIpInfo.value && !resIpInfo.value.error) {
-        const d = resIpInfo.value;
-        let pLat: number | null = null;
-        let pLon: number | null = null;
-        if (d.loc && typeof d.loc === "string" && d.loc.includes(",")) {
-          const [lt, ln] = d.loc.split(",");
-          const parsedLt = parseFloat(lt);
-          const parsedLn = parseFloat(ln);
-          if (!isNaN(parsedLt) && !isNaN(parsedLn)) {
-            pLat = parsedLt;
-            pLon = parsedLn;
-          }
+      // Primary: ipwho.is (native HTTPS, high precision for Vietnam, provides lat/lon & region)
+      const dataWhois = await fetchWithTimeout(`https://ipwho.is/${ip}`, 2500);
+      if (dataWhois && dataWhois.success !== false) {
+        rawCity = dataWhois.city || "";
+        rawRegion = dataWhois.region || "";
+        rawCountry = dataWhois.country || "Việt Nam";
+        lat = typeof dataWhois.latitude === "number" ? dataWhois.latitude : null;
+        lon = typeof dataWhois.longitude === "number" ? dataWhois.longitude : null;
+        providerSource = "ipwho.is";
+      } else {
+        // Fallback: ip-api.com
+        const dataIpApi = await fetchWithTimeout(
+          `http://ip-api.com/json/${ip}?fields=status,country,region,regionName,city,lat,lon`,
+          2500
+        );
+        if (dataIpApi && dataIpApi.status === "success") {
+          rawCity = dataIpApi.city || "";
+          rawRegion = dataIpApi.regionName || dataIpApi.region || "";
+          rawCountry = dataIpApi.country || "Việt Nam";
+          lat = typeof dataIpApi.lat === "number" ? dataIpApi.lat : null;
+          lon = typeof dataIpApi.lon === "number" ? dataIpApi.lon : null;
+          providerSource = "ip-api.com";
         }
-        candidates.push({
-          city: d.city || "",
-          region: d.region || "",
-          country: d.country === "VN" ? "Việt Nam" : (d.country || "Việt Nam"),
-          lat: pLat,
-          lon: pLon,
-          source: "ipinfo.io",
-        });
-      }
-
-      if (resIpApi.status === "fulfilled" && resIpApi.value && resIpApi.value.status === "success") {
-        const d = resIpApi.value;
-        candidates.push({
-          city: d.city || d.district || "",
-          region: d.regionName || d.region || "",
-          country: d.country || "Việt Nam",
-          lat: typeof d.lat === "number" ? d.lat : null,
-          lon: typeof d.lon === "number" ? d.lon : null,
-          source: "ip-api.com",
-        });
-      }
-
-      // Smart Multi-Provider Consensus & Accuracy Scorer:
-      // Evaluates all candidates (Google Edge headers, ipwho.is, ipinfo.io, ip-api.com)
-      // Scores based on: edge telemetry, coordinate match, province consensus, and district specificity.
-      let bestCandidate: Cand | null = null;
-      let highestScore = -1;
-
-      // First, tally how many candidates voted for each province
-      const provinceVotes = new Map<string, number>();
-      for (const cand of candidates) {
-        const prov = standardizeVietnamProvince(cand.city, cand.region, cand.lat ?? undefined, cand.lon ?? undefined);
-        if (prov && prov !== "Việt Nam") {
-          provinceVotes.set(prov, (provinceVotes.get(prov) || 0) + 1);
-        }
-      }
-
-      for (const cand of candidates) {
-        const prov = standardizeVietnamProvince(cand.city, cand.region, cand.lat ?? undefined, cand.lon ?? undefined);
-        let score = 0;
-
-        if (prov && prov !== "Việt Nam") {
-          score += 10;
-          // Add consensus weight (how many other candidates agree)
-          const votes = provinceVotes.get(prov) || 1;
-          score += (votes - 1) * 8;
-
-          // Google Edge direct peering bonus
-          if (cand.source === "google-edge") {
-            score += 15;
-          }
-
-          // Granular district specificity (e.g. "Cầu Giấy, Hà Nội" or "Hạ Long, Quảng Ninh")
-          if (prov.includes(",")) {
-            score += 5;
-          }
-
-          // Mathematical coordinate validation bonus
-          if (typeof cand.lat === "number" && typeof cand.lon === "number") {
-            score += 4;
-          }
-        }
-
-        if (score > highestScore) {
-          highestScore = score;
-          bestCandidate = cand;
-        }
-      }
-
-      if (bestCandidate) {
-        rawCity = bestCandidate.city;
-        rawRegion = bestCandidate.region;
-        rawCountry = bestCandidate.country;
-        lat = bestCandidate.lat;
-        lon = bestCandidate.lon;
-        providerSource = bestCandidate.source;
-      } else if (candidates.length > 0) {
-        const first = candidates[0];
-        rawCity = first.city;
-        rawRegion = first.region;
-        rawCountry = first.country;
-        lat = first.lat;
-        lon = first.lon;
-        providerSource = first.source;
       }
     } catch (e: any) {
       console.warn(`[resolveGeoFromIp] Geo lookup error for ${masked}:`, e.message);
@@ -1299,54 +948,12 @@ async function startServer() {
   app.post("/api/visitor/log", async (req, res) => {
     try {
       const publicIp = extractPublicClientIp(req) || "127.0.0.1";
-      const edgeGeo = extractGoogleEdgeGeo(req);
-      const {
-        visitorId,
-        deviceId,
-        sessionId,
-        page,
-        detail,
-        device,
-        browser,
-        screenResolution,
-        isReturning,
-        visitCount,
-        role,
-        isAdminDevice,
-        clientLocation,
-        latitude,
-        longitude,
-      } = req.body || {};
+      const { visitorId, sessionId, page, detail, device, browser, role, isAdminDevice } = req.body || {};
 
-      const cleanDevice = sanitizeDeviceLabelServer(device || "Thiết bị di động", screenResolution || "");
-      const geo = await resolveGeoFromIp(publicIp, edgeGeo);
+      const geo = await resolveGeoFromIp(publicIp);
       const maskedIp = maskIp(publicIp);
       const nowIso = new Date().toISOString();
       const effectiveVisitorId = visitorId || sessionId || `vis_${Date.now()}`;
-      const effectiveRecordId = deviceId || effectiveVisitorId;
-
-      // Ultra-accurate location resolution (prioritize GPS / clientLocation, prevent false Long Biên ISP datacenter mappings)
-      let resolvedLoc = geo.location || "Việt Nam";
-      let resolvedCity = geo.city || "";
-      let resolvedRegion = geo.region || "";
-      let resolvedLat = geo.latitude ?? (typeof latitude === "number" ? latitude : null);
-      let resolvedLon = geo.longitude ?? (typeof longitude === "number" ? longitude : null);
-
-      if (typeof latitude === "number" && typeof longitude === "number" && latitude !== 0 && longitude !== 0) {
-        resolvedLat = latitude;
-        resolvedLon = longitude;
-        const gpsProv = standardizeVietnamProvince("", "", latitude, longitude);
-        if (gpsProv && gpsProv !== "Việt Nam") {
-          resolvedLoc = gpsProv;
-        }
-      }
-
-      if (clientLocation && clientLocation !== "Việt Nam") {
-        const cleanedClientLoc = stripIspServer(clientLocation);
-        if (cleanedClientLoc && cleanedClientLoc !== "Việt Nam") {
-          resolvedLoc = cleanedClientLoc;
-        }
-      }
 
       // 1. Write to Firestore 'visitor_logs' collection
       if (db) {
@@ -1356,23 +963,19 @@ async function startServer() {
           await setDoc(logDocRef, {
             id: logId,
             visitorId: effectiveVisitorId,
-            deviceId: deviceId || effectiveVisitorId,
             sessionId: sessionId || effectiveVisitorId,
             ip: maskedIp,
             rawIp: publicIp,
-            city: resolvedCity,
-            region: resolvedRegion,
+            city: geo.city || "",
+            region: geo.region || "",
             country: geo.country || "Việt Nam",
-            location: resolvedLoc,
-            latitude: resolvedLat,
-            longitude: resolvedLon,
+            location: geo.location || "Việt Nam",
+            latitude: geo.latitude,
+            longitude: geo.longitude,
             page: page || "Trang chủ",
             detail: detail || "Xem Portfolio",
-            device: cleanDevice,
+            device: device || "Thiết bị di động",
             browser: browser || "Trình duyệt",
-            screenResolution: screenResolution || "",
-            isReturning: Boolean(isReturning || (visitCount && visitCount > 1)),
-            visitCount: typeof visitCount === "number" ? visitCount : (isReturning ? 2 : 1),
             userAgent: req.headers["user-agent"] || "",
             role: role || "visitor",
             isAdminDevice: Boolean(isAdminDevice),
@@ -1385,26 +988,22 @@ async function startServer() {
 
         // 2. Synchronize with 'visitor_history' for Admin UI panels
         try {
-          const histDocRef = doc(db, "visitor_history", effectiveRecordId);
+          const histDocRef = doc(db, "visitor_history", effectiveVisitorId);
           await setDoc(
             histDocRef,
             {
-              id: effectiveRecordId,
+              id: effectiveVisitorId,
               visitorId: effectiveVisitorId,
-              deviceId: deviceId || effectiveVisitorId,
               role: role || "visitor",
               isAdminDevice: Boolean(isAdminDevice),
-              isReturning: Boolean(isReturning || (visitCount && visitCount > 1)),
-              visitCount: typeof visitCount === "number" ? visitCount : (isReturning ? 2 : 1),
-              device: cleanDevice,
+              device: device || "Thiết bị di động",
               browser: browser || "Trình duyệt",
-              screenResolution: screenResolution || "",
-              location: resolvedLoc,
-              city: resolvedCity,
-              region: resolvedRegion,
+              location: geo.location,
+              city: geo.city,
+              region: geo.region,
               country: geo.country,
-              latitude: resolvedLat,
-              longitude: resolvedLon,
+              latitude: geo.latitude,
+              longitude: geo.longitude,
               lastPage: page || "Trang chủ",
               lastSeenAt: nowIso,
             },
@@ -1415,17 +1014,17 @@ async function startServer() {
         }
       }
 
-      console.log(`[VisitorLog] Resolved IP ${maskedIp} -> Location: "${resolvedLoc}" (Lat: ${resolvedLat}, Lon: ${resolvedLon}) Device: "${cleanDevice}"`);
+      console.log(`[VisitorLog] Resolved IP ${maskedIp} -> Location: "${geo.location}" (City: "${geo.city}", Region: "${geo.region}", Lat: ${geo.latitude}, Lon: ${geo.longitude})`);
 
       return res.json({
         ok: true,
         ip: maskedIp,
-        city: resolvedCity,
-        region: resolvedRegion,
+        city: geo.city,
+        region: geo.region,
         country: geo.country,
-        location: resolvedLoc,
-        latitude: resolvedLat,
-        longitude: resolvedLon,
+        location: geo.location,
+        latitude: geo.latitude,
+        longitude: geo.longitude,
         source: geo.source,
       });
     } catch (err: any) {
@@ -1444,8 +1043,7 @@ async function startServer() {
       if (!ip) {
         return res.json({ ok: false, location: "Việt Nam" });
       }
-      const edgeGeo = extractGoogleEdgeGeo(req);
-      const geo = await resolveGeoFromIp(ip, edgeGeo);
+      const geo = await resolveGeoFromIp(ip);
       return res.json({
         ok: true,
         location: geo.location,
@@ -1468,8 +1066,7 @@ async function startServer() {
       if (!ip) {
         return res.json({ ok: false, location: "Việt Nam" });
       }
-      const edgeGeo = extractGoogleEdgeGeo(req);
-      const geo = await resolveGeoFromIp(ip, edgeGeo);
+      const geo = await resolveGeoFromIp(ip);
       return res.json({
         ok: geo.ok,
         location: geo.location,
@@ -1487,19 +1084,7 @@ async function startServer() {
   // Presence ping for stranger detection & surge alerting
   app.post("/api/presence/ping", async (req, res) => {
     try {
-      const {
-        visitorId,
-        deviceId,
-        role,
-        device,
-        browser,
-        screenResolution,
-        page,
-        isAdminDevice,
-        clientLocation,
-        isReturning,
-        visitCount,
-      } = req.body;
+      const { visitorId, role, device, browser, page, isAdminDevice, clientLocation } = req.body;
       if (!visitorId) return res.json({ ok: true });
 
       const now = Date.now();
@@ -1509,15 +1094,12 @@ async function startServer() {
         String(role).toLowerCase().includes("admin")
       );
 
-      const cleanDevice = sanitizeDeviceLabelServer(device || "Thiết bị di động", screenResolution || "");
-
       // Resolve visitor geographic location
       let location = clientLocation ? stripIspServer(clientLocation) : undefined;
       if (!location || location === "Việt Nam") {
         const ip = extractPublicClientIp(req);
         if (ip) {
-          const edgeGeo = extractGoogleEdgeGeo(req);
-          const geo = await resolveGeoFromIp(ip, edgeGeo);
+          const geo = await resolveGeoFromIp(ip);
           if (geo.location && geo.location !== "Việt Nam") {
             location = geo.location;
           }
@@ -1525,16 +1107,12 @@ async function startServer() {
       }
 
       serverActiveVisitors.set(visitorId, {
-        deviceId: deviceId || visitorId,
         role: isActuallyAdmin ? "admin" : (role || "visitor"),
-        device: cleanDevice,
+        device: device || "Thiết bị di động",
         browser: browser || "Trình duyệt",
-        screenResolution: screenResolution || "",
         page: page || "Trang chủ",
         location: location || "Việt Nam",
         isAdminDevice: isActuallyAdmin,
-        isReturning: Boolean(isReturning || (visitCount && visitCount > 1)),
-        visitCount: typeof visitCount === "number" ? visitCount : (isReturning ? 2 : 1),
         lastSeen: now,
       });
 
@@ -1561,13 +1139,10 @@ async function startServer() {
           alertedStrangerVisitors.add(visitorId);
           lastStrangerPushTime = now;
 
-          const isReturningVisitor = Boolean(isReturning || (visitCount && visitCount > 1));
-          const returnLabel = isReturningVisitor ? `Khách xem lại (Lần ${visitCount || 2})` : "Khách mới";
-          console.log(`[WebPush] Detected ${returnLabel} (${device}) from ${location} on "${page}". Triggering background push!`);
-
+          console.log(`[WebPush] Detected stranger visitor (${device}) from ${location} on "${page}". Triggering background push!`);
           sendPushNotificationToAdmins({
-            title: isReturningVisitor ? `🔄 Khách Xem Lại Đang Vào Web (Lần ${visitCount || 2})!` : "🚨 Khách Lạ Đang Xem Website!",
-            body: `${returnLabel} [${device || "Điện thoại"}] từ ${location || "Việt Nam"} đang xem: "${page || "Trang chủ"}". Hiện có ${strangers.length} khách trực tuyến.`,
+            title: "🚨 Khách Lạ Đang Xem Website!",
+            body: `${device || "Điện thoại"} từ ${location || "Việt Nam"} đang xem: "${page || "Trang chủ"}". Hiện có ${strangers.length} khách trực tuyến.`,
             url: "/?source=stranger_alert",
             tag: "stranger-visitor-alert",
           });
@@ -1621,43 +1196,6 @@ async function startServer() {
     }
   });
 
-  // Real-Time Precision Calibration endpoint for instant device & location updating
-  app.post("/api/presence/calibrate-vip", async (req, res) => {
-    try {
-      const { visitorId, deviceId, newLocation, device } = req.body || {};
-      const targetLoc = newLocation ? stripIspServer(newLocation) : undefined;
-      const targetDevice = device ? sanitizeDeviceLabelServer(device) : undefined;
-
-      const updateData: any = {};
-      if (targetLoc && targetLoc !== "Việt Nam") updateData.location = targetLoc;
-      if (targetDevice) updateData.device = targetDevice;
-
-      if (Object.keys(updateData).length > 0) {
-        if (visitorId && serverActiveVisitors.has(visitorId)) {
-          const prev = serverActiveVisitors.get(visitorId)!;
-          serverActiveVisitors.set(visitorId, {
-            ...prev,
-            ...(targetLoc ? { location: targetLoc } : {}),
-            ...(targetDevice ? { device: targetDevice } : {}),
-          });
-        }
-        if (db) {
-          if (deviceId) {
-            const histRef = doc(db, "visitor_history", deviceId);
-            await setDoc(histRef, updateData, { merge: true }).catch(() => {});
-          }
-          if (visitorId) {
-            const actRef = doc(db, "active_visitors", visitorId);
-            await setDoc(actRef, updateData, { merge: true }).catch(() => {});
-          }
-        }
-      }
-      return res.json({ ok: true, location: targetLoc, device: targetDevice });
-    } catch (e: any) {
-      return res.json({ ok: false, error: e.message });
-    }
-  });
-
   // 6. Booking alert endpoint called on new booking submission
   app.post("/api/booking/alert", async (req, res) => {
     try {
@@ -1679,6 +1217,17 @@ async function startServer() {
       return res.status(500).json({ error: err.message });
     }
   });
+
+  const getFriendlyAiError = (error: any) => {
+    const errMsg = error?.message || String(error || "");
+    if (errMsg.includes("Rate exceeded") || errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("exceeded")) {
+      return "Mô hình AI hiện đang đạt giới hạn tần suất (Rate Exceeded). Vui lòng đợi 1-2 phút rồi thử lại nhen! 🌱";
+    }
+    if (errMsg.includes("503") || errMsg.includes("high demand") || errMsg.includes("UNAVAILABLE")) {
+      return "Mô hình AI hiện đang bận do lượng truy cập cao. Vui lòng thử lại sau ít phút!";
+    }
+    return errMsg || "Lỗi xử lý AI";
+  };
 
   // API Route for AI suggestion based on Album Title
   app.post("/api/recommend-photo-meta", async (req, res) => {
@@ -1740,12 +1289,9 @@ Hãy phản hồi định dạng JSON chứa các trường:
         }
       }
 
-      console.log("Last Error from GenAI:", lastError);
-
       if (!response) {
         throw new Error(
-          lastError?.message || 
-          "Mô hình AI hiện đang quá tải hoặc gặp lỗi. Vui lòng thử lại sau!"
+          getFriendlyAiError(lastError)
         );
       }
 
@@ -1756,7 +1302,9 @@ Hãy phản hồi định dạng JSON chứa các trường:
       return res.json(JSON.parse(responseText));
     } catch (error: any) {
       console.error("AI Photo Suggestion Error:", error);
-      return res.status(500).json({ error: error.message || "Lỗi xử lý gợi ý AI" });
+      const msg = getFriendlyAiError(error);
+      const isRateLimit = msg.includes("Rate Exceeded") || msg.includes("quá tải");
+      return res.status(isRateLimit ? 429 : 500).json({ error: msg });
     }
   });
 
@@ -1837,8 +1385,7 @@ Hãy phản hồi DUY NHẤT một định dạng JSON chính xác như cấu tr
 
       if (!response) {
         throw new Error(
-          lastError?.message || 
-          "Mô hình AI hiện đang quá tải hoặc gặp lỗi. Vui lòng thiết lập khóa API của riêng bạn hoặc thử lại sau vài phút!"
+          getFriendlyAiError(lastError)
         );
       }
 
@@ -1851,7 +1398,9 @@ Hãy phản hồi DUY NHẤT một định dạng JSON chính xác như cấu tr
       return res.json(data);
     } catch (error: any) {
       console.error("AI Generation Error:", error);
-      return res.status(500).json({ error: error.message || "Lỗi xử lý gợi ý AI" });
+      const msg = getFriendlyAiError(error);
+      const isRateLimit = msg.includes("Rate Exceeded") || msg.includes("quá tải");
+      return res.status(isRateLimit ? 429 : 500).json({ error: msg });
     }
   });
 
@@ -1900,16 +1449,16 @@ Hãy phản hồi DUY NHẤT một định dạng JSON chính xác như cấu tr
       }
 
       if (!response) {
-        throw new Error(
-          lastError?.message || "Mô hình AI hiện đang quá tải hoặc gặp lỗi."
-        );
+        throw new Error(getFriendlyAiError(lastError));
       }
 
       const optimizedText = response.text ? response.text.trim() : textRaw;
       return res.json({ optimizedText: optimizedText.replace(/^["']|(?:["']\n?)$/g, "") });
     } catch (error: any) {
       console.error("AI Text Optimization Error:", error);
-      return res.status(500).json({ error: "Lỗi AI tối ưu chữ" });
+      const msg = getFriendlyAiError(error);
+      const isRateLimit = msg.includes("Rate Exceeded") || msg.includes("quá tải");
+      return res.status(isRateLimit ? 429 : 500).json({ error: msg });
     }
   });
 
@@ -2043,11 +1592,11 @@ BỐI CẢNH HIỆN TẠI:
       return res.json({ reply: replyText, bookingData });
     } catch (error: any) {
       const errMsg = error.message || "";
-      if (errMsg.includes("429") || errMsg.includes("quota") || error?.status === 429 || errMsg.includes("RESOURCE_EXHAUSTED")) {
-        return res.json({ reply: "Ối dồi ôi, bà con hỏi đông quá Đậu Đậu quá tải xỉu up xỉu down ùi 💦 Đằng ấy đợi tui cỡ 1-2 phút rùi nhắn lại nha hức hức!" });
+      if (errMsg.includes("429") || errMsg.includes("quota") || error?.status === 429 || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("Rate exceeded") || errMsg.includes("exceeded")) {
+        return res.json({ reply: "Ối dồi ôi, bà con hỏi đông quá Đậu Đậu đạt giới hạn tần suất (Rate Exceeded) mất gòi 💦 Đằng ấy đợi tui cỡ 1-2 phút rùi nhắn lại nha hức hức!" });
       }
       if (errMsg.includes("503") || errMsg.includes("high demand") || error?.status === 503 || errMsg.includes("UNAVAILABLE")) {
-        return res.json({ reply: "Đậu Đậu đang bị nghẽn mạng xíu xiu gòi 🥺 Máy chủ đang hơi quá tải, đằng ấy đợi xíu gòi nhắn lại nhen!" });
+        return res.json({ reply: "Đậu Đậu đang bị nghẽn mạng xíu xiu gòi 🥺 Máy chủ đang hơi quá tải, đằng ấy đợi tui xíu rùi nhắn lại nhen!" });
       }
       console.error("AI Chat Error:", error);
       return res.json({ reply: "Đậu Đậu bị va vấp mạng rùi ứa ừa! Đằng ấy tải lại trang dùm Đậu nhen 😭" });
@@ -2982,21 +2531,12 @@ BỐI CẢNH HIỆN TẠI:
         return res.end(cached.buffer);
       }
 
-      const candidateUrls = width && width > 0 && width < 2560
-        ? [
-            `https://lh3.googleusercontent.com/d/${targetId}=w${width}-rw`,
-            `https://lh3.googleusercontent.com/d/${targetId}=w${width}`,
-            `https://drive.google.com/thumbnail?id=${targetId}&sz=w${width}`,
-            `https://lh3.googleusercontent.com/d/${targetId}=s0`,
-            `https://drive.google.com/uc?export=view&id=${targetId}`
-          ]
-        : [
-            `https://lh3.googleusercontent.com/d/${targetId}=s0`,
-            `https://lh3.googleusercontent.com/d/${targetId}=s0-rw`,
-            `https://lh3.googleusercontent.com/d/${targetId}`,
-            `https://drive.google.com/thumbnail?id=${targetId}&sz=w${width || 3840}`,
-            `https://drive.google.com/uc?export=view&id=${targetId}`
-          ];
+      const candidateUrls = [
+        width ? `https://lh3.googleusercontent.com/d/${targetId}=w${width}-rw` : `https://lh3.googleusercontent.com/d/${targetId}=s2400-rw`,
+        width ? `https://lh3.googleusercontent.com/d/${targetId}=w${width}` : `https://lh3.googleusercontent.com/d/${targetId}=s2400`,
+        `https://drive.google.com/thumbnail?id=${targetId}&sz=w${width || 1920}`,
+        `https://drive.google.com/uc?export=view&id=${targetId}`
+      ];
 
       let imageResponse: Response | null = null;
       let contentType = "image/webp";

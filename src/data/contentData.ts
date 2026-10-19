@@ -1,4 +1,5 @@
-const founderPortrait = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=800";
+import { DEFAULT_FOUNDER_PORTRAIT } from "../constants/founderConfig";
+const founderPortrait = DEFAULT_FOUNDER_PORTRAIT;
 import sonyCamera from "../assets/images/regenerated_image_1779884047451.jpg";
 import sigmaLens from "../assets/images/regenerated_image_1779884713797.jpg";
 import godoxFlash from "../assets/images/regenerated_image_1779933195915.webp";

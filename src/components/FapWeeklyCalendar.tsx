@@ -234,6 +234,35 @@ export const FapWeeklyCalendar: React.FC<FapWeeklyCalendarProps> = ({
 
   const daysOfWeek = getDaysOfWeek(currentWeekStart);
 
+  // Count available slots for the currently viewed week's month
+  const monthAvailabilityStats = React.useMemo(() => {
+    const targetY = currentWeekStart.getFullYear();
+    const targetM = currentWeekStart.getMonth();
+    const daysInM = new Date(targetY, targetM + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let available = 0;
+    for (let day = 1; day <= daysInM; day++) {
+      const d = new Date(targetY, targetM, day);
+      if (d >= today) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const dayStr = String(d.getDate()).padStart(2, "0");
+        const key = `${y}-${m}-${dayStr}`;
+        const status = availableDates[key]?.status;
+        if (status === "available" || status === undefined) {
+          available++;
+        }
+      }
+    }
+    return {
+      month: targetM + 1,
+      year: targetY,
+      available,
+    };
+  }, [currentWeekStart, availableDates]);
+
   useEffect(() => {
     if (!isOpen) return;
     const rangeStart = formatShortDate(daysOfWeek[0]);
@@ -332,9 +361,18 @@ export const FapWeeklyCalendar: React.FC<FapWeeklyCalendarProps> = ({
                 <CalendarIcon className="w-6 h-6 text-[#B5945B]" />
               </div>
               <div>
-                <h3 className="font-sans font-bold text-lg text-white uppercase tracking-wide">
-                  Lịch Chụp Sự Kiện / Prom
-                </h3>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="font-sans font-bold text-lg text-white uppercase tracking-wide">
+                    Lịch Chụp Sự Kiện / Prom
+                  </h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 text-xs font-bold font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>
+                      Tháng {monthAvailabilityStats.month}/{monthAvailabilityStats.year}: Còn{" "}
+                      {monthAvailabilityStats.available} lịch trống
+                    </span>
+                  </span>
+                </div>
                 <p className="text-[12px] text-zinc-400 font-sans tracking-tight mt-0.5">
                   Hiển thị lịch tuần theo ca chi tiết
                 </p>

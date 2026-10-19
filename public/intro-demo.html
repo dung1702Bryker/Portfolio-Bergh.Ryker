@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bergh.Ryker Studio - Cinematic Intro & Hero</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- GSAP CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Cormorant Garamond -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            serif: ['"Cormorant Garamond"', 'serif'],
+          },
+          colors: {
+            gold: {
+              400: '#E5C17C',
+              500: '#B5945B',
+              600: '#8E713E',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0A0A0C;
+      color: #FFFFFF;
+      overflow-x: hidden;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Radial Ambient Background Glow */
+    .ambient-glow {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 600px;
+      max-width: 95vw;
+      max-height: 95vw;
+      background: radial-gradient(circle, rgba(181, 148, 91, 0.18) 0%, rgba(20, 20, 24, 0) 70%);
+      border-radius: 9999px;
+      pointer-events: none;
+      z-index: 1;
+      filter: blur(40px);
+    }
+
+    /* Perspective Container for 3D Cards */
+    .perspective-stage {
+      perspective: 1400px;
+      transform-style: preserve-3d;
+    }
+
+    .card-item {
+      transform-origin: center bottom;
+      will-change: transform, opacity;
+      backface-visibility: hidden;
+    }
+
+    /* Glass styling */
+    .glass-pill {
+      background: rgba(22, 22, 26, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .glass-gold-btn {
+      background: linear-gradient(135deg, #E5C17C 0%, #B5945B 100%);
+      color: #0A0A0C;
+      font-weight: 700;
+      box-shadow: 0 10px 25px -5px rgba(181, 148, 91, 0.35);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .glass-gold-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 30px -4px rgba(229, 193, 124, 0.45);
+    }
+
+    /* Custom scrollbar hide */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="relative min-h-screen flex flex-col justify-between selection:bg-[#B5945B]/30 selection:text-white">
+
+  <!-- Ambient Golden Center Glow -->
+  <div id="ambientGlow" class="ambient-glow"></div>
+
+  <!-- ============================================================== -->
+  <!-- 1. NAVBAR (Header) - Contains target anchor for Logo Flight -->
+  <!-- ============================================================== -->
+  <header class="fixed top-0 inset-x-0 z-50 px-4 sm:px-8 py-4 sm:py-5 flex items-center justify-between pointer-events-auto">
+    <!-- Navbar Logo Anchor (The landing spot for the flying logo) -->
+    <div id="navLogoAnchor" class="w-12 h-12 flex items-center justify-center relative">
+      <!-- Target position for logo -->
+    </div>
+
+    <!-- Navigation Right Controls (Fade in during step 4) -->
+    <div id="navRightControls" class="flex items-center gap-2.5 sm:gap-4 opacity-0">
+      <button class="px-4 py-2 rounded-full text-xs sm:text-sm font-semibold text-zinc-300 hover:text-white glass-pill transition-all active:scale-95">
+        Đăng nhập
+      </button>
+      <button class="px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-bold glass-gold-btn active:scale-95 flex items-center gap-2">
+        <span>Đặt lịch ngay</span>
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================================== -->
+  <!-- 2. FLYING LOGO BADGE (Starts centered, glows, then flies to Navbar) -->
+  <!-- ============================================================== -->
+  <div id="centralLogo" class="fixed z-[60] flex flex-col items-center justify-center pointer-events-none select-none" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">
+    <div class="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl glass-pill flex flex-col items-center justify-center border border-[#B5945B]/60 shadow-[0_0_50px_rgba(181,148,91,0.4)] overflow-hidden">
+      <!-- Inner subtle badge ring -->
+      <div class="absolute inset-0 rounded-2xl border border-white/10 pointer-events-none z-10"></div>
+      
+      <!-- Monogram -->
+      <span class="text-4xl sm:text-5xl font-extrabold font-serif tracking-wider text-[#E5C17C] leading-none">
+        BR
+      </span>
+      <span class="text-[9px] sm:text-[10px] font-sans font-bold tracking-[0.25em] text-zinc-400 mt-1 uppercase">
+        STUDIO
+      </span>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 3. MAIN CAROUSEL & CARDS CONTAINER (Fan Out -> Stack -> Carousel) -->
+  <!-- ============================================================== -->
+  <main class="relative z-10 w-full max-w-5xl mx-auto flex-1 flex flex-col items-center justify-center pt-20 sm:pt-24 pb-8 px-4">
+    
+    <!-- Stage for 3D cards animation -->
+    <div id="carouselWrapper" class="relative w-full h-[290px] sm:h-[360px] md:h-[400px] flex items-center justify-center perspective-stage my-2">
+      
+      <!-- Card 0 -->
+      <div class="card-item absolute rounded-2xl overflow-hidden shadow-2xl border border-white/10 cursor-pointer"
+           data-index="0"
+           style="width: 200px; height: 270px; opacity: 0;">
+        <img src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800" 
+             alt="Bộ sưu tập 01" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-3 left-3 right-3 text-left">
+          <span class="text-[9px] text-[#E5C17C] font-bold uppercase tracking-wider block">Kỷ Yếu Hà Nội</span>
+          <h4 class="text-xs sm:text-sm font-bold text-white truncate">Chuyến Tàu Thanh Xuân</h4>
+        </div>
+      </div>
+
+      <!-- Card 1 -->
+      <div class="card-item absolute rounded-2xl overflow-hidden shadow-2xl border border-white/10 cursor-pointer"
+           data-index="1"
+           style="width: 200px; height: 270px; opacity: 0;">
+        <img src="https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&q=80&w=800" 
+             alt="Bộ sưu tập 02" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-3 left-3 right-3 text-left">
+          <span class="text-[9px] text-[#E5C17C] font-bold uppercase tracking-wider block">Editorial Wedding</span>
+          <h4 class="text-xs sm:text-sm font-bold text-white truncate">The Red Bliss Romance</h4>
+        </div>
+      </div>
+
+      <!-- Card 2 (MAIN CENTER CARD) -->
+      <div class="card-item absolute rounded-2xl overflow-hidden shadow-2xl border border-[#B5945B]/60 cursor-pointer ring-1 ring-[#B5945B]/50"
+           data-index="2"
+           style="width: 200px; height: 270px; opacity: 0;">
+        <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=800" 
+             alt="Bộ sưu tập 03" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent"></div>
+        <div class="absolute top-2.5 right-2.5 bg-[#B5945B] text-black text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+          Mới Nhất
+        </div>
+        <div class="absolute bottom-3.5 left-3.5 right-3.5 text-left">
+          <span class="text-[9px] text-[#E5C17C] font-bold uppercase tracking-wider block">Chân Dung Tân Cử Nhân</span>
+          <h4 class="text-xs sm:text-sm font-bold text-white truncate">Melbourne Polytechnic '26</h4>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="card-item absolute rounded-2xl overflow-hidden shadow-2xl border border-white/10 cursor-pointer"
+           data-index="3"
+           style="width: 200px; height: 270px; opacity: 0;">
+        <img src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&q=80&w=800" 
+             alt="Bộ sưu tập 04" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-3 left-3 right-3 text-left">
+          <span class="text-[9px] text-[#E5C17C] font-bold uppercase tracking-wider block">Sự Kiện Độc Bản</span>
+          <h4 class="text-xs sm:text-sm font-bold text-white truncate">Prom Night Luminescence</h4>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="card-item absolute rounded-2xl overflow-hidden shadow-2xl border border-white/10 cursor-pointer"
+           data-index="4"
+           style="width: 200px; height: 270px; opacity: 0;">
+        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800" 
+             alt="Bộ sưu tập 05" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+        <div class="absolute bottom-3 left-3 right-3 text-left">
+          <span class="text-[9px] text-[#E5C17C] font-bold uppercase tracking-wider block">Artistic Concept</span>
+          <h4 class="text-xs sm:text-sm font-bold text-white truncate">Vũ Khúc Hoàng Hôn</h4>
+        </div>
+      </div>
+
+      <!-- Carousel Navigation Arrows (Desktop & Mobile) -->
+      <button id="prevBtn" class="absolute left-2 sm:left-4 z-40 p-2.5 rounded-full glass-pill hover:bg-white/20 text-white transition-all active:scale-90 opacity-0 pointer-events-none">
+        <svg class="w-4 h-4 sm:w-5 sm:h-5 text-[#E5C17C]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+
+      <button id="nextBtn" class="absolute right-2 sm:right-4 z-40 p-2.5 rounded-full glass-pill hover:bg-white/20 text-white transition-all active:scale-90 opacity-0 pointer-events-none">
+        <svg class="w-4 h-4 sm:w-5 sm:h-5 text-[#E5C17C]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+
+    </div>
+
+    <!-- ============================================================== -->
+    <!-- 4. HERO TEXT & CALL-TO-ACTION (Fade-in-up during Step 4) -->
+    <!-- ============================================================== -->
+    <div id="heroContent" class="text-center max-w-xl mx-auto px-4 mt-4 sm:mt-6 opacity-0" style="transform: translateY(30px);">
+      
+      <!-- Small Golden Tag -->
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#E5C17C] bg-[#B5945B]/15 border border-[#B5945B]/30 mb-3">
+        <span>✦</span>
+        <span>STUDIO KỶ YẾU & SỰ KIỆN NGHỆ THUẬT</span>
+        <span>✦</span>
+      </div>
+
+      <!-- Main Headline with Italic Accent -->
+      <h1 class="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-tight mb-3">
+        Album kỷ yếu <span class="font-serif italic font-normal text-[#E5C17C] underline decoration-[#B5945B]/40 decoration-1">đẳng cấp</span>.<br/>
+        Thiết kế độc bản trong từng khung hình.
+      </h1>
+
+      <!-- Description Body -->
+      <p class="text-xs sm:text-sm md:text-base text-zinc-300 font-normal leading-relaxed mb-6 max-w-md mx-auto">
+        Kể câu chuyện thanh xuân bằng màu sắc điện ảnh và cảm xúc tự nhiên nhất. Được thực hiện bởi Đức Dũng & Bergh.Ryker Studio.
+      </p>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md mx-auto">
+        <button class="w-full sm:w-auto px-6 py-3.5 rounded-2xl font-bold text-xs sm:text-sm glass-gold-btn flex items-center justify-center gap-2">
+          <span>Xem Bảng Giá & Gói Chụp</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
+          </svg>
+        </button>
+        <button class="w-full sm:w-auto px-6 py-3.5 rounded-2xl font-semibold text-xs sm:text-sm glass-pill hover:bg-white/10 text-white flex items-center justify-center gap-2 border border-white/15">
+          <span>Khám Phá Tác Phẩm</span>
+        </button>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ============================================================== -->
+  <!-- 5. FLOATING CONTROLS: REPLAY BUTTON -->
+  <!-- ============================================================== -->
+  <div class="fixed bottom-4 right-4 z-50">
+    <button id="replayBtn" class="px-3.5 py-2 rounded-full glass-pill hover:bg-white/20 text-xs text-[#E5C17C] font-semibold flex items-center gap-2 shadow-2xl active:scale-95 transition-all">
+      <svg class="w-3.5 h-3.5 animate-spin-slow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      <span>Phát Lại Chuyển Động</span>
+    </button>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 6. GSAP ANIMATION LOGIC -->
+  <!-- ============================================================== -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const cards = Array.from(document.querySelectorAll(".card-item"));
+      const centralLogo = document.getElementById("centralLogo");
+      const navLogoAnchor = document.getElementById("navLogoAnchor");
+      const navRightControls = document.getElementById("navRightControls");
+      const heroContent = document.getElementById("heroContent");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const replayBtn = document.getElementById("replayBtn");
+      const ambientGlow = document.getElementById("ambientGlow");
+
+      let currentActiveIndex = 2; // Card 2 is the main center card
+      let isCarouselReady = false;
+
+      // Master Timeline
+      let masterTl = gsap.timeline();
+
+      function runIntroSequence() {
+        // Reset states
+        isCarouselReady = false;
+        currentActiveIndex = 2;
+        
+        // Hide UI elements initially
+        gsap.set(navRightControls, { opacity: 0 });
+        gsap.set(heroContent, { opacity: 0, y: 30 });
+        gsap.set([prevBtn, nextBtn], { opacity: 0, pointerEvents: "none" });
+
+        // Reset Logo to center
+        gsap.set(centralLogo, {
+          top: "50%",
+          left: "50%",
+          xPercent: -50,
+          yPercent: -50,
+          scale: 1,
+          opacity: 1,
+          borderRadius: "1rem"
+        });
+
+        // Reset cards to center stack with opacity 0
+        const isMobile = window.innerWidth < 640;
+        const cardW = isMobile ? 180 : 240;
+        const cardH = isMobile ? 250 : 330;
+
+        cards.forEach((card, i) => {
+          gsap.set(card, {
+            width: cardW,
+            height: cardH,
+            x: 0,
+            y: 0,
+            z: 0,
+            rotationZ: 0,
+            scale: 0.8,
+            opacity: 0,
+            zIndex: 10 + i
+          });
+        });
+
+        // Kill existing timeline if replaying
+        if (masterTl) masterTl.kill();
+        masterTl = gsap.timeline();
+
+        // -------------------------------------------------------------
+        // BƯỚC 1: Logo phát sáng nhẹ ở giữa trong 1 giây đầu (Glow effect)
+        // -------------------------------------------------------------
+        masterTl.to(centralLogo, {
+          scale: 1.05,
+          duration: 1.0,
+          ease: "power2.out",
+          boxShadow: "0 0 60px rgba(229,193,124,0.6)",
+        })
+        .to(ambientGlow, {
+          scale: 1.25,
+          opacity: 0.9,
+          duration: 1.0,
+          ease: "power2.out",
+        }, "<");
+
+        // -------------------------------------------------------------
+        // BƯỚC 2: Sau 1s, các thẻ ảnh bung ra từ giữa theo kiểu xòe quạt (card fan),
+        // xoay nhẹ rồi xếp chồng lại vào trung tâm.
+        // -------------------------------------------------------------
+        // Cấu hình góc xoay và độ lệch xòe quạt cho 5 thẻ
+        const fanConfigs = [
+          { angle: -24, x: -140, y: -20, scale: 0.9 },
+          { angle: -12, x: -70,  y: -10, scale: 0.95 },
+          { angle: 0,   x: 0,    y: -5,  scale: 1.0 },
+          { angle: 12,  x: 70,   y: -10, scale: 0.95 },
+          { angle: 24,  x: 140,  y: -20, scale: 0.9 },
+        ];
+
+        // 2.1 Xòe quạt (Card Fan Burst Out)
+        masterTl.to(cards, {
+          opacity: 1,
+          duration: 0.8,
+          stagger: 0.05,
+          ease: "back.out(1.4)",
+          x: (i) => (fanConfigs[i % fanConfigs.length].x * (isMobile ? 0.65 : 1)),
+          y: (i) => fanConfigs[i % fanConfigs.length].y,
+          rotationZ: (i) => fanConfigs[i % fanConfigs.length].angle,
+          scale: (i) => fanConfigs[i % fanConfigs.length].scale,
+        }, "+=0.2");
+
+        // Giữ quạt mở trong chốc lát
+        masterTl.to({}, { duration: 0.5 });
+
+        // 2.2 Thu gọn lại thành xấp ảnh ở trung tâm (Stacking into center)
+        masterTl.to(cards, {
+          x: 0,
+          y: (i) => -i * 3, // xếp tầng nhẹ
+          rotationZ: 0,
+          scale: 0.95,
+          stagger: 0.03,
+          duration: 0.65,
+          ease: "power3.inOut"
+        });
+
+        // -------------------------------------------------------------
+        // BƯỚC 3 & 4: Mở rộng thành Carousel (ảnh chính ở giữa + 2 ảnh 2 bên)
+        // CÙNG LÚC ĐÓ: Logo bay thu nhỏ về Navbar góc trái & Hero text hiện lên
+        // -------------------------------------------------------------
+        masterTl.add("carouselAndHero", "+=0.15");
+
+        // 3. Mở rộng thành Carousel 3D
+        masterTl.call(() => {
+          arrangeCarousel(currentActiveIndex, true);
+        }, null, "carouselAndHero");
+
+        // 4.1 Logo bay thu nhỏ về góc Navbar (FLIP Animation)
+        masterTl.call(() => {
+          flyLogoToNavbar();
+        }, null, "carouselAndHero");
+
+        // 4.2 Navbar controls và nút bấm hiện dần
+        masterTl.to(navRightControls, {
+          opacity: 1,
+          duration: 0.7,
+          ease: "power2.out"
+        }, "carouselAndHero+=0.3");
+
+        // 4.3 Hero Text và CTA fade in up
+        masterTl.to(heroContent, {
+          opacity: 1,
+          y: 0,
+          duration: 0.9,
+          ease: "power3.out"
+        }, "carouselAndHero+=0.2");
+
+        // 4.4 Các nút điều hướng Carousel hiện lên
+        masterTl.to([prevBtn, nextBtn], {
+          opacity: 1,
+          pointerEvents: "auto",
+          duration: 0.6,
+          onComplete: () => {
+            isCarouselReady = true;
+          }
+        }, "carouselAndHero+=0.4");
+      }
+
+      // Hàm tính toán vị trí Carousel (Ảnh chính ở giữa, 2 ảnh bên cạnh lộ ra một phần)
+      function arrangeCarousel(activeIdx, animated = true) {
+        const isMobile = window.innerWidth < 640;
+        const total = cards.length;
+        const centerSpacing = isMobile ? 120 : 210;
+        const sideScale = isMobile ? 0.78 : 0.85;
+
+        cards.forEach((card, idx) => {
+          let offset = idx - activeIdx;
+
+          // Wrap-around offset logic
+          if (offset > total / 2) offset -= total;
+          if (offset < -total / 2) offset += total;
+
+          let targetX = 0;
+          let targetZ = 0;
+          let targetScale = 1;
+          let targetOpacity = 1;
+          let targetZIndex = 30;
+          let targetRotY = 0;
+
+          if (offset === 0) {
+            // Ảnh chính ở giữa (Active Center Card)
+            targetX = 0;
+            targetZ = 50;
+            targetScale = isMobile ? 1.05 : 1.15;
+            targetOpacity = 1;
+            targetZIndex = 40;
+            targetRotY = 0;
+          } else if (offset === -1 || (offset > 0 && offset === total - 1)) {
+            // Ảnh bên trái (Left peek card)
+            targetX = -centerSpacing;
+            targetZ = -40;
+            targetScale = sideScale;
+            targetOpacity = 0.65;
+            targetZIndex = 25;
+            targetRotY = 14;
+          } else if (offset === 1 || (offset < 0 && offset === -(total - 1))) {
+            // Ảnh bên phải (Right peek card)
+            targetX = centerSpacing;
+            targetZ = -40;
+            targetScale = sideScale;
+            targetOpacity = 0.65;
+            targetZIndex = 25;
+            targetRotY = -14;
+          } else {
+            // Các ảnh còn lại ở xa hơn / ẩn phía sau
+            targetX = offset * centerSpacing * 1.3;
+            targetZ = -120;
+            targetScale = 0.65;
+            targetOpacity = 0;
+            targetZIndex = 10;
+            targetRotY = 0;
+          }
+
+          if (animated) {
+            gsap.to(card, {
+              x: targetX,
+              z: targetZ,
+              rotationY: targetRotY,
+              scale: targetScale,
+              opacity: targetOpacity,
+              zIndex: targetZIndex,
+              duration: 0.85,
+              ease: "power3.out"
+            });
+          } else {
+            gsap.set(card, {
+              x: targetX,
+              z: targetZ,
+              rotationY: targetRotY,
+              scale: targetScale,
+              opacity: targetOpacity,
+              zIndex: targetZIndex
+            });
+          }
+        });
+      }
+
+      // Hàm chuyển động Logo từ trung tâm bay về góc Navbar
+      function flyLogoToNavbar() {
+        const anchorRect = navLogoAnchor.getBoundingClientRect();
+        const startX = window.innerWidth / 2;
+        const startY = window.innerHeight / 2;
+        const targetX = anchorRect.left + anchorRect.width / 2;
+        const targetY = anchorRect.top + anchorRect.height / 2;
+
+        gsap.to(centralLogo, {
+          top: targetY + "px",
+          left: targetX + "px",
+          xPercent: -50,
+          yPercent: -50,
+          scale: 0.45,
+          duration: 0.9,
+          ease: "power3.inOut",
+          boxShadow: "0 0 15px rgba(181,148,91,0.25)"
+        });
+      }
+
+      // Click to select card in Carousel
+      cards.forEach((card, idx) => {
+        card.addEventListener("click", () => {
+          if (!isCarouselReady) return;
+          currentActiveIndex = idx;
+          arrangeCarousel(currentActiveIndex, true);
+        });
+      });
+
+      // Carousel Prev & Next Controls
+      prevBtn.addEventListener("click", () => {
+        if (!isCarouselReady) return;
+        currentActiveIndex = (currentActiveIndex - 1 + cards.length) % cards.length;
+        arrangeCarousel(currentActiveIndex, true);
+      });
+
+      nextBtn.addEventListener("click", () => {
+        if (!isCarouselReady) return;
+        currentActiveIndex = (currentActiveIndex + 1) % cards.length;
+        arrangeCarousel(currentActiveIndex, true);
+      });
+
+      // Replay Animation Button
+      replayBtn.addEventListener("click", () => {
+        runIntroSequence();
+      });
+
+      // Touch / Swipe support for mobile
+      let touchStartX = 0;
+      const carouselWrap = document.getElementById("carouselWrapper");
+      carouselWrap.addEventListener("touchstart", (e) => {
+        touchStartX = e.touches[0].clientX;
+      }, { passive: true });
+
+      carouselWrap.addEventListener("touchend", (e) => {
+        if (!isCarouselReady) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const diff = touchEndX - touchStartX;
+        if (diff > 40) {
+          // Swipe Right -> Prev
+          currentActiveIndex = (currentActiveIndex - 1 + cards.length) % cards.length;
+          arrangeCarousel(currentActiveIndex, true);
+        } else if (diff < -40) {
+          // Swipe Left -> Next
+          currentActiveIndex = (currentActiveIndex + 1) % cards.length;
+          arrangeCarousel(currentActiveIndex, true);
+        }
+      }, { passive: true });
+
+      // Window resize adaptation
+      window.addEventListener("resize", () => {
+        if (isCarouselReady) {
+          arrangeCarousel(currentActiveIndex, false);
+          flyLogoToNavbar();
+        }
+      });
+
+      // Bắt đầu chạy Intro khi tải trang
+      runIntroSequence();
+    });
+  </script>
+</body>
+</html>

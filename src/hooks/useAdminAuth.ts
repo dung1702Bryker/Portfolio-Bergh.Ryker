@@ -70,23 +70,37 @@ export function useAdminAuth() {
   }, []);
 
   const login = async () => {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-
-    // Force refresh to ensure we get the latest token logic
-    const token = await result.user.getIdTokenResult(true);
-    if (!isAuthorizedAdmin(token.claims, result.user.email)) {
-      await auth.signOut();
-      throw new Error(
-        "Tài khoản này không có quyền truy cập quản trị! Yêu cầu phân quyền Admin.",
-      );
-    }
-    setIsAdmin(true);
-    setUser(result.user);
     try {
-      localStorage.setItem("admin_device_verified", "true");
-      if (result.user.email) localStorage.setItem("admin_email", result.user.email);
-    } catch (_) {}
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+
+      // Force refresh to ensure we get the latest token logic
+      const token = await result.user.getIdTokenResult(true);
+      if (!isAuthorizedAdmin(token.claims, result.user.email)) {
+        await auth.signOut();
+        throw new Error(
+          "Tài khoản này không có quyền truy cập quản trị! Yêu cầu phân quyền Admin.",
+        );
+      }
+      setIsAdmin(true);
+      setUser(result.user);
+      try {
+        localStorage.setItem("admin_device_verified", "true");
+        if (result.user.email) localStorage.setItem("admin_email", result.user.email);
+      } catch (_) {}
+      return { success: true };
+    } catch (err: any) {
+      if (
+        err?.code === "auth/popup-closed-by-user" ||
+        err?.code === "auth/cancelled-popup-request" ||
+        err?.code === "auth/popup-blocked" ||
+        err?.message?.includes("popup")
+      ) {
+        return { cancelled: true };
+      }
+      throw err;
+    }
   };
 
   const loginWithEmailPassword = async (email: string, pass: string) => {

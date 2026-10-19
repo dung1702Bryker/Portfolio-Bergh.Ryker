@@ -156,8 +156,8 @@ export const GalleryViewer: React.FC<GalleryViewerProps> = ({
  <ChevronRight className="w-5 h-5"/>
  </button>
 
- <div className="absolute bottom-4 left-4 right-4 z-10 text-left text-white">
- <h5 className="font-sans font-bold text-sm text-white truncate max-w-xs sm:max-w-md">
+ <div className="absolute bottom-2 sm:bottom-4 left-2.5 sm:left-4 right-2.5 sm:right-4 z-10 text-left text-white">
+ <h5 className="font-sans font-semibold text-xs sm:text-sm text-white truncate max-w-[200px] sm:max-w-md">
  {activeCollection.images[selectedIndex]?.title ||"Bộ ảnh kỷ yếu"}
  </h5>
  </div>

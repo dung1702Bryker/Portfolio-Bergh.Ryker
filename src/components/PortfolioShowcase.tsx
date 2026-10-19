@@ -38,6 +38,12 @@ import {
   Maximize2,
   Minimize2,
   Square,
+  Calendar,
+  Filter,
+  Layers,
+  Tag,
+  SlidersHorizontal,
+  LayoutGrid,
 } from "lucide-react";
 const GoogleDrivePicker = React.lazy(() =>
   import("./GoogleDrivePicker").then((m) => ({ default: m.GoogleDrivePicker }))
@@ -48,7 +54,12 @@ import { resolveImage, buildLightboxSources } from "../utils/imageMapper";
 import { getOptimizedImageUrl, markImageLoadedInCache } from "../utils/imageOptimizer";
 import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { validateUrl } from "../utils/validateUrl";
-import { usePortfolioData, AllowedCollection } from "../hooks/usePortfolioData";
+import {
+  usePortfolioData,
+  AllowedCollection,
+  extractYearFromText,
+  inferEventTypeFromText,
+} from "../hooks/usePortfolioData";
 import { useToast } from "../hooks/useToast";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { ToastContainer } from "./ToastContainer";
@@ -147,13 +158,17 @@ interface CustomCollection {
   coverImagePosition?: string;
   order?: number;
   isHidden?: boolean;
+  year?: string;
+  eventType?: string;
 }
 
 const DEFAULT_COLLECTIONS: CustomCollection[] = [
   {
     id: "col-1",
-    title: "Kỷ Yếu THPT Chu Văn An 12A1",
-    subtitle: "Thanh Xuân Rực Rỡ",
+    title: "Thanh Xuân - Như Quỳnh - THPT Trần Phú",
+    subtitle: "Kỷ Yếu THPT & Cấp 3",
+    year: "2025",
+    eventType: "Kỷ yếu THPT & Cấp 3",
     body: "Những khung hình ngập tràn ánh nắng hoàng hôn sân trường, tà áo dài bay trong gió và nụ cười vô tư nhất tuổi 18. Phong cách Youth Editorial mang đến nguồn năng lượng tươi sáng, trong trẻo nhưng vẫn đậm chất thơ của lứa tuổi học trò.",
     coverImageSrc: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1000",
     driveLink:
@@ -161,32 +176,32 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     images: [
       {
         src: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=1000",
-        alt: "Highschool Group Editorial",
-        title: "Hoàng Hôn Sân Trường",
+        alt: "Golden Hour - Ánh Sáng Tự Nhiên",
+        title: "Mở Đầu Câu Chuyện",
         focal: "35mm F/2.0",
         iso: "320",
-        desc: "Hình tập thể lớp đùa nghịch dưới nắng chiều vàng ươm hắt xiên qua cửa lớp.",
+        desc: "Thanh Xuân - Như Quỳnh - THPT Trần Phú. Bức ảnh ở độ phân giải gốc siêu nét.",
       },
       {
         src: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=1000",
-        alt: "Ao Dai Portrait",
-        title: "Tà Áo Dài Thơ Mộng",
+        alt: "Han Hoang - THPT Quang Hạ",
+        title: "Cảm Xúc Tự Nhiên",
         focal: "85mm F/1.4",
         iso: "100",
-        desc: "Chân dung đơn giản mộc mạc bên hành lang lớp học cũ, tóc bay nhẹ đón gió.",
+        desc: "Ánh sáng tự nhiên buổi chiều tản lối qua hàng cây sân trường...",
       },
       {
         src: "https://images.unsplash.com/photo-1516627145497-ae6968895b74?auto=format&fit=crop&q=80&w=800",
-        alt: "Candid dynamic shot",
-        title: "Candid Sân Bóng",
+        alt: "Minh Anh - THCS Ka Long",
+        title: "Nét Đẹp Tuổi Học Trò",
         focal: "50mm F/1.8",
         iso: "400",
         desc: "Bắt trọn nụ cười rạng rỡ tự nhiên nhất của nhóm bạn thân sau giờ chào cờ.",
       },
       {
         src: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&q=80&w=800",
-        alt: "Macro Detail school badge",
-        title: "Huy Hiệu Vai Áo",
+        alt: "Khánh Khắc Đất Gió",
+        title: "Khoảnh Khắc Đất Gió",
         focal: "90mm Macro F/2.8",
         iso: "200",
         desc: "Chi tiết thêu tỉ mỉ trên vai áo đồng phục trường THPT, nét lưu dấu kỷ niệm.",
@@ -197,6 +212,8 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     id: "col-2",
     title: "Kỷ Yếu Chuyên Hà Nội - Amsterdam",
     subtitle: "Mùa Nắng Cuối Cùng",
+    year: "2025",
+    eventType: "Cử nhân & Đại học",
     body: "Dự án lưu giữ thanh xuân và tinh thần đam mê tột độ cùng các thế hệ học sinh chuyên Hà Nội - Amsterdam. Trải nghiệm concept cử nhân kịch tính, nghệ thuật đầy cảm xúc chân thành.",
     coverImageSrc: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
     driveLink: "https://drive.google.com/drive/folders/1B_z_example_ams_shoot",
@@ -223,6 +240,8 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     id: "col-3",
     title: "Pre-Graduation THPT Chuyên Ngoại Ngữ",
     subtitle: "Áo Dài & Giảng Đường Xanh",
+    year: "2026",
+    eventType: "Pre-Graduation & Áo dài",
     body: "Bộ ảnh Pre-Graduation tôn vinh nét đẹp truyền thống của tà áo dài trắng tinh khôi hòa cùng cảnh sắc rợp bóng cây xanh của khuôn viên trường chuyên ngữ.",
     coverImageSrc: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=1000",
     driveLink: "",
@@ -249,6 +268,8 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     id: "col-4",
     title: "Kỷ Yếu THPT Phan Đình Phùng 12D3",
     subtitle: "Mùa Hoa Sữa & Ký Ức 18",
+    year: "2024",
+    eventType: "Kỷ yếu THPT & Cấp 3",
     body: "Phan Đình Phùng cổ kính với những hàng cây rợp bóng, nắng vàng xuyên qua kẽ lá và những trang lưu bút nghẹn ngào cảm xúc của tuổi 18 trưởng thành.",
     coverImageSrc: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=80&w=1000",
     driveLink: "",
@@ -275,6 +296,8 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     id: "col-5",
     title: "Kỷ Yếu THPT Kim Liên Khối 12",
     subtitle: "Tone Phim Retro & Nụ Cười Tuổi Học Trò",
+    year: "2024",
+    eventType: "Kỷ yếu THPT & Cấp 3",
     body: "Sử dụng tông màu film hoài niệm thập niên 90 mang đến cảm giác ấm áp, chân thực như một cuộn phim nhựa ghi lại thời học sinh tươi đẹp nhất.",
     coverImageSrc: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&q=80&w=1000",
     driveLink: "",
@@ -301,6 +324,8 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
     id: "col-6",
     title: "Lễ Bế Giảng & Tri Ân THPT Việt Đức",
     subtitle: "Thời Khắc Chia Tay & Ước Mơ Bay Xa",
+    year: "2025",
+    eventType: "Lễ Tri ân & Bế giảng",
     body: "Thời khắc bế giảng thiêng liêng, những cái ôm siết chặt, giọt nước mắt tri ân thầy cô và những quả bóng bay mang theo ước mơ bay cao vào bầu trời tương lai.",
     coverImageSrc: "https://images.unsplash.com/photo-1525921429624-479b6a26d84d?auto=format&fit=crop&q=80&w=1000",
     driveLink: "",
@@ -328,8 +353,10 @@ const DEFAULT_COLLECTIONS: CustomCollection[] = [
 const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
   {
     id: "prom-col-1",
-    title: "Prom Night - High School Gala",
-    subtitle: "Hơi Thở Của Đam Mê",
+    title: "TEDx MPV Hanoi",
+    subtitle: "Prom & Sự Kiện",
+    year: "2025",
+    eventType: "Prom & Sự kiện",
     body: "Từ lễ khai giảng trang nghiêm, những đêm Prom bùng nổ đến hội trại gắn kết. Hướng tiếp cận Warm Documentary giúp Bergh.Ryker hòa mình vào đám đông, nắm bắt trọn vẹn bầu không khí và những khoảnh khắc bùng nổ nhất mà không làm gián đoạn cuộc vui.",
     coverImageSrc: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&q=80&w=1200",
     driveLink: "https://drive.google.com/drive/folders/1Prom_example_link",
@@ -364,6 +391,8 @@ const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
     id: "prom-col-2",
     title: "Sự Kiện Khai Giảng & Tri Ân",
     subtitle: "Kỷ Niệm Ngày Tựu Trường",
+    year: "2024",
+    eventType: "Lễ Khai giảng & Tri ân",
     body: "Lễ khai giảng trang nghiêm với cờ hoa khoe sắc dưới sân trường ngập nắng, những giọt nước mắt nghẹn ngào ngày tri ân thầy cô trước chặng đường mới.",
     coverImageSrc: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&q=80&w=1200",
     driveLink: "https://drive.google.com/drive/folders/2Prom_example_link",
@@ -382,6 +411,8 @@ const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
     id: "prom-col-3",
     title: "Midnight Masquerade Prom 2026",
     subtitle: "Dạ Hội Mặt Nạ Hoàng Gia",
+    year: "2026",
+    eventType: "Prom Night & Dạ hội",
     body: "Không gian dạ hội lộng lẫy với ánh nến lung linh, trang phục tuxedo và váy dạ hội kiêu sa. Từng điệu valse xoay vòng lưu dấu một đêm tiệc cổ tích không thể nào quên.",
     coverImageSrc: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -408,6 +439,8 @@ const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
     id: "prom-col-4",
     title: "Hội Trại Thanh Xuân & Flashmob",
     subtitle: "Nhiệt Huyết Sân Trường Bùng Cháy",
+    year: "2025",
+    eventType: "Hội trại & Flashmob",
     body: "Hội trại rực lửa tuổi trẻ với các màn trình diễn flashmob đồng đều, pháo khói màu sắc và tiếng reo hò cổ vũ cuồng nhiệt khắp sân trường.",
     coverImageSrc: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -426,6 +459,8 @@ const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
     id: "prom-col-5",
     title: "Sunset Gala & After Party",
     subtitle: "Giao Hưởng Ánh Sáng Hoàng Hôn",
+    year: "2024",
+    eventType: "Sunset Gala & After Party",
     body: "Bữa tiệc hoàng hôn ngoài trời bên hồ với ánh đèn fairy lights lãng mạn, âm nhạc acoustic du dương và những câu chuyện chia sẻ thân tình.",
     coverImageSrc: "https://images.unsplash.com/photo-1484820540004-14229fe36ca4?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -444,6 +479,8 @@ const DEFAULT_PROM_COLLECTIONS: CustomCollection[] = [
     id: "prom-col-6",
     title: "Lễ Hội Âm Nhạc & Countdown Cấp 3",
     subtitle: "Âm Nhạc, Sắc Màu & Tuổi Trẻ",
+    year: "2026",
+    eventType: "Đại nhạc hội & Countdown",
     body: "Sân khấu nhạc sống hoành tráng, dàn DJ sôi động và hàng nghìn cánh tay giơ cao hòa vào nhịp điệu đêm hội countdown cuối cấp.",
     coverImageSrc: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -495,8 +532,10 @@ const PHOTO_PRESETS = [
 const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
   {
     id: "freedom-col-1",
-    title: "Y2K STREET NOISE",
-    subtitle: "PHÁ BỎ MỌI GIỚI HẠN",
+    title: "Trần Ngọc Tài Linh",
+    subtitle: "Concept Áo Dài",
+    year: "2025",
+    eventType: "Concept Nghệ thuật",
     body: "Tái hiện âm hưởng Y2K nổi loạn với những set trang phục bụi bặm, phá cách trên đường phố về đêm. Không cần dàn dựng phức tạp, tinh thần tự do và năng lượng gen Z là lớp makeup đẹp nhất.",
     coverImageSrc: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&q=80&w=800",
     driveLink: "",
@@ -531,6 +570,8 @@ const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
     id: "freedom-col-2",
     title: "RETRO CINEMATIC FILM",
     subtitle: "HỒI ỨC THẬP NIÊN 90",
+    year: "2024",
+    eventType: "Retro Cinematic Film",
     body: "Những gam màu phim nhựa ấm hạt, ánh sáng tự nhiên và khoảnh khắc xuất thần đậm chất điện ảnh cổ điển. Mỗi khung hình tựa như một thước phim điện ảnh quay chậm của thanh xuân.",
     coverImageSrc: "https://images.unsplash.com/photo-1541534401786-2077efa33b15?auto=format&fit=crop&q=80&w=800",
     driveLink: "",
@@ -557,6 +598,8 @@ const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
     id: "freedom-col-3",
     title: "HIGH-FASHION EDITORIAL",
     subtitle: "PHONG CÁCH TẠP CHÍ CAO CẤP",
+    year: "2026",
+    eventType: "High-Fashion Editorial",
     body: "Tạo hình thời trang phá cách, góc máy táo bạo và chỉ đạo tạo dáng chuyên nghiệp chuẩn editorial. Mang đẳng cấp tạp chí thời trang vào bộ ảnh cá nhân của riêng bạn.",
     coverImageSrc: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&q=80&w=800",
     driveLink: "",
@@ -583,6 +626,8 @@ const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
     id: "freedom-col-4",
     title: "CYBERPUNK NEON NOIR",
     subtitle: "ÁNH ĐÈN ĐÔ THỊ HUYỀN ẢO",
+    year: "2025",
+    eventType: "Cyberpunk Neon Noir",
     body: "Hòa mình vào thế giới tương lai với ánh sáng neon xanh tím tương phản cao, phong cách gothic đương đại và những góc máy điện ảnh táo bạo.",
     coverImageSrc: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -601,6 +646,8 @@ const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
     id: "freedom-col-5",
     title: "INDIE VINTAGE NOSTALGIA",
     subtitle: "HOÀI NIỆM THANH XUÂN DỊU ÊM",
+    year: "2024",
+    eventType: "Indie Vintage & Nostalgia",
     body: "Bình dị, nhẹ nhàng và ngập tràn chất thơ với phong cách cottagecore giữa thiên nhiên hoa cỏ. Tông màu pastel dịu mát đánh thức những rung cảm tinh khôi.",
     coverImageSrc: "https://images.unsplash.com/photo-1551855350-13f59ed4111f?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -619,6 +666,8 @@ const DEFAULT_FREEDOM_COLLECTIONS: CustomCollection[] = [
     id: "freedom-col-6",
     title: "ACADEMIA CLASSIC VIBES",
     subtitle: "TRI THỨC & NGHỆ THUẬT CỔ ĐIỂN",
+    year: "2026",
+    eventType: "Dark Academia Classic",
     body: "Cảm hứng Dark Academia với sách cổ, áo trench coat và thư viện châu Âu. Tôn vinh nét đẹp tri thức, sự điềm tĩnh và phong thái thanh lịch vượt thời gian.",
     coverImageSrc: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=1200",
     driveLink: "",
@@ -692,6 +741,16 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   const [selectedWorkIdx, setSelectedWorkIdx] = useState(0);
   const [favorites, setFavorites] = useState<{ [key: string]: boolean }>({});
 
+  // Admin and authorization states
+  const [isAdminMode, setIsAdminMode] = useState(false);
+
+  // Synchronize with global admin state
+  useEffect(() => {
+    if (isAdminGlobal !== undefined) {
+      setIsAdminMode(isAdminGlobal);
+    }
+  }, [isAdminGlobal]);
+
   // View mode and Search states for advanced grid/detail navigation and filters
   const [viewMode, setViewMode] = useState<"grid" | "detail">("grid");
 
@@ -711,6 +770,27 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
   const [quickSearchAlbumQuery, setQuickSearchAlbumQuery] = useState("");
   const [quickSearchPhotoQuery, setQuickSearchPhotoQuery] = useState("");
+
+  const handleOpenAlbum = (albumId?: string, fallbackIdx?: number) => {
+    if (albumId) {
+      const targetIdx = collections.findIndex((c) => c.id === albumId);
+      if (targetIdx !== -1) {
+        setActiveCollectionIdx(targetIdx);
+        setSelectedIndex(0);
+        setVisiblePhotoCount(12);
+        setIsAutoplay(false);
+        showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+    }
+    if (typeof fallbackIdx === "number" && fallbackIdx >= 0) {
+      setActiveCollectionIdx(fallbackIdx);
+      setSelectedIndex(0);
+      setVisiblePhotoCount(12);
+      setIsAutoplay(false);
+      showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
 
   // Slide autoplay features
   const [isAutoplay, setIsAutoplay] = useState(true);
@@ -773,16 +853,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
   // Keyboard navigation was moved below activeCollection
 
-  // Admin and authorization states
-  const [isAdminMode, setIsAdminMode] = useState(false);
-
-  // Synchronize with global admin state
-  useEffect(() => {
-    if (isAdminGlobal !== undefined) {
-      setIsAdminMode(isAdminGlobal);
-    }
-  }, [isAdminGlobal]);
-
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
@@ -805,6 +875,8 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   // Form inputs for creating a new album
   const [newColTitle, setNewColTitle] = useState("");
   const [newColSubtitle, setNewColSubtitle] = useState("");
+  const [newColYear, setNewColYear] = useState("2026");
+  const [newColEventType, setNewColEventType] = useState("");
   const [newColBody, setNewColBody] = useState("");
   const [newColDrive, setNewColDrive] = useState("");
   const [newColCoverSrc, setNewColCoverSrc] = useState("");
@@ -842,6 +914,8 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   // Form inputs for editing active album info
   const [editColTitle, setEditColTitle] = useState("");
   const [editColSubtitle, setEditColSubtitle] = useState("");
+  const [editColYear, setEditColYear] = useState("");
+  const [editColEventType, setEditColEventType] = useState("");
   const [editColBody, setEditColBody] = useState("");
   const [editColDrive, setEditColDrive] = useState("");
   const [editColCoverPosition, setEditColCoverPosition] = useState("center");
@@ -1233,6 +1307,22 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     if (activeCollection) {
       setEditColTitle(activeCollection.title || "");
       setEditColSubtitle(activeCollection.subtitle || "");
+      setEditColYear(
+        activeCollection.year ||
+          extractYearFromText(
+            activeCollection.title,
+            activeCollection.subtitle,
+            activeCollection.body,
+          ),
+      );
+      setEditColEventType(
+        activeCollection.eventType ||
+          inferEventTypeFromText(
+            activeCollection.title,
+            activeCollection.subtitle,
+            firestoreCollection,
+          ),
+      );
       setEditColBody(activeCollection.body || "");
       setEditColDrive(activeCollection.driveLink || "");
       setEditColCoverPosition(
@@ -1423,6 +1513,8 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
       id: newColId,
       title: newColTitle,
       subtitle: newColSubtitle || "Bộ Sưu Tập Mới",
+      year: newColYear.trim() || extractYearFromText(newColTitle, newColSubtitle, newColBody),
+      eventType: newColEventType.trim() || inferEventTypeFromText(newColTitle, newColSubtitle, firestoreCollection),
       body:
         newColBody ||
         "Câu chuyện hình ảnh mới được thực hiện bởi đội ngũ Bergh.Ryker.",
@@ -1435,6 +1527,8 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         // Reset fields
         setNewColTitle("");
         setNewColSubtitle("");
+        setNewColYear("2026");
+        setNewColEventType("");
         setNewColBody("");
         setNewColDrive("");
         setNewColCoverSrc("");
@@ -1774,6 +1868,8 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     const metaPromise = updateAlbumMeta(activeCollection.id, {
       title: editColTitle,
       subtitle: editColSubtitle,
+      year: editColYear.trim() || extractYearFromText(editColTitle, editColSubtitle, editColBody),
+      eventType: editColEventType.trim() || inferEventTypeFromText(editColTitle, editColSubtitle, firestoreCollection),
       body: editColBody,
       driveLink: editColDrive,
       coverImageSrc: editColCoverSrc,
@@ -1941,114 +2037,141 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         }}
       />
 
-      {/* 1. HEADER ROW: Distinct, modern title */}
-      <div className="flex flex-col gap-2 pb-2 border-b border-white/5">
-        <h3 className="font-sans font-extrabold text-2xl sm:text-3xl text-white tracking-tight text-center sm:text-left">
-          {viewMode === "grid"
-            ? slide.id === "S6"
-              ? "Event & Prom Night"
-              : slide.id === "S4"
-                ? "Kỷ Yếu THPT & Pre Graduation"
-                : slide.id === "S8"
-                  ? "Concept Theo Yêu cầu"
-                  : "BỘ SƯU TẬP ALBUM"
-            : slide.title || "ALBUM NỔI BẬT"}
-        </h3>
+      {/* 1. HEADER ROW: Category title, Quick Photo Progress Lookup, and Album Pill Selector */}
+      <div className="flex flex-col gap-4 pb-4 border-b border-white/10 text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h3 className="font-sans font-extrabold text-2xl sm:text-3xl text-white tracking-tight">
+              {slide.id === "S6"
+                ? "Event & Prom Night"
+                : slide.id === "S4"
+                  ? "Kỷ Yếu THPT & Pre Graduation"
+                  : slide.id === "S8"
+                    ? "Concept Theo Yêu Cầu"
+                    : slide.title || "BỘ SƯU TẬP ALBUM"}
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#B5945B]/15 text-[#E5C17C] border border-[#B5945B]/30 tracking-tight shrink-0">
+              {collections.length} album
+            </span>
+          </div>
+
+          {/* Quick Lookup by Booking Code Button */}
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("openPhotoProgressLookup", {}));
+            }}
+            className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.16] border border-[#B5945B]/40 hover:border-[#B5945B] text-[#E8D2A6] hover:text-white text-xs font-semibold tracking-wide transition-all cursor-pointer shadow-sm active:scale-95 group"
+            title="Tra cứu tiến độ ảnh và tải trọn bộ file bằng Mã booking"
+          >
+            <Search className="w-3.5 h-3.5 text-[#B5945B] group-hover:scale-110 transition-transform" />
+            <span>Tra cứu ảnh bằng Mã booking</span>
+          </button>
+        </div>
+
+        {/* Horizontal Album Navigation Pills (Zero Grid, Direct Showcase) */}
+        {collections.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+            {collections.map((col, idx) => (
+              <button
+                key={col.id || idx}
+                type="button"
+                onClick={() => {
+                  setActiveCollectionIdx(idx);
+                  setSelectedIndex(0);
+                  setVisiblePhotoCount(12);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer select-none ${
+                  activeCollectionIdx === idx
+                    ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/25 font-extrabold scale-[1.02]"
+                    : "bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white border border-white/10"
+                }`}
+              >
+                {col.title}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {viewMode === "grid" ? (
-        <div className="space-y-6 animate-fadeIn w-full">
-          {/* 3D SCROLLYTELLING HORIZONTAL AUTO-RUNNING RAIL */}
+      {/* 2. 3D CONTINUOUS FLOW: Chạy hiệu ứng 3D carousel toàn bộ các bộ sưu tập */}
+      {collections.length > 0 && (
+        <div className="w-full">
           <Horizontal3DCollectionTrack
-            collections={collections}
+            collections={collections as any}
+            activeCollectionIdx={activeCollectionIdx}
             categoryTitle={categoryTitle}
             categorySubtitle={categorySubtitle}
-            onSelectCollection={(idx) => {
-              setActiveCollectionIdx(idx);
-              setSelectedIndex(0);
-              setViewMode("detail");
-              setIsAutoplay(false);
-              showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
+            onSelectCollection={(idx, colId) => {
+              handleOpenAlbum(colId, idx);
             }}
             isAdminMode={isAdminMode}
             preloadHighResImage={preloadHighResImage}
             slideImages={slide.images}
             currentSlideId={slide.id}
-            onNavigateCategory={onNavigateSlide}
           />
         </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {/* Seamless Transparent Editorial Navigation Header */}
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10 text-left bg-transparent">
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("grid");
-                showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="text-white hover:text-[#E5C17C] text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer group select-none py-1"
-              title="Quay lại danh sách bộ sưu tập"
-            >
-              <ChevronLeft className="w-4 h-4 text-[#E5C17C] group-hover:-translate-x-1 transition-transform shrink-0" />
-              <span className="text-white font-bold tracking-tight whitespace-nowrap">
-                Bộ sưu tập Album
-              </span>
-              {activeCollection && (
-                <>
-                  <span className="text-white/60 font-bold mx-1">/</span>
-                  <span className="text-[#E5C17C] font-extrabold uppercase tracking-wide truncate max-w-[150px] sm:max-w-xs md:max-w-md">
-                    {activeCollection.title}
-                  </span>
-                </>
-              )}
-            </button>
+      )}
 
-            {/* Quick Next/Previous album hops right in header */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm shrink-0">
-              {prevCol && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (prevColIdx !== -1) {
-                      setActiveCollectionIdx(prevColIdx);
-                      setSelectedIndex(0);
-                      setVisiblePhotoCount(12);
-                      showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
-                    }
-                  }}
-                  className="text-white/90 hover:text-white font-semibold flex items-center gap-1 transition-all cursor-pointer py-1 px-2 rounded-lg hover:bg-white/10"
-                  title={`Album trước: ${prevCol.title}`}
-                >
-                  <ChevronLeft className="w-4 h-4 text-[#E5C17C]" />
-                  <span className="hidden md:inline font-medium">{prevCol.title}</span>
-                  <span className="md:hidden font-bold">Trước</span>
-                </button>
-              )}
-              {prevCol && nextCol && (
-                <span className="text-white/40">·</span>
-              )}
-              {nextCol && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (nextColIdx !== -1) {
-                      setActiveCollectionIdx(nextColIdx);
-                      setSelectedIndex(0);
-                      setVisiblePhotoCount(12);
-                      showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
-                    }
-                  }}
-                  className="text-[#E5C17C] hover:text-[#f3e5ab] font-bold flex items-center gap-1 transition-all cursor-pointer py-1 px-2 rounded-lg hover:bg-white/10"
-                  title={`Album tiếp theo: ${nextCol.title}`}
-                >
-                  <span className="hidden md:inline font-bold">{nextCol.title}</span>
-                  <span className="md:hidden font-extrabold">Tiếp</span>
-                  <ChevronRight className="w-4 h-4 text-[#E5C17C]" />
-                </button>
-              )}
-            </div>
+      <div className="flex flex-col gap-6">
+        {/* Quick Next/Previous album hops right in header */}
+        <div className="flex items-center justify-between gap-3 pb-2 border-b border-white/5 text-left text-xs sm:text-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-zinc-400 font-sans text-xs shrink-0">Đang xem:</span>
+            <span className="text-[#E5C17C] font-extrabold uppercase tracking-wide truncate">
+              {activeCollection?.title || "Album"}
+            </span>
+            {activeCollection?.images?.length ? (
+              <span className="text-zinc-500 text-xs shrink-0 font-sans">
+                ({activeCollection.images.length} ảnh)
+              </span>
+            ) : null}
           </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {prevCol && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (prevColIdx !== -1) {
+                    setActiveCollectionIdx(prevColIdx);
+                    setSelectedIndex(0);
+                    setVisiblePhotoCount(12);
+                    showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+                className="text-white/90 hover:text-white font-semibold flex items-center gap-1 transition-all cursor-pointer py-1 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs"
+                title={`Album trước: ${prevCol.title}`}
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-[#E5C17C]" />
+                <span className="hidden sm:inline font-medium">{prevCol.title}</span>
+                <span className="sm:hidden font-bold">Trước</span>
+              </button>
+            )}
+            {prevCol && nextCol && (
+              <span className="text-white/40">·</span>
+            )}
+            {nextCol && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (nextColIdx !== -1) {
+                    setActiveCollectionIdx(nextColIdx);
+                    setSelectedIndex(0);
+                    setVisiblePhotoCount(12);
+                    showcaseRef.current?.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+                className="text-[#E5C17C] hover:text-[#f3e5ab] font-bold flex items-center gap-1 transition-all cursor-pointer py-1 px-2.5 rounded-lg bg-[#B5945B]/15 hover:bg-[#B5945B]/25 border border-[#B5945B]/30 text-xs"
+                title={`Album tiếp theo: ${nextCol.title}`}
+              >
+                <span className="hidden sm:inline font-bold">{nextCol.title}</span>
+                <span className="sm:hidden font-extrabold">Tiếp</span>
+                <ChevronRight className="w-3.5 h-3.5 text-[#E5C17C]" />
+              </button>
+            )}
+          </div>
+        </div>
 
           {activeCollection ? (
             <div className="flex flex-col gap-8">
@@ -2061,16 +2184,41 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                   transition={{ duration: 0.4 }}
                   className="space-y-4"
                 >
-                  <h4 className="font-sans font-bold text-3xl md:text-4xl tracking-tight text-white leading-tight">
+                  <h4 className="font-sans font-bold text-xl min-[400px]:text-2xl sm:text-3xl md:text-4xl tracking-tight text-white leading-snug">
                     {activeCollection.title}
                   </h4>
-                  <p className="text-zinc-300 text-base leading-relaxed max-w-3xl">
+                  <p className="text-zinc-300 text-xs sm:text-sm md:text-base leading-relaxed max-w-3xl line-clamp-3 sm:line-clamp-none">
                     {activeCollection.body}
                   </p>
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-sans text-xs text-zinc-400 bg-zinc-800/50 px-3 py-1 rounded-md">
                         {activeCollection.images.length} ảnh
+                      </span>
+                      {/* Year Badge */}
+                      <span className="font-sans text-xs text-[#E5C17C] font-bold bg-[#B5945B]/15 px-3 py-1 rounded-md border border-[#B5945B]/30 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-[#B5945B]" />
+                        <span>
+                          Năm{" "}
+                          {activeCollection.year ||
+                            extractYearFromText(
+                              activeCollection.title,
+                              activeCollection.subtitle,
+                              activeCollection.body,
+                            )}
+                        </span>
+                      </span>
+                      {/* Event Type Badge */}
+                      <span className="font-sans text-xs text-zinc-200 font-semibold bg-white/10 px-3 py-1 rounded-md border border-white/15 flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-[#B5945B]" />
+                        <span>
+                          {activeCollection.eventType ||
+                            inferEventTypeFromText(
+                              activeCollection.title,
+                              activeCollection.subtitle,
+                              firestoreCollection,
+                            )}
+                        </span>
                       </span>
                       {activeCollection.subtitle && (
                         <span className="font-sans text-[12px] capitalize tracking-wide text-[#B5945B] font-medium bg-[#B5945B]/10 px-3 py-1 rounded-md border border-[#B5945B]/30">
@@ -2277,7 +2425,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
             </div>
           )}
         </div>
-      )}
 
       {/* 4. RE-ARCHITECTED ADMIN ACTION DECK: Sleek tabbed workspace panel */}
       <AnimatePresence>
@@ -2698,6 +2845,54 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
+                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Năm thực hiện</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Vd: 2026, 2025, 2024..."
+                        value={newColYear}
+                        onChange={(e) => setNewColYear(e.target.value)}
+                        className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        {["2026", "2025", "2024"].map((yr) => (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => setNewColYear(yr)}
+                            className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
+                              newColYear === yr
+                                ? "bg-amber-500 text-black border-amber-400"
+                                : "bg-zinc-800 text-zinc-300 border-white/10 hover:text-white"
+                            }`}
+                          >
+                            {yr}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
+                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Loại hình sự kiện / Concept</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Vd: Kỷ yếu THPT & Cấp 3, Prom Night, Y2K..."
+                      value={newColEventType}
+                      onChange={(e) => setNewColEventType(e.target.value)}
+                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
                     <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
                       Đường dẫn Google Drive của Album
                     </label>
@@ -2846,6 +3041,54 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       required
                       value={editColSubtitle}
                       onChange={(e) => setEditColSubtitle(e.target.value)}
+                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
+                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Năm thực hiện</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Vd: 2026, 2025, 2024..."
+                        value={editColYear}
+                        onChange={(e) => setEditColYear(e.target.value)}
+                        className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        {["2026", "2025", "2024"].map((yr) => (
+                          <button
+                            key={yr}
+                            type="button"
+                            onClick={() => setEditColYear(yr)}
+                            className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
+                              editColYear === yr
+                                ? "bg-amber-500 text-black border-amber-400"
+                                : "bg-zinc-800 text-zinc-300 border-white/10 hover:text-white"
+                            }`}
+                          >
+                            {yr}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
+                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Loại hình sự kiện / Concept</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Vd: Kỷ yếu THPT & Cấp 3, Prom Night, Y2K..."
+                      value={editColEventType}
+                      onChange={(e) => setEditColEventType(e.target.value)}
                       className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
                     />
                   </div>
@@ -4410,16 +4653,16 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
               {/* Minimal Luxury Float-Pill Caption Info */}
               {showUIOverlay && activeWorkSubPhotos[selectedIndex] && (
-                <div className="absolute bottom-[72px] sm:bottom-24 inset-x-0 flex justify-center text-center pointer-events-none select-none z-[60] animate-fadeIn px-3">
-                  <div className="px-3.5 py-1.5 rounded-full bg-black/75 backdrop-blur-md max-w-[95%] sm:max-w-xl shadow-lg border border-white/15 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 truncate">
-                      <p className="font-sans font-semibold text-xs sm:text-sm capitalize tracking-wide text-[#B5945B] truncate">
+                <div className="absolute bottom-[68px] sm:bottom-24 inset-x-0 flex justify-center text-center pointer-events-none select-none z-[60] animate-fadeIn px-2 sm:px-3">
+                  <div className="px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-black/75 backdrop-blur-md max-w-[95%] sm:max-w-xl shadow-lg border border-white/15 flex items-center justify-between gap-2 sm:gap-3">
+                    <div className="flex items-center gap-1.5 sm:gap-2 truncate">
+                      <p className="font-sans font-semibold text-[11px] sm:text-sm capitalize tracking-wide text-[#B5945B] truncate">
                         {activeWorkSubPhotos[selectedIndex].title}
                       </p>
                       {activeWorkSubPhotos[selectedIndex].desc && (
                         <>
                           <span className="text-white/30 hidden sm:inline">•</span>
-                          <p className="text-[11px] sm:text-xs text-zinc-300 font-light truncate hidden sm:inline">
+                          <p className="text-[10px] sm:text-xs text-zinc-300 font-light truncate hidden sm:inline">
                             {activeWorkSubPhotos[selectedIndex].desc}
                           </p>
                         </>

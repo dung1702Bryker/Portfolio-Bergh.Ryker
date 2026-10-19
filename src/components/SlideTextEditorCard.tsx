@@ -17,6 +17,7 @@ import { ImagePositionControl } from"./ImagePositionControl";
 import { resolveImage } from"../utils/imageMapper";
 import { useAdminAuth } from"../hooks/useAdminAuth";
 import { toast } from "../hooks/useToast";
+import { normalizeDriveImageUrl } from "../constants/founderConfig";
 
 interface SlideTextEditorProps {
  slide: SlideData;
@@ -495,10 +496,13 @@ export const SlideTextEditorCard: React.FC<SlideTextEditorProps> = ({
  value={img.src && img.src.startsWith("data:") ? "" : img.src || ""}
  onChange={(e) => {
  const val = e.target.value;
+ const formattedVal = val.includes("drive.google.com")
+   ? normalizeDriveImageUrl(val, 1200)
+   : val;
  const newImages = [...images];
  newImages[idx] = {
  ...newImages[idx],
- src: val,
+ src: formattedVal,
  };
  setImages(newImages);
  }}

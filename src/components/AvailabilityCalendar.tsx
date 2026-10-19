@@ -166,22 +166,40 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
     );
   };
 
-  // Count available days in month
-  const availableCountInMonth = useMemo(() => {
-    let count = 0;
+  // Count available, booked, and unavailable days in the currently viewed month
+  const monthStats = useMemo(() => {
+    let available = 0;
+    let booked = 0;
+    let unavailable = 0;
+    let past = 0;
+
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(year, month, day);
-      if (!isPastDate(d)) {
+      if (isPastDate(d)) {
+        past++;
+      } else {
         const dStr = formatDateStr(d);
         const status = availableDates[dStr]?.status;
-        if (status === "available" || status === undefined) {
-          count++;
+        if (status === "booked") {
+          booked++;
+        } else if (status === "unavailable") {
+          unavailable++;
+        } else {
+          // "available" or undefined (open slot)
+          available++;
         }
       }
     }
-    return count;
+    return {
+      available,
+      booked,
+      unavailable,
+      past,
+      total: daysInMonth,
+    };
   }, [year, month, daysInMonth, availableDates]);
 
+  const availableCountInMonth = monthStats.available;
   const hasAnyAvailableInMonth = availableCountInMonth > 0;
 
   // Month names in Vietnamese
@@ -254,7 +272,8 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.2 }}
-          className="relative w-full max-w-[360px] sm:max-w-[390px] h-auto my-auto bg-zinc-950 border border-[#B5945B]/40 rounded-2xl shadow-2xl z-10 overflow-hidden text-white flex flex-col p-4 sm:p-4.5 space-y-3"
+          data-lenis-prevent="true"
+          className="relative w-full max-w-[360px] sm:max-w-[390px] h-auto my-auto bg-zinc-950 border border-[#B5945B]/40 rounded-2xl shadow-2xl z-10 overflow-hidden text-white flex flex-col p-4 sm:p-4.5 space-y-2.5"
         >
           {/* Top highlight bar */}
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#B5945B] to-transparent" />
@@ -266,20 +285,13 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
                 <CalendarIcon className="w-4 h-4" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-base sm:text-lg text-white uppercase tracking-wide">
-                    Lịch Chụp
-                  </h3>
-                  {availableCountInMonth > 0 && !isAdminMode && (
-                    <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold">
-                      {availableCountInMonth} ngày trống
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-zinc-300 font-medium">
+                <h3 className="font-bold text-base sm:text-lg text-white uppercase tracking-wide leading-tight">
+                  Lịch Chụp Studio
+                </h3>
+                <p className="text-[11px] sm:text-xs text-zinc-300 font-medium">
                   {isAdminMode
                     ? "Click ngày để đổi trạng thái"
-                    : "Chạm vào ngày màu xanh để chọn ngày"}
+                    : "Chạm ngày xanh để chọn ngày chụp"}
                 </p>
               </div>
             </div>
@@ -293,22 +305,38 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
             </button>
           </div>
 
-          {/* MONTH NAVIGATION BAR */}
-          <div className="flex items-center justify-between bg-white/[0.03] border border-white/[0.07] rounded-xl px-2.5 py-1.5">
+          {/* MONTH NAVIGATION & REMAINING SLOTS BAR (COMPACT & UNIFIED) */}
+          <div className="flex items-center justify-between bg-white/[0.03] border border-white/[0.08] rounded-xl px-2.5 py-1.5">
             <button
               type="button"
               onClick={prevMonth}
               className="p-1 hover:bg-white/10 rounded-lg text-zinc-300 hover:text-[#B5945B] transition-all cursor-pointer"
+              title="Tháng trước"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-sm sm:text-base text-white uppercase tracking-wider">
-                {vietnameseMonths[month]}
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <span className="font-bold text-xs sm:text-sm text-white uppercase tracking-wider">
+                {vietnameseMonths[month]} {year}
               </span>
-              <span className="font-mono font-bold text-sm sm:text-base text-[#B5945B]">
-                {year}
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full border font-bold flex items-center gap-1 shrink-0 ${
+                  availableCountInMonth > 0
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/35"
+                    : "bg-red-500/15 text-red-300 border-red-500/35"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    availableCountInMonth > 0 ? "bg-emerald-400 animate-pulse" : "bg-red-400"
+                  }`}
+                />
+                <span>
+                  {availableCountInMonth > 0
+                    ? `Còn ${availableCountInMonth} ngày trống`
+                    : "Đã kín lịch"}
+                </span>
               </span>
             </div>
 
@@ -316,6 +344,7 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
               type="button"
               onClick={nextMonth}
               className="p-1 hover:bg-white/10 rounded-lg text-zinc-300 hover:text-[#B5945B] transition-all cursor-pointer"
+              title="Tháng sau"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

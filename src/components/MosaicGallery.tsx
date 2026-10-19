@@ -50,11 +50,11 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
         className="flex flex-col md:flex-row justify-between items-center md:items-end gap-3 sm:gap-4 pb-2 text-center md:text-left"
       >
         <div className="flex flex-col items-center md:items-start">
-          <span className="font-sans text-xs sm:text-sm uppercase tracking-wider text-[#B5945B] mb-1.5 flex items-center justify-center md:justify-start gap-1.5 font-bold">
-            <Sparkles className="w-4 h-4 text-optic-yellow" />
+          <span className="font-sans text-[11px] sm:text-sm uppercase tracking-wider text-[#B5945B] mb-1 flex items-center justify-center md:justify-start gap-1 font-bold">
+            <Sparkles className="w-3.5 h-3.5 text-optic-yellow" />
             ✦ {slide.subtitle || "EDITORIAL MOSAIC"} ✦
           </span>
-          <h2 className="font-sans font-bold text-2xl min-[360px]:text-3xl md:text-5xl text-white tracking-tight leading-snug md:leading-[1.18] py-0.5">
+          <h2 className="font-sans font-bold text-xl min-[360px]:text-2xl md:text-5xl text-white tracking-tight leading-snug md:leading-[1.18] py-0.5">
             {slide.title}
           </h2>
         </div>
@@ -115,16 +115,16 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
           </div>
 
           {/* Standard Bottom Persistent Info when not hovered - Liquid Glass Floating Bar */}
-          <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-4 py-3 rounded-2xl">
+          <div className="absolute bottom-2.5 sm:bottom-4 left-2.5 sm:left-4 right-2.5 sm:right-4 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-2.5 py-1.5 sm:px-4 sm:py-3 rounded-xl sm:rounded-2xl">
             <div>
-              <span className="font-sans text-xs sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
+              <span className="font-sans text-[10px] sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
                 {cardDetails[0].category}
               </span>
-              <h4 className="font-sans text-sm sm:text-base font-bold text-white mt-0.5">
+              <h4 className="font-sans text-xs sm:text-base font-bold text-white mt-0.5">
                 {cardDetails[0].title}
               </h4>
             </div>
-            <span className="font-sans text-xs text-zinc-100 liquid-glass-btn px-3 py-1 rounded-full font-mono">
+            <span className="font-sans text-[10px] sm:text-xs text-zinc-100 liquid-glass-btn px-2 py-0.5 sm:px-3 sm:py-1 rounded-full font-mono">
               {cardDetails[0].aperture} · ISO {cardDetails[0].iso}
             </span>
           </div>
@@ -151,7 +151,7 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 z-10 pointer-events-none" />
 
-            <div className="absolute top-4 left-4 font-sans text-xs text-zinc-200 tracking-wider uppercase z-10 liquid-glass-btn px-3 py-1 rounded-full font-semibold">
+            <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 font-sans text-[10px] sm:text-xs text-zinc-200 tracking-wider uppercase z-10 liquid-glass-btn px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full font-semibold">
               CAMERA 02 • PORTRAIT
             </div>
 
@@ -169,16 +169,16 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
             </div>
 
             {/* Bottom info banner */}
-            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-3.5 py-2.5 rounded-xl">
+            <div className="absolute bottom-2.5 sm:bottom-3 left-2.5 sm:left-3 right-2.5 sm:right-3 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl">
               <div>
-                <span className="font-sans text-xs sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
+                <span className="font-sans text-[10px] sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
                   {cardDetails[1].category}
                 </span>
-                <h4 className="font-sans text-sm sm:text-base font-semibold text-white mt-0.5 truncate max-w-[150px] sm:max-w-none">
+                <h4 className="font-sans text-xs sm:text-base font-semibold text-white mt-0.5 truncate max-w-[150px] sm:max-w-none">
                   {cardDetails[1].title}
                 </h4>
               </div>
-              <span className="font-sans text-xs text-zinc-100 liquid-glass-btn px-2.5 py-1 rounded-full font-mono shrink-0">
+              <span className="font-sans text-[10px] sm:text-xs text-zinc-100 liquid-glass-btn px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full font-mono shrink-0">
                 {cardDetails[1].aperture} · ISO {cardDetails[1].iso}
               </span>
             </div>
@@ -203,7 +203,7 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20 z-10 pointer-events-none" />
 
-            <div className="absolute top-4 left-4 font-sans text-xs text-zinc-200 tracking-wider uppercase z-10 liquid-glass-btn px-3 py-1 rounded-full font-semibold">
+            <div className="absolute top-2.5 sm:top-4 left-2.5 sm:left-4 font-sans text-[10px] sm:text-xs text-zinc-200 tracking-wider uppercase z-10 liquid-glass-btn px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full font-semibold">
               CAMERA 03 • DOCUMENTARY
             </div>
 
@@ -221,16 +221,16 @@ export const MosaicGallery: React.FC<MosaicGalleryProps> = ({ slide }) => {
             </div>
 
             {/* Bottom info banner */}
-            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-3.5 py-2.5 rounded-xl">
+            <div className="absolute bottom-2.5 sm:bottom-3 left-2.5 sm:left-3 right-2.5 sm:right-3 flex justify-between items-center z-10 group-hover:opacity-0 transition-opacity liquid-glass-header px-2.5 py-1.5 sm:px-3.5 sm:py-2.5 rounded-xl">
               <div>
-                <span className="font-sans text-xs sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
+                <span className="font-sans text-[10px] sm:text-sm text-[#B5945B] uppercase tracking-wider font-bold block">
                   {cardDetails[2].category}
                 </span>
-                <h4 className="font-sans text-sm sm:text-base font-semibold text-white mt-0.5 truncate max-w-[150px] sm:max-w-none">
+                <h4 className="font-sans text-xs sm:text-base font-semibold text-white mt-0.5 truncate max-w-[150px] sm:max-w-none">
                   {cardDetails[2].title}
                 </h4>
               </div>
-              <span className="font-sans text-xs text-zinc-100 liquid-glass-btn px-2.5 py-1 rounded-full font-mono shrink-0">
+              <span className="font-sans text-[10px] sm:text-xs text-zinc-100 liquid-glass-btn px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full font-mono shrink-0">
                 {cardDetails[2].aperture} · ISO {cardDetails[2].iso}
               </span>
             </div>

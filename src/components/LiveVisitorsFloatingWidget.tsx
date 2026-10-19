@@ -45,6 +45,7 @@ export const LiveVisitorsFloatingWidget: React.FC<LiveVisitorsFloatingWidgetProp
     visitorLocation,
     calibrateGpsLocation,
     setCustomLocation,
+    resetToAutoLocation,
     updateNickname,
     isWidgetOpen,
     setIsWidgetOpen,
@@ -348,36 +349,81 @@ export const LiveVisitorsFloatingWidget: React.FC<LiveVisitorsFloatingWidgetProp
                 </div>
 
                 {/* Device Location & High-Precision Calibration Bar */}
-                <div className="bg-gradient-to-r from-amber-500/10 via-zinc-900 to-amber-500/10 border border-[#B5945B]/30 rounded-xl p-2.5 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <MapPin className="w-3.5 h-3.5 text-[#B5945B] shrink-0" />
-                    <div className="min-w-0">
-                      <span className="text-[10px] text-zinc-400 block leading-tight">Vị trí của bạn:</span>
-                      <span className="text-white font-bold text-xs truncate block">
-                        {stripIspFromName(visitorLocation || "Phan Tây Nhạc, Nam Từ Liêm, Hà Nội")}
-                      </span>
+                <div className="bg-gradient-to-r from-amber-500/10 via-zinc-900 to-amber-500/10 border border-[#B5945B]/30 rounded-xl p-2.5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <MapPin className="w-3.5 h-3.5 text-[#B5945B] shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] text-zinc-400 block leading-tight">Vị trí hiện tại:</span>
+                        <span className="text-white font-bold text-xs truncate block">
+                          {stripIspFromName(visitorLocation || "Đang định vị IP...")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (resetToAutoLocation) {
+                            await resetToAutoLocation();
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500 hover:text-zinc-950 font-bold text-[10px] border border-cyan-500/40 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                        title="Xoá bỏ vị trí cũ và tự động nhận diện lại qua IP/GPS"
+                      >
+                        <RotateCcw className="w-2.5 h-2.5" /> 🔄 Tự Động
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (calibrateGpsLocation) {
+                            await calibrateGpsLocation(true);
+                          }
+                        }}
+                        className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500 hover:text-zinc-950 font-bold text-[10px] border border-emerald-500/40 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                        title="Bật GPS thiết bị để định vị chính xác vị trí thực tế ngay bây giờ"
+                      >
+                        <Navigation className="w-2.5 h-2.5" /> 🧭 Quét GPS
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  {/* Quick District/City Switcher */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none text-[10px]">
+                    <span className="text-zinc-500 text-[9px] shrink-0">Đổi:</span>
                     <button
                       type="button"
-                      onClick={() => setCustomLocation && setCustomLocation("Phan Tây Nhạc, Nam Từ Liêm, Hà Nội")}
-                      className="px-2 py-1 rounded-lg bg-[#B5945B]/20 text-[#E5C17C] hover:bg-[#B5945B] hover:text-zinc-950 font-bold text-[10px] border border-[#B5945B]/40 transition-all cursor-pointer shadow-sm"
-                      title="Gán vị trí chuẩn: Phan Tây Nhạc, Nam Từ Liêm, Hà Nội"
+                      onClick={() => setCustomLocation && setCustomLocation("Đà Nẵng")}
+                      className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 text-[10px] whitespace-nowrap transition-all"
                     >
-                      🎯 Phan Tây Nhạc
+                      Đà Nẵng
                     </button>
                     <button
                       type="button"
-                      onClick={async () => {
-                        if (calibrateGpsLocation) {
-                          await calibrateGpsLocation(true);
-                        }
-                      }}
-                      className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500 hover:text-zinc-950 font-bold text-[10px] border border-emerald-500/40 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-                      title="Bật GPS thiết bị để định vị chính xác vị trí thực tế"
+                      onClick={() => setCustomLocation && setCustomLocation("TP. Hồ Chí Minh")}
+                      className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 text-[10px] whitespace-nowrap transition-all"
                     >
-                      <Navigation className="w-2.5 h-2.5" /> GPS
+                      TP. HCM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomLocation && setCustomLocation("Hà Nội")}
+                      className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 text-[10px] whitespace-nowrap transition-all"
+                    >
+                      Hà Nội
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomLocation && setCustomLocation("Quảng Ninh")}
+                      className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] whitespace-nowrap transition-all"
+                    >
+                      Quảng Ninh
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomLocation && setCustomLocation("Hải Phòng")}
+                      className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] whitespace-nowrap transition-all"
+                    >
+                      Hải Phòng
                     </button>
                   </div>
                 </div>

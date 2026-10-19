@@ -5,7 +5,6 @@ import {
   ZoomIn,
   Sparkles,
   Layers,
-  Compass,
   Film,
   Heart,
   Share2,
@@ -49,7 +48,9 @@ const STORY_BEATS = [
   { label: "Khép Lại Khung Hình", tag: "Toàn Cảnh Bế Mạc · Kỷ Niệm Đẹp Nhất", mood: "Dấu ấn thanh xuân" },
 ];
 
-// Single 3D Scrollytelling Card with Mouse Parallax & Depth
+import { useDeviceTilt, DeviceTiltState } from "../hooks/useDeviceTilt";
+
+// Single 3D Scrollytelling Card with Mouse Parallax & Gyroscope Depth
 const Scrollytelling3DCard: React.FC<{
   photo: AlbumPhotoItem;
   index: number;
@@ -62,6 +63,7 @@ const Scrollytelling3DCard: React.FC<{
   recordPhotoView: (photoId: string, photoTitle: string, albumId: string) => void;
   preloadHighResImage: (src: string) => void;
   isActive: boolean;
+  deviceTilt?: DeviceTiltState;
 }> = ({
   photo,
   index,
@@ -74,6 +76,7 @@ const Scrollytelling3DCard: React.FC<{
   recordPhotoView,
   preloadHighResImage,
   isActive,
+  deviceTilt,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [rotateX, setRotateX] = useState(0);
@@ -110,6 +113,18 @@ const Scrollytelling3DCard: React.FC<{
     setGlarePos((prev) => ({ ...prev, opacity: 0 }));
   };
 
+  // Determine whether to use Mobile Gyroscope Tilt or Desktop Mouse Tilt
+  const isTouchDevice = typeof window !== "undefined" && (
+    window.matchMedia("(pointer: coarse)").matches ||
+    navigator.maxTouchPoints > 0
+  );
+
+  const effectiveRotateX = isTouchDevice && deviceTilt && isActive ? deviceTilt.rotateX : rotateX;
+  const effectiveRotateY = isTouchDevice && deviceTilt && isActive ? deviceTilt.rotateY : rotateY;
+  const effectiveGlareX = isTouchDevice && deviceTilt && isActive ? deviceTilt.glareX : glarePos.x;
+  const effectiveGlareY = isTouchDevice && deviceTilt && isActive ? deviceTilt.glareY : glarePos.y;
+  const effectiveGlareOpacity = isTouchDevice && deviceTilt && isActive ? deviceTilt.glareOpacity : glarePos.opacity;
+
   return (
     <motion.div
       ref={cardRef}
@@ -129,9 +144,11 @@ const Scrollytelling3DCard: React.FC<{
       {/* 3D Transform Surface */}
       <div
         style={{
-          transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(0px)`,
-          transition: "transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+          transform: `rotateX(${effectiveRotateX}deg) rotateY(${effectiveRotateY}deg) translateZ(0px)`,
+          transition: isTouchDevice ? "transform 0.08s ease-out" : "transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
           transformStyle: "preserve-3d",
+          WebkitBackfaceVisibility: "hidden",
+          backfaceVisibility: "hidden",
         }}
         className={`relative rounded-2xl sm:rounded-3xl overflow-hidden liquid-glass border transition-all duration-500 shadow-2xl ${
           isActive
@@ -143,31 +160,31 @@ const Scrollytelling3DCard: React.FC<{
         <div
           className="absolute inset-0 pointer-events-none z-30 transition-opacity duration-300 rounded-2xl sm:rounded-3xl"
           style={{
-            background: `radial-gradient(circle at ${glarePos.x}% ${glarePos.y}%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 65%)`,
-            opacity: glarePos.opacity,
+            background: `radial-gradient(circle at ${effectiveGlareX}% ${effectiveGlareY}%, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 65%)`,
+            opacity: effectiveGlareOpacity,
           }}
         />
 
         {/* TOP FLOATING 3D STORYLINE HEADER (Elevated in 3D) */}
         <div
           style={{ transform: "translateZ(26px)" }}
-          className="p-3.5 sm:p-4.5 bg-gradient-to-b from-black/85 via-black/40 to-transparent flex items-center justify-between gap-3 text-left relative z-20 pointer-events-none"
+          className="p-2.5 sm:p-4 bg-gradient-to-b from-black/85 via-black/35 to-transparent flex items-center justify-between gap-2 text-left relative z-20 pointer-events-none"
         >
           {/* Chapter Beat Chip */}
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-sans font-bold bg-[#B5945B] text-black tracking-wider uppercase flex items-center gap-1.5 shrink-0 shadow-sm">
-              <Film className="w-3 h-3 stroke-[2.5]" />
-              <span>Khoảnh khắc #{index + 1}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[11px] font-sans font-bold bg-[#B5945B] text-black tracking-wider uppercase flex items-center gap-1 shrink-0 shadow-sm">
+              <Film className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[2.5]" />
+              <span>#{index + 1}</span>
             </span>
 
-            <span className="text-[11px] sm:text-xs text-white/90 font-medium truncate hidden sm:inline">
+            <span className="text-[10px] sm:text-xs text-white/90 font-medium truncate hidden min-[400px]:inline">
               ✦ {beat.label}
             </span>
           </div>
 
           {/* Counter pill */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono text-zinc-300 bg-black/60 backdrop-blur-md border border-white/15">
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono text-zinc-300 bg-black/60 backdrop-blur-md border border-white/15">
               {index + 1} / {total}
             </span>
           </div>
@@ -216,24 +233,24 @@ const Scrollytelling3DCard: React.FC<{
         {/* BOTTOM STORY METADATA & EDITORIAL PANEL (Elevated in 3D) */}
         <div
           style={{ transform: "translateZ(20px)" }}
-          className="p-4 sm:p-5 liquid-glass border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-left relative z-20"
+          className="p-2.5 sm:p-4.5 liquid-glass border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 text-left relative z-20"
         >
-          <div className="space-y-1 min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] sm:text-[11px] font-semibold text-[#E5C17C] uppercase tracking-wider bg-[#B5945B]/10 px-2 py-0.5 rounded-md border border-[#B5945B]/30">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[9px] sm:text-[11px] font-semibold text-[#E5C17C] uppercase tracking-wider bg-[#B5945B]/10 px-1.5 py-0.5 rounded border border-[#B5945B]/30">
                 {beat.tag}
               </span>
-              <span className="text-[10px] sm:text-[11px] text-zinc-400 font-normal">
+              <span className="text-[9px] sm:text-[11px] text-zinc-400 font-normal">
                 {beat.mood}
               </span>
             </div>
 
-            <h5 className="font-sans font-bold text-sm sm:text-base text-white tracking-wide truncate">
+            <h5 className="font-sans font-bold text-xs sm:text-base text-white tracking-wide truncate">
               {photo.title || `${collectionTitle} • Tác phẩm #${index + 1}`}
             </h5>
 
             {photo.desc && (
-              <p className="text-xs text-zinc-300 font-normal line-clamp-2 leading-relaxed">
+              <p className="text-[11px] sm:text-xs text-zinc-300 font-normal line-clamp-1 sm:line-clamp-2 leading-snug">
                 {photo.desc}
               </p>
             )}
@@ -301,6 +318,7 @@ export const Album3DScrollytellingViewer: React.FC<Album3DScrollytellingViewerPr
 }) => {
   const [layoutMode, setLayoutMode] = useState<"scrollytelling" | "grid">("scrollytelling");
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const deviceTilt = useDeviceTilt(8);
 
   // Track scroll position to update active index & progress
   useEffect(() => {
@@ -366,6 +384,7 @@ export const Album3DScrollytellingViewer: React.FC<Album3DScrollytellingViewerPr
               recordPhotoView={recordPhotoView}
               preloadHighResImage={preloadHighResImage}
               isActive={idx === activeStoryIndex}
+              deviceTilt={deviceTilt}
             />
           ))}
         </div>

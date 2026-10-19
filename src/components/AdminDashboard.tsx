@@ -10,16 +10,22 @@ import {
   Palette,
   ExternalLink,
   Sparkles,
+  PlusCircle,
+  FileSpreadsheet,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { Booking } from "../types";
+import { syncAllBookingsToSheet } from "../services/googleSheetsService";
 import { AdminLiveChat } from "./AdminLiveChat";
 import { SchoolScheduleSync } from "./admin/SchoolScheduleSync";
 import { BookingSlotAvailabilityManager } from "./admin/BookingSlotAvailabilityManager";
-import { EmailNotificationConfig } from "./admin/EmailNotificationConfig";
 import { AdminPhotoProgressModal } from "./AdminPhotoProgressModal";
+import { BookingConfirmationQrSection } from "./admin/BookingConfirmationQrSection";
+import { AdminCreateBookingModal } from "./admin/AdminCreateBookingModal";
+import { AdminBatchImportModal } from "./admin/AdminBatchImportModal";
+import { BookingDiagnosticPanel } from "./admin/BookingDiagnosticPanel";
 
 interface AdminDashboardProps {
   isAdminMode: boolean;
@@ -74,10 +80,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   TIME_SLOTS,
 }) => {
   const [adminActiveTab, setAdminActiveTab] = useState<
-    "schedule" | "chat" | "school_sync" | "availability_config" | "email_config"
+    "schedule" | "chat" | "school_sync" | "availability_config"
   >("schedule");
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isBatchImportModalOpen, setIsBatchImportModalOpen] = useState(false);
+
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
 
   const handleSavePhotoProgress = async (bookingId: string, progressData: Partial<Booking>) => {
     try {
@@ -92,6 +102,124 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       console.error("Save photo progress error:", err);
       showToast("Lỗi cập nhật tiến độ ảnh", "error");
     }
+  };
+
+  const handleSyncAllToGoogleSheet = async () => {
+    let targetBookings: Booking[] = [...bookings];
+    try {
+      // 1. Quét collection 'bookings'
+      const snap = await getDocs(collection(db, "bookings"));
+      snap.forEach((d) => {
+        const data = d.data() as any;
+        const exists = targetBookings.some((b) => b.id === d.id || (b.bookingCode && b.bookingCode === data.bookingCode));
+        if (!exists) {
+          targetBookings.push({ id: d.id, ...data });
+        }
+      });
+
+      // 2. Quét collection 'availableDates' - CHỈ LẤY các ngày có tên khách hoặc SĐT thực tế
+      const datesSnap = await getDocs(collection(db, "availableDates"));
+      datesSnap.forEach((d) => {
+        const data = d.data() as any;
+        // Chỉ lấy nếu ngày có thông tin khách thực tế (tên khách hàng hoặc số điện thoại)
+        const hasRealCustomer = Boolean(data.schoolName || data.phone || data.customerName);
+        if (hasRealCustomer) {
+          const exists = targetBookings.some((b) => b.date === d.id);
+          if (!exists) {
+            targetBookings.push({
+              id: `DATE_${d.id}`,
+              date: d.id,
+              schoolName: data.schoolName || data.customerName || "Khách lịch trình",
+              phone: data.phone || "",
+              instagramOrZalo: data.phone || data.instagramOrZalo || "",
+              conceptType: "THPT",
+              classSize: 1,
+              status: "confirmed",
+              notes: data.notes || data.reason || "",
+              createdAt: data.updatedAt || new Date().toISOString(),
+            } as any);
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Could not fetch extra bookings from Firestore:", e);
+    }
+
+    // Nếu hệ thống chưa có dữ liệu hoặc danh sách khách rỗng, mở modal nhập hàng loạt
+    if (targetBookings.length === 0) {
+      triggerConfirm(
+        "Chưa có dữ liệu khách hàng",
+        "Hệ thống nhận thấy bạn chưa có dữ liệu khách hàng cũ nào trong database. Bạn có muốn mở bảng 'Nhập Dữ Liệu Khách Hàng Cũ' để quét tự động từ Google Calendar hoặc dán từ Excel không?",
+        () => {
+          setIsBatchImportModalOpen(true);
+        },
+        undefined,
+        "Quét / Nhập ngay",
+        "Để sau"
+      );
+      return;
+    }
+
+    // Kiểm tra xem có bao nhiêu khách hàng đang thiếu số điện thoại
+    const missingPhoneCount = targetBookings.filter((b) => {
+      const p = (b.phone || b.instagramOrZalo || "").replace(/[^\d]/g, "");
+      return p.length < 9;
+    }).length;
+
+    if (missingPhoneCount > 0) {
+      triggerConfirm(
+        "Phát hiện lịch trình thiếu Số điện thoại",
+        `Hệ thống tìm thấy ${targetBookings.length} lịch trình, trong đó có ${missingPhoneCount} lịch trình chưa có Số điện thoại khách hàng (hoặc chỉ có tên sự kiện). Bạn có muốn mở bảng 'Nhập & Bổ Sung Khách Cũ' để quét toàn bộ từ Google Calendar hoặc điền nhanh SĐT trước không?`,
+        () => {
+          setIsBatchImportModalOpen(true);
+        },
+        () => {
+          proceedSyncToSheet(targetBookings);
+        },
+        "Bổ sung SĐT ngay",
+        "Vẫn đẩy ngay"
+      );
+      return;
+    }
+
+    proceedSyncToSheet(targetBookings);
+  };
+
+  const proceedSyncToSheet = (targetBookings: Booking[]) => {
+    triggerConfirm(
+      "Đẩy tất cả lịch trình lên Google Sheet",
+      `Bạn có muốn đẩy toàn bộ ${targetBookings.length} lịch trình khách hàng lên tab KH_Data của Google Sheet? Báo cáo 12 tháng và Dashboard sẽ tự động cập nhật ngay lập tức.`,
+      async () => {
+        setIsSyncingSheets(true);
+        showToast(`Đang bắt đầu đồng bộ ${targetBookings.length} khách hàng lên Google Sheet...`, "info");
+        try {
+          const result = await syncAllBookingsToSheet(targetBookings, (curr, total) => {
+            if (curr === total || curr % 5 === 0) {
+              showToast(`Đang đẩy ${curr}/${total} khách hàng lên Google Sheet...`, "info");
+            }
+          });
+
+          if (result.success) {
+            showToast(
+              `🎉 Đã đẩy thành công ${result.synced}/${result.total} lịch trình khách hàng lên tab KH_Data!`,
+              "success"
+            );
+          } else {
+            showToast(
+              result.error || "Không thể đồng bộ lên Google Sheet. Vui lòng kiểm tra lại webhook.",
+              "error"
+            );
+          }
+        } catch (err: any) {
+          showToast(`Lỗi đồng bộ Google Sheet: ${err?.message || err}`, "error");
+        } finally {
+          setIsSyncingSheets(false);
+        }
+      },
+      undefined,
+      "Đẩy ngay",
+      "Hủy"
+    );
   };
 
   if (!isAdminMode) return null;
@@ -140,20 +268,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         >
           SLOT
         </button>
-        <button
-          onClick={() => setAdminActiveTab("email_config")}
-          className={`min-h-[36px] rounded-lg text-[11px] font-sans font-medium uppercase tracking-wide transition-all ${
-            adminActiveTab === "email_config"
-              ? "bg-[#B5945B] text-black shadow-md shadow-[#B5945B]/20 font-bold"
-              : "text-zinc-400 hover:text-white hover:bg-white/5 cursor-pointer"
-          }`}
-        >
-          GMAIL
-        </button>
       </div>
 
-      {/* TAB CONTENT: EMAIL CONFIG */}
-      {adminActiveTab === "email_config" && <EmailNotificationConfig />}
+      {/* HIDDEN DIAGNOSTIC PANEL FOR PUBLIC BOOKING BASE URL & RECENT BOOKINGS */}
+      <BookingDiagnosticPanel showToast={showToast} />
 
       {/* TAB CONTENT: CHAT */}
       {adminActiveTab === "chat" &&
@@ -190,6 +308,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7, delay: 0.15 }}
+              data-lenis-prevent="true"
               className="bg-zinc-950 border border-white/5 p-5 rounded-2xl relative min-h-[160px] flex flex-col justify-between shadow-sm"
             >
               <div>
@@ -204,6 +323,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-[#B5945B]/15"
+                        title="Nhập thông tin khách từ Facebook Messenger và tự động sinh mã QR xác nhận"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        + Nhập Booking
+                      </button>
+                    )}
                     {isAdminMode && (
                       <button
                         type="button"
@@ -328,6 +458,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <RefreshCw className="w-3 h-3" />
                         Kiểm tra 2 chiều
+                      </button>
+                    )}
+                    {/* Google Sheets Sync All Button */}
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        disabled={isSyncingSheets}
+                        onClick={handleSyncAllToGoogleSheet}
+                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#1F3A5F] hover:bg-[#2F5D8C] text-white border border-[#2F6FED]/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+                        title="Đẩy toàn bộ danh sách lịch trình khách hàng lên Google Sheet (tab KH_Data)"
+                      >
+                        <FileSpreadsheet className={`w-3.5 h-3.5 text-[#E5C17C] ${isSyncingSheets ? "animate-spin" : ""}`} />
+                        <span>{isSyncingSheets ? "Đang đẩy Sheet..." : "Đẩy lên Sheet"}</span>
+                      </button>
+                    )}
+                    {/* Import / Sync Old Customers Modal Button */}
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        onClick={() => setIsBatchImportModalOpen(true)}
+                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#B5945B]/15 hover:bg-[#B5945B]/30 text-[#E5C17C] border border-[#B5945B]/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        title="Quét Google Calendar hoặc Dán Excel để nhập & bổ sung SĐT khách hàng cũ lên Sheet"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C]" />
+                        <span>Nhập Khách Cũ</span>
+                      </button>
+                    )}
+                    {/* Intro Editor Trigger Button */}
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        onClick={() => window.dispatchEvent(new CustomEvent("openIntroEditor"))}
+                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#2A2315] hover:bg-[#3D321F] text-[#E5C17C] border border-[#B5945B]/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        title="Tùy chỉnh 5 thẻ ảnh và logo của màn hình Intro mở đầu"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C]" />
+                        <span>Sửa Intro</span>
                       </button>
                     )}
                     {/* Dọn Lịch Cũ Button */}
@@ -461,7 +628,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3.5 max-h-[180px] overflow-y-auto pr-1">
+                  <div
+                    data-lenis-prevent="true"
+                    tabIndex={0}
+                    className="space-y-3.5 max-h-[460px] lg:max-h-[540px] overflow-y-auto overscroll-contain pr-1.5 custom-scrollbar focus:outline-none"
+                  >
                     {displayedBookings.map((bk, bkIdx) => {
                       // Custom status aesthetics mapping
                       let statusClass =
@@ -669,6 +840,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               Cập nhật ảnh
                             </button>
                           </div>
+
+                          {/* Xác nhận & Mã QR (Giai đoạn 2) */}
+                          <BookingConfirmationQrSection
+                            booking={bk}
+                            showToast={showToast}
+                            onBookingUpdated={(updates) => {
+                              if (updates.status && onUpdateBookingStatus) {
+                                onUpdateBookingStatus(bk.id, updates.status as any);
+                              }
+                            }}
+                          />
                         </div>
                       );
                     })}
@@ -692,6 +874,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }}
         booking={editingBooking}
         onSaveProgress={handleSavePhotoProgress}
+      />
+
+      {/* Admin Create Booking (Messenger) Modal */}
+      <AdminCreateBookingModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* Admin Batch Import & Sync Old Customers Modal */}
+      <AdminBatchImportModal
+        isOpen={isBatchImportModalOpen}
+        onClose={() => setIsBatchImportModalOpen(false)}
+        showToast={showToast}
+        googleToken={googleToken}
+        googleSignIn={googleSignIn}
+        existingBookings={bookings}
+        onBookingsUpdated={() => {
+          // bookings will update automatically via Firestore snapshot
+        }}
       />
     </div>
   );

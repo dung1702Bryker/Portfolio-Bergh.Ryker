@@ -56,6 +56,7 @@ export function purgeLegacyGeoCache(): void {
         val.includes(" • ") ||
         val.includes("FPT") ||
         val.includes("VNPT") ||
+        val.includes("Phan Tây Nhạc") ||
         val === "Việt Nam")
     ) {
       sessionStorage.removeItem(STORAGE_KEY_LOCATION);
@@ -85,6 +86,42 @@ export async function logVisitorArrival(params: {
   try {
     const devInfo = typeof window !== "undefined" ? getPersistentDeviceInfo() : null;
 
+    // Passive client-side IP and geo hint check (0% user disturbance, 0 permission popups)
+    let clientIpHint: string | undefined;
+    let clientGeoHint: { city?: string; region?: string; country?: string } | undefined;
+
+    try {
+      // Check cached IP first
+      const cachedIp = sessionStorage.getItem("visitor_detected_ip");
+      if (cachedIp && !cachedIp.startsWith("127.") && !cachedIp.startsWith("192.168.")) {
+        clientIpHint = cachedIp;
+      }
+
+      const [ipwhoRes, ipifyRes] = await Promise.allSettled([
+        fetch("https://ipwho.is/", { signal: AbortSignal.timeout(2000) }),
+        fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(1800) }),
+      ]);
+
+      if (ipwhoRes.status === "fulfilled" && ipwhoRes.value.ok) {
+        const geoJson = await ipwhoRes.value.json();
+        if (geoJson && geoJson.success !== false) {
+          clientIpHint = geoJson.ip || clientIpHint;
+          clientGeoHint = {
+            city: geoJson.city || "",
+            region: geoJson.region || "",
+            country: geoJson.country || "Việt Nam",
+          };
+          if (clientIpHint) sessionStorage.setItem("visitor_detected_ip", clientIpHint);
+        }
+      } else if (!clientIpHint && ipifyRes.status === "fulfilled" && ipifyRes.value.ok) {
+        const ipifyJson = await ipifyRes.value.json();
+        if (ipifyJson && ipifyJson.ip) {
+          clientIpHint = ipifyJson.ip;
+          sessionStorage.setItem("visitor_detected_ip", clientIpHint);
+        }
+      }
+    } catch (_) {}
+
     const response = await fetch("/api/visitor/log", {
       method: "POST",
       headers: {
@@ -103,9 +140,41 @@ export async function logVisitorArrival(params: {
         visitCount: devInfo?.visitCount || 1,
         role: params.role || "visitor",
         isAdminDevice: Boolean(params.isAdminDevice),
-        clientLocation: params.clientLocation,
-        latitude: params.latitude,
-        longitude: params.longitude,
+        browserVersion: devInfo?.browserVersion || "",
+        connectionType: devInfo?.network?.connectionType,
+        effectiveType: devInfo?.network?.effectiveType,
+        downlink: devInfo?.network?.downlink,
+        rtt: devInfo?.network?.rtt,
+        saveData: devInfo?.network?.saveData,
+        clientLocation: params.clientLocation || (() => {
+          try {
+            const cal = sessionStorage.getItem("visitor_calibrated_location") || localStorage.getItem("visitor_calibrated_location");
+            if (cal && cal !== "Việt Nam") return cal;
+          } catch (_) {}
+          return undefined;
+        })(),
+        latitude: params.latitude || (() => {
+          try {
+            const cached = sessionStorage.getItem(STORAGE_KEY_GEO_DETAILS);
+            if (cached) {
+              const d = JSON.parse(cached);
+              if (typeof d.latitude === "number") return d.latitude;
+            }
+          } catch (_) {}
+          return undefined;
+        })(),
+        longitude: params.longitude || (() => {
+          try {
+            const cached = sessionStorage.getItem(STORAGE_KEY_GEO_DETAILS);
+            if (cached) {
+              const d = JSON.parse(cached);
+              if (typeof d.longitude === "number") return d.longitude;
+            }
+          } catch (_) {}
+          return undefined;
+        })(),
+        clientIp: clientIpHint,
+        clientGeo: clientGeoHint,
       }),
     });
 
@@ -146,10 +215,16 @@ export async function logVisitorArrival(params: {
     console.warn("[ipGeoService] Error logging visitor arrival:", err);
   }
 
-  // Fallback: check cached location if available
+  // Fallback: check cached location if available (prevent poisoned or stale locks)
   try {
     const cached = sessionStorage.getItem(STORAGE_KEY_LOCATION);
-    if (cached && cached !== "Việt Nam" && !cached.includes("Mạng ") && !cached.includes(" • ")) {
+    if (
+      cached &&
+      cached !== "Việt Nam" &&
+      !cached.includes("Mạng ") &&
+      !cached.includes(" • ") &&
+      !cached.includes("Phan Tây Nhạc")
+    ) {
       return { ok: true, location: cached };
     }
   } catch (_) {}

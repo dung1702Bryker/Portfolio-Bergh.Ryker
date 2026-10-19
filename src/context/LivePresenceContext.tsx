@@ -9,6 +9,7 @@ import {
   resolvePreciseVisitorLocation,
   stripIspFromName,
   purgeStaleLocationCache,
+  clearAllLocationCaches,
   getBrowserGpsProvince,
 } from "../services/geoService";
 import { logVisitorArrival, purgeLegacyGeoCache } from "../services/ipGeoService";
@@ -55,12 +56,14 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Real-time Firestore presence subscription
     const unsubscribeSnapshot = subscribeToLiveVisitors((visitors) => {
-      // Ensure all visitor locations and devices are sanitized and properly labeled without forcing overrides
-      const sanitizedVisitors = visitors.map((v) => ({
-        ...v,
-        device: sanitizeDeviceLabel(v.device || "Thiết bị di động", v.screenResolution),
-        location: v.location ? stripIspFromName(v.location) : "Việt Nam",
-      }));
+      // STRICT FILTER: Exclude admin devices so only real guest/client visitors appear online
+      const sanitizedVisitors = visitors
+        .filter((v) => v.role !== "admin" && !v.isAdminDevice && !v.visitorName.toLowerCase().includes("admin"))
+        .map((v) => ({
+          ...v,
+          device: sanitizeDeviceLabel(v.device || "Thiết bị di động", v.screenResolution),
+          location: v.location ? stripIspFromName(v.location) : "Việt Nam",
+        }));
       setActiveVisitors(sanitizedVisitors);
     });
 
@@ -83,17 +86,34 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       // Clear obsolete hardcoded locks if present
       try {
-        const oldCalibrated = localStorage.getItem("visitor_calibrated_location") || sessionStorage.getItem("visitor_calibrated_location");
-        if (oldCalibrated && oldCalibrated.includes("Phan Tây Nhạc")) {
-          localStorage.removeItem("visitor_calibrated_location");
-          sessionStorage.removeItem("visitor_calibrated_location");
+        const staleKeys = [
+          "visitor_calibrated_location",
+          "visitor_detailed_location_v7",
+          "visitor_detailed_location_v6",
+          "visitor_detailed_location_v5",
+          "visitor_detailed_location",
+          "visitor_location",
+          "visitor_preferred_location",
+        ];
+        for (const k of staleKeys) {
+          const sVal = sessionStorage.getItem(k);
+          if (sVal && (sVal.includes("Phan Tây Nhạc") || sVal.includes("Mạng ") || sVal === "Việt Nam")) {
+            sessionStorage.removeItem(k);
+          }
+          const lVal = localStorage.getItem(k);
+          if (lVal && (lVal.includes("Phan Tây Nhạc") || lVal.includes("Mạng ") || lVal === "Việt Nam")) {
+            localStorage.removeItem(k);
+          }
         }
       } catch (_) {}
 
       // Check if user has an explicit custom location in this active session
       let savedCalibrated: string | null = null;
       try {
-        savedCalibrated = sessionStorage.getItem("visitor_calibrated_location");
+        const candidate = sessionStorage.getItem("visitor_calibrated_location");
+        if (candidate && !candidate.includes("Phan Tây Nhạc") && candidate !== "Việt Nam") {
+          savedCalibrated = candidate;
+        }
       } catch (_) {}
 
       const visitorId = currentVisitorId || sessionStorage.getItem("live_visitor_session_id") || "guest";
@@ -134,7 +154,7 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return cleanLoc;
       }
     } catch (_) {}
-    return "Hà Nội";
+    return "Việt Nam";
   }, [currentVisitorId, isAdmin]);
 
   // Run precise location detection on mount and attempt silent GPS calibration if granted
@@ -234,6 +254,24 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentVisitorId]);
 
+  const resetToAutoLocation = useCallback(async (): Promise<string> => {
+    clearAllLocationCaches();
+    try {
+      const devInfo = getPersistentDeviceInfo();
+      await fetch("/api/presence/reset-location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitorId: currentVisitorId,
+          deviceId: devInfo?.deviceId,
+        }),
+      });
+    } catch (_) {}
+
+    const fresh = await detectLocation();
+    return fresh;
+  }, [currentVisitorId, detectLocation]);
+
   const updateLocation = useCallback((page: string, detail?: string) => {
     if (updateLocationRef.current) {
       updateLocationRef.current(page, detail);
@@ -252,7 +290,7 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, []);
 
-  const activeCount = Math.max(activeVisitors.length, 1);
+  const activeCount = activeVisitors.length;
   const currentVisitor = activeVisitors.find((v) => v.id === currentVisitorId);
   const devInfo = typeof window !== "undefined" ? getPersistentDeviceInfo() : null;
   const currentDeviceId = currentVisitor?.deviceId || devInfo?.deviceId || currentVisitorId;
@@ -273,6 +311,7 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         refreshPreciseLocation: detectLocation,
         calibrateGpsLocation,
         setCustomLocation,
+        resetToAutoLocation,
         updateLocation,
         updateNickname,
         updateAdminStatus,

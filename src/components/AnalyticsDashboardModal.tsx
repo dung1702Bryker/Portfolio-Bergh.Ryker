@@ -200,41 +200,40 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
           transition={{ duration: 0.22 }}
           className="relative w-full max-w-5xl bg-[#0c0d11] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[94vh] sm:h-[90vh] max-h-[94vh] z-10"
         >
-          {/* HEADER: Clean, Focused & Elegant */}
-          <div className="px-4 sm:px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3 bg-zinc-950/70 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#B5945B]/15 border border-[#B5945B]/30 flex items-center justify-center text-[#B5945B] shrink-0">
-                <BarChart3 className="w-5 h-5" />
+          {/* HEADER: Clean, Focused & Elegant (No overflow on mobile or desktop) */}
+          <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-white/10 flex items-center justify-between gap-2 bg-zinc-950/90 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#B5945B]/25 to-amber-600/15 border border-[#B5945B]/35 flex items-center justify-center text-[#B5945B] shrink-0 shadow-sm">
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-nowrap">
+                  <h3 className="text-xs sm:text-base font-extrabold text-white tracking-tight truncate">
                     Thống Kê Lượt Xem Portfolio
                   </h3>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
                     <ShieldCheck className="w-3 h-3" />
                     Admin
                   </span>
                 </div>
-                <p className="text-zinc-400 text-xs">
-                  Khách truy cập, vị trí khu vực và hiệu suất các album kỷ yếu
+                <p className="text-zinc-400 text-[10px] sm:text-xs truncate">
+                  Định vị khách xem, hiệu suất bộ sưu tập & giờ vàng
                 </p>
               </div>
             </div>
 
             {/* Right Tools: Month Filter + Actions */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               {/* Month Selector */}
-              <div className="flex items-center gap-1.5 bg-zinc-900 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-zinc-300">
-                <Calendar className="w-3.5 h-3.5 text-[#B5945B]" />
-                <span className="text-zinc-400 font-medium hidden sm:inline">Kỳ:</span>
+              <div className="flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-zinc-300">
+                <Calendar className="w-3 h-3 text-[#B5945B] shrink-0" />
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1 text-xs"
+                  className="bg-transparent text-white font-semibold outline-none cursor-pointer pr-1 text-xs max-w-[85px] sm:max-w-[140px] truncate"
                 >
                   <option value="all" className="bg-zinc-900 text-white">
-                    Tất cả thời gian
+                    Tất cả kỳ
                   </option>
                   {availableMonths.map((m, mIdx) => (
                     <option key={`month-${m}-${mIdx}`} value={m} className="bg-zinc-900 text-white">
@@ -249,10 +248,10 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                 onClick={() => setShowResetConfirm(true)}
                 disabled={isResetting}
                 title="Reset toàn bộ số lượt xem về 0"
-                className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/25 transition-colors cursor-pointer text-xs flex items-center gap-1"
+                className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/25 transition-colors cursor-pointer text-xs flex items-center gap-1 shrink-0"
               >
                 <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Reset về 0</span>
+                <span className="hidden md:inline">Reset về 0</span>
               </button>
 
               {/* Clean legacy sections */}
@@ -260,7 +259,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                 onClick={handleCleanLegacy}
                 disabled={isCleaning}
                 title="Dọn dẹp mục rác không thuộc Portfolio"
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/10 transition-colors cursor-pointer text-xs"
+                className="p-1.5 sm:p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/10 transition-colors cursor-pointer text-xs shrink-0"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -268,7 +267,8 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
               {/* Close Button */}
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/10 transition-colors cursor-pointer ml-1"
+                className="p-1.5 sm:p-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white border border-white/10 transition-colors cursor-pointer shrink-0"
+                title="Đóng bảng thống kê"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -448,19 +448,19 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
             </div>
 
             {/* UNIFIED 4 MAIN TABS (Sticky header inside scroll body so tabs are always accessible) */}
-            <div className="sticky top-0 z-30 backdrop-blur-xl bg-[#0c0d11]/95 py-2.5 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-white/10 flex items-center gap-1.5 overflow-x-auto scrollbar-none transition-all shadow-sm">
+            <div className="sticky top-0 z-30 backdrop-blur-xl bg-[#0c0d11]/95 py-2 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-white/10 flex items-center gap-1.5 overflow-x-auto scrollbar-none shadow-sm">
               {/* Tab 1: Visitors & Geography */}
               <button
                 type="button"
                 onClick={() => setActiveTab("visitors")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   activeTab === "visitors"
                     ? "bg-[#B5945B] text-zinc-950 shadow-md font-extrabold"
                     : "text-zinc-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Khách Xem & Vị Trí</span>
+                <span>Khách & Vị Trí</span>
                 {activeCount > 0 && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
@@ -469,7 +469,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                         : "bg-emerald-500/20 text-emerald-400"
                     }`}
                   >
-                    {activeCount} online
+                    {activeCount}
                   </span>
                 )}
               </button>
@@ -478,28 +478,28 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
               <button
                 type="button"
                 onClick={() => setActiveTab("hourly")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   activeTab === "hourly"
                     ? "bg-[#B5945B] text-zinc-950 shadow-md font-extrabold"
                     : "text-zinc-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" />
-                <span>Khung Giờ Vàng (24h)</span>
+                <span>Giờ Vàng (24h)</span>
               </button>
 
               {/* Tab 3: Collections & Albums */}
               <button
                 type="button"
                 onClick={() => setActiveTab("content")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   activeTab === "content"
                     ? "bg-[#B5945B] text-zinc-950 shadow-md font-extrabold"
                     : "text-zinc-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>Bộ Sưu Tập & Album</span>
+                <span>Bộ Sưu Tập</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                     activeTab === "content" ? "bg-zinc-950/20 text-zinc-950" : "bg-white/10 text-zinc-400"
@@ -513,34 +513,34 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
               <button
                 type="button"
                 onClick={() => setActiveTab("photos")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
                   activeTab === "photos"
                     ? "bg-[#B5945B] text-zinc-950 shadow-md font-extrabold"
                     : "text-zinc-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <ImageIcon className="w-3.5 h-3.5" />
-                <span>Ảnh Được Xem ({photosList.length})</span>
+                <span>Ảnh Phóng To</span>
               </button>
             </div>
 
             {/* TAB 1 CONTENT: VISITORS & GEOLOCATION */}
             {activeTab === "visitors" && (
-              <div className="space-y-3.5">
+              <div className="space-y-3">
                 {/* Clean Sub-Navigation for Visitors */}
-                <div className="flex items-center justify-between gap-3 p-1.5 rounded-xl bg-zinc-950 border border-white/10">
+                <div className="flex items-center justify-between gap-2 p-1 rounded-xl bg-zinc-950 border border-white/10">
                   <div className="flex items-center gap-1 text-xs">
                     <button
                       type="button"
                       onClick={() => setVisitorSubTab("live")}
                       className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold flex items-center gap-1.5 text-xs ${
                         visitorSubTab === "live"
-                          ? "bg-emerald-600 text-white shadow"
+                          ? "bg-emerald-600 text-white shadow-sm"
                           : "text-zinc-400 hover:text-white"
                       }`}
                     >
-                      <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-300" />
-                      <span>Đang Xem Trực Tiếp ({activeCount})</span>
+                      <Radio className="w-3 h-3 text-emerald-300" />
+                      <span>Trực Tiếp ({activeCount})</span>
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
                     </button>
 
@@ -549,19 +549,19 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                       onClick={() => setVisitorSubTab("history")}
                       className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold flex items-center gap-1.5 text-xs ${
                         visitorSubTab === "history"
-                          ? "bg-[#B5945B] text-zinc-950 shadow"
+                          ? "bg-[#B5945B] text-zinc-950 shadow-sm"
                           : "text-zinc-400 hover:text-white"
                       }`}
                     >
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>Toàn Bộ Lịch Sử & Kiểm Soát Khu Vực</span>
+                      <MapPin className="w-3 h-3" />
+                      <span>Lịch Sử & Khu Vực</span>
                     </button>
                   </div>
 
-                  <span className="text-[11px] text-zinc-500 hidden sm:inline px-2">
+                  <span className="text-[11px] text-zinc-500 hidden md:inline px-2 truncate">
                     {visitorSubTab === "live"
-                      ? "Khách đang mở trang ngay thời điểm này"
-                      : "Theo dõi lượng khách từ Quảng Ninh, Hà Nội..."}
+                      ? "Khách đang trực tuyến thời gian thực"
+                      : "Theo dõi khách theo từng tỉnh thành"}
                   </span>
                 </div>
 

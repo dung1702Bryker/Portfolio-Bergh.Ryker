@@ -37,13 +37,31 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || "ai-studio-01acd3e7-5d2e-492d-a9cc-c46484de9c60");
 export const auth = getAuth();
 
+/**
+ * Recursively strips undefined values so Firestore setDoc/updateDoc/addDoc calls never throw:
+ * "Function setDoc() called with invalid data. Unsupported field value: undefined"
+ */
+export function cleanFirestoreData<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  const result: any = Array.isArray(obj) ? [] : {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      if (val !== null && typeof val === "object" && !(val instanceof Date) && typeof (val as any).toMillis !== "function") {
+        result[key] = cleanFirestoreData(val);
+      } else {
+        result[key] = val;
+      }
+    }
+  }
+  return result;
+}
+
 // --- Google Workspace Auth for Google Drive & Google Calendar ---
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive'); // Google Drive scope
 provider.addScope('https://www.googleapis.com/auth/calendar'); // Google Calendar scope
 provider.addScope('https://www.googleapis.com/auth/calendar.events'); // Google Calendar Events scope
 provider.addScope('https://www.googleapis.com/auth/tasks'); // Google Tasks scope
-provider.addScope('https://www.googleapis.com/auth/gmail.send'); // Gmail Send scope
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -132,7 +150,7 @@ let quotaExceededMemory = false;
 const QUOTA_EXCEEDED_STORAGE_KEY = "firestore_quota_exhausted_timestamp";
 
 /**
- * Check if Firestore free daily write limit (20,000 writes/day) has been reached
+ * Check if Firestore free daily read/write limit has been reached
  */
 export function isFirestoreQuotaExceeded(): boolean {
   if (quotaExceededMemory) return true;
@@ -140,7 +158,7 @@ export function isFirestoreQuotaExceeded(): boolean {
     const item = localStorage.getItem(QUOTA_EXCEEDED_STORAGE_KEY) || sessionStorage.getItem(QUOTA_EXCEEDED_STORAGE_KEY);
     if (item) {
       const timestamp = parseInt(item, 10);
-      // Back off writes for 45 minutes once quota is exhausted
+      // Back off for 45 minutes once quota is exhausted
       if (Date.now() - timestamp < 45 * 60 * 1000) {
         quotaExceededMemory = true;
         return true;
@@ -150,6 +168,10 @@ export function isFirestoreQuotaExceeded(): boolean {
   return false;
 }
 
+export function isQuotaError(..._args: any[]): boolean {
+  return isFirestoreQuotaExceeded();
+}
+
 /**
  * Mark Firestore quota as exceeded to prevent cascading retry storm & console spam
  */
@@ -157,7 +179,7 @@ export function markFirestoreQuotaExceeded(): void {
   if (!quotaExceededMemory) {
     quotaExceededMemory = true;
     console.warn(
-      "[Firestore Quota Circuit Breaker] Free daily write quota reached (20,000 writes/day). Seamlessly pausing non-critical background writes (heartbeats/analytics) to prevent error backoff loops."
+      "[Firestore Quota Circuit Breaker] Free daily read/write quota reached. Seamlessly pausing database requests to prevent quota error loops and ensuring local/cached fallback."
     );
   }
   try {
@@ -175,7 +197,9 @@ if (typeof window !== "undefined") {
     if (
       code === "resource-exhausted" ||
       msg.includes("Quota limit exceeded") ||
-      msg.includes("Free daily write units")
+      msg.includes("Free daily write units") ||
+      msg.includes("Free daily read units") ||
+      msg.includes("Quota exceeded")
     ) {
       markFirestoreQuotaExceeded();
       event.preventDefault();
@@ -223,7 +247,9 @@ export function handleFirestoreError(
   if (
     errCode === "resource-exhausted" ||
     errMsg.includes("Quota limit exceeded") ||
-    errMsg.includes("Free daily write units")
+    errMsg.includes("Free daily write units") ||
+    errMsg.includes("Free daily read units") ||
+    errMsg.includes("Quota exceeded")
   ) {
     markFirestoreQuotaExceeded();
     return {

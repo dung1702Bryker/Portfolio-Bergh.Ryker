@@ -58,6 +58,22 @@ export interface CustomCollection {
   order?: number;
   deletedAt?: Date | null;
   isHidden?: boolean;
+  year?: number | string;
+  eventType?: string;
+}
+
+export function extractYearFromText(text: string, ..._args: any[]): number | null {
+  if (!text) return null;
+  const match = String(text).match(/\b20\d{2}\b/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
+export function inferEventTypeFromText(text: string, ..._args: any[]): string {
+  if (!text) return "Kỷ yếu";
+  const lower = String(text).toLowerCase();
+  if (lower.includes("prom") || lower.includes("dạ hội")) return "Prom Night";
+  if (lower.includes("sự kiện") || lower.includes("event")) return "Sự kiện";
+  return "Kỷ yếu THPT";
 }
 
 export function formatDisplayName(text: string): string {
@@ -76,17 +92,7 @@ export function usePortfolioData(
   defaultSeeds?: CustomCollection[],
   isAdminGlobal?: boolean,
 ) {
-  const cacheKey = `bergh_cached_portfolio_${firestoreCollection}`;
   const [collectionsData, setCollectionsData] = useState<CustomCollection[]>(() => {
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      }
-    } catch {}
     return defaultSeeds && defaultSeeds.length > 0 ? defaultSeeds : [];
   });
   const [loading, setLoading] = useState(false);
@@ -251,9 +257,6 @@ export function usePortfolioData(
                     }
                     return col;
                   });
-                  try {
-                    localStorage.setItem(cacheKey, JSON.stringify(updated));
-                  } catch {}
                   return updated;
                 });
               },
