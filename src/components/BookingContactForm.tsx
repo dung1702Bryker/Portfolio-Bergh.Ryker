@@ -84,6 +84,7 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 
 const TWENTY_FOUR_HOUR_SLOTS = [
@@ -1961,6 +1962,44 @@ Mã Booking: ${booking.id}`;
     activeBookingsRef.current = bookings;
   }, [bookings]);
 
+  // 4. Listen for real-time status updates & Poll for confirmation
+  useEffect(() => {
+    if (!submittedData?.id) return;
+
+    let interval: any;
+    const bookingRef = doc(db, "bookings", submittedData.id);
+
+    // Snapshot listener
+    const unsubscribe = onSnapshot(bookingRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Booking;
+        if (data.status === "Đã duyệt" || data.hasConfirmedPayment === true) {
+           console.log("[BookingForm] Real-time approval detected!");
+           setSubmittedData(prev => ({ ...prev, ...data }));
+        }
+      }
+    });
+
+    // Polling listener
+    interval = setInterval(async () => {
+        try {
+            const res = await fetch(`/api/check-payment/${submittedData.id}`);
+            const data = await res.json();
+            if (data.success) {
+                console.log("[BookingForm] Polling approval detected!");
+                // Re-fetch to get updated state
+                const snap = await getDoc(bookingRef);
+                if (snap.exists()) setSubmittedData(prev => ({ ...prev, ...(snap.data() as Booking) }));
+            }
+        } catch(e) {}
+    }, 3000);
+
+    return () => {
+        unsubscribe();
+        clearInterval(interval);
+    };
+  }, [submittedData?.id]);
+
   // Distributed continuous background polling (runs for Admin and any active visitor to ensure auto-approval & 2-way sync)
   useEffect(() => {
     let interval: any;
@@ -2399,6 +2438,11 @@ Mã Booking: ${booking.id}`;
                   <button
                     type="button"
                     onClick={() => setIsCalendarOpen(true)}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      setIsCalendarOpen(true);
+                    }}
+                    style={{ touchAction: "manipulation" }}
                     className={`w-full rounded-2xl p-3.5 sm:p-4 text-left cursor-pointer transition-all duration-300 border select-none ${
                       date
                         ? "liquid-glass-btn border-[#B5945B]/80 text-white ring-1 ring-[#B5945B]/40 shadow-lg shadow-amber-500/10"
@@ -2637,19 +2681,33 @@ Mã Booking: ${booking.id}`;
                   {/* Subtle success confetti animation */}
                   <SubtleConfetti />
 
-                  {/* THẺ VÉ ĐIỆN TỬ VỚI MÃ QR SẮC NÉT (Digital Pass Card) */}
-                  {submittedData && (
-                    <DigitalPassCard booking={submittedData} />
+                  {/* 1. digital pass card (hidden before payment) */}
+                  {submittedData && submittedData.hasConfirmedPayment && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <DigitalPassCard booking={submittedData} />
+                    </motion.div>
                   )}
 
+                  {/* 2. Payment block (hidden after payment) */}
                   {submittedData &&
+                    !submittedData.hasConfirmedPayment &&
                     (submittedData.conceptType === "THPT" || submittedData.conceptType === "University") &&
                     submittedData.deposit !== undefined &&
-                    submittedData.deposit > 0 &&
-                    !submittedData.hasConfirmedPayment && (
-                      <div className="flex flex-col gap-4 bg-zinc-950/80 p-5 rounded-3xl border border-emerald-500/30 items-center text-center mt-2 w-full max-w-md liquid-glass">
-                        <p className="text-emerald-300 font-semibold text-sm">
-                          Thông tin chuyển khoản giữ lịch
+                    submittedData.deposit > 0 && (
+                      <motion.div
+                        key="payment-block"
+                        initial={{ opacity: 1 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.5 }}
+                        className="flex flex-col gap-4 bg-zinc-950/80 p-5 rounded-3xl border border-emerald-500/30 items-center text-center mt-2 w-full max-w-md liquid-glass"
+                      >
+                        <p className="text-emerald-300 font-semibold text-sm flex items-center gap-2">
+                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                           Thông tin chuyển khoản giữ lịch
                         </p>
                         
                         <div className="bg-white p-3 rounded-2xl shadow-xl w-60 h-60 sm:w-64 sm:h-64">
@@ -2679,12 +2737,53 @@ Mã Booking: ${booking.id}`;
                             <span className="font-mono text-white text-xs font-bold bg-black/50 px-2 py-1 rounded select-all flex-1 text-right truncate">COC {submittedData.id}</span>
                           </div>
                           
-                          <p className="text-[11px] text-amber-300 mt-2 font-medium flex items-center justify-center gap-1.5 animate-pulse bg-amber-900/20 py-2 px-3 rounded-lg border border-amber-500/20">
-                            ⏳ Hệ thống đang chờ tự động xác nhận trong vài giây...
-                          </p>
+                          {/* Manual Verification */}
+                          <div className="flex flex-col gap-2 mt-2">
+                             <button
+                                type="button"
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg text-xs uppercase flex items-center justify-center gap-2 cursor-pointer transition-all"
+                                onClick={async (e) => {
+                                    const btn = e.target as HTMLButtonElement;
+                                    btn.innerText = "Đang kiểm tra...";
+                                    const res = await fetch("/api/verify-sepay-deposit", {
+                                        method: "POST",
+                                        headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify({
+                                            bookingId: submittedData.id,
+                                            requiredAmount: 2000 // Test mode allowed
+                                        })
+                                    });
+                                    const data = await res.json();
+                                    if (data.verified) {
+                                        // Update Firestore directly
+                                        await updateDoc(doc(db, "bookings", submittedData.id), {
+                                            status: "Đã duyệt",
+                                            hasConfirmedPayment: true,
+                                            confirmationStatus: "link_created",
+                                            confirmedAt: new Date().toISOString()
+                                        });
+                                        setSubmittedData(prev => ({...prev, status: "Đã duyệt", hasConfirmedPayment: true}));
+                                        // success screen will be rendered automatically via status check in parent
+                                    } else {
+                                        btn.innerText = "🔄 Kiểm tra thanh toán & Nhận vé QR";
+                                        alert("⚠️ Hệ thống chưa ghi nhận khoản cọc. Nếu bạn vừa chuyển khoản xong, vui lòng chờ 10–15 giây rồi bấm Kiểm tra lại. Hoặc tải ảnh biên lai.");
+                                    }
+                                }}
+                             >
+                                <RefreshCw className="w-3.5 h-3.5" /> 🔄 Kiểm tra thanh toán & Nhận vé QR
+                             </button>
+                             <button
+                                type="button"
+                                className="text-zinc-400 hover:text-white text-[11px] underline mt-1"
+                                onClick={() => { /* Logic to open image upload */ }}
+                             >
+                                📤 Tải ảnh biên lai chuyển khoản để duyệt ngay
+                             </button>
+                          </div>
                         </div>
-                      </div>
+                      </motion.div>
                     )}
+
 
                   <div className="pt-2 text-center">
                     <button

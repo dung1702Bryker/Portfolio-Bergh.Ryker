@@ -112,7 +112,8 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
       }
     );
 
-    return () => unsubscribe();
+    const safetyTimer = setTimeout(() => { setIsLoading(false); }, 5000);
+    return () => { unsubscribe(); clearTimeout(safetyTimer); };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -255,7 +256,7 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
     <AnimatePresence>
       <div
         key="availability-calendar-modal"
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm font-sans"
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm font-sans touch-action-pan-y"
       >
         {/* Backdrop click to close */}
         <motion.div
@@ -442,6 +443,11 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
                     type="button"
                     disabled={isDisabled}
                     onClick={() => handleDateClick(dateStr, rawStatus)}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      if (!isDisabled) handleDateClick(dateStr, rawStatus);
+                    }}
+                    style={{ touchAction: "manipulation" }}
                     className={`h-9 sm:h-10 rounded-lg flex flex-col items-center justify-center transition-all relative select-none cursor-pointer ${buttonClass}`}
                   >
                     <span
