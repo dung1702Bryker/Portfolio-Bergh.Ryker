@@ -308,25 +308,11 @@ export function handleFirestoreError(
 
 async function testConnection() {
   try {
-    // Validate Connection to Firestore
     if (!isFirestoreQuotaExceeded()) {
-      await getDocFromServer(doc(db, "test", "connection"));
+      // Gentle ping
+      await getDocFromServer(doc(db, "test", "connection")).catch(() => {});
     }
-  } catch (error: any) {
-    if (
-      error?.code === "resource-exhausted" ||
-      error?.message?.includes("Quota limit exceeded")
-    ) {
-      markFirestoreQuotaExceeded();
-      return;
-    }
-    if (
-      error instanceof Error &&
-      error.message.includes("the client is offline")
-    ) {
-      console.error("Please check your Firebase configuration.");
-    }
-  }
+  } catch (_) {}
 }
 
 testConnection();

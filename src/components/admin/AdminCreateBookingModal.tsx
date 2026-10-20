@@ -100,11 +100,7 @@ export const AdminCreateBookingModal: React.FC<AdminCreateBookingModalProps> = (
       const bookingId = `booking_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       // Tự động sinh mã booking định dạng BR-2026-X7Y9
       const bookingCode = generateBookingCode();
-      const origin = getPublicBookingBaseUrl();
-      const confirmationLink = ensureValidPublicBookingUrl(
-        `${origin}/booking/${bookingCode}`,
-        bookingCode
-      );
+      const confirmationLink = ensureValidPublicBookingUrl(undefined, bookingCode);
       const qrUrl = await generateQrDataUrl(confirmationLink, 1200);
       const confirmedAt = autoConfirm ? new Date().toLocaleString("vi-VN") : undefined;
 

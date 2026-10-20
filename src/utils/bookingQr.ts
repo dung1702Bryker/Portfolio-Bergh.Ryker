@@ -39,23 +39,43 @@ export const PUBLIC_BOOKING_BASE_URL: string = (() => {
 
 /**
  * Lấy Base URL công khai chuẩn để tạo link xác nhận và mã QR cho khách.
- * TUYỆT ĐỐI KHÔNG dùng window.location.origin khi chạy trong:
- * - Google AI Studio (aistudio.google.com)
- * - Dev Cloud Run (ais-dev-*.run.app)
- * - Localhost / 127.0.0.1
+ * - Tự động chuyển đổi ais-dev- sang ais-pre- (Shared App URL công khai).
+ * - Tuyệt đối không để dính link dev IAP bảo mật gây lỗi 'Action required to load your app' trên điện thoại.
+ * - Khi chạy localhost hoặc aistudio.google.com thì dùng OFFICIAL_PUBLIC_DOMAIN.
  */
 export function getPublicBookingBaseUrl(): string {
   try {
     if (typeof window !== "undefined" && window.location && window.location.origin) {
       const origin = window.location.origin.replace(/\/+$/, "");
-      if (origin && !origin.includes("aistudio.google.com")) {
+      
+      // Nếu đang mở trên link dev (ais-dev-...), tự động trỏ sang link preview công khai (ais-pre-...)
+      if (origin.includes("ais-dev-")) {
+        return origin.replace("ais-dev-", "ais-pre-");
+      }
+
+      // Nếu đang chạy trong iframe AI Studio hoặc localhost, dùng OFFICIAL_PUBLIC_DOMAIN
+      if (
+        origin.includes("aistudio.google.com") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1") ||
+        origin.includes("0.0.0.0")
+      ) {
+        return OFFICIAL_PUBLIC_DOMAIN;
+      }
+
+      // Domain thực tế (custom domain hoặc ais-pre-...)
+      if (origin.startsWith("http")) {
         return origin;
       }
     }
   } catch (_) {}
 
   if (PUBLIC_BOOKING_BASE_URL) {
-    return PUBLIC_BOOKING_BASE_URL.replace(/\/+$/, "");
+    const cleaned = PUBLIC_BOOKING_BASE_URL.replace(/\/+$/, "");
+    if (cleaned.includes("ais-dev-")) {
+      return cleaned.replace("ais-dev-", "ais-pre-");
+    }
+    return cleaned;
   }
   return OFFICIAL_PUBLIC_DOMAIN;
 }
@@ -83,38 +103,17 @@ export function containsUnauthorizedDomainKeywords(url?: string): boolean {
 }
 
 /**
- * Helper function bắt buộc: Kiểm tra URL booking và thay thế mọi domain nội bộ/dev/localhost
- * bằng URL môi trường production chính thức trước khi lưu vào Firestore.
+ * Helper function bắt buộc: Kiểm tra URL booking và chuẩn hóa sang định dạng:
+ * ${publicBase}/?booking=${bookingCode}
+ * Bỏ qua hoàn toàn các subpath /booking/... để tránh lỗi 404/Page not found trên điện thoại.
  */
 export function ensureValidPublicBookingUrl(
   rawUrl?: string,
   bookingCode?: string
 ): string {
   const publicBase = getPublicBookingBaseUrl();
-  const code = (bookingCode || "").trim() || "BR-STUDIO";
-
-  if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim()) {
-    return `${publicBase}/?booking=${code}`;
-  }
-
-  const trimmed = rawUrl.trim();
-
-  // Nếu chứa bất kỳ từ khóa cấm nào (aistudio, localhost, ais-dev-...)
-  if (containsUnauthorizedDomainKeywords(trimmed) || !trimmed.includes("/booking/")) {
-    return `${publicBase}/?booking=${code}`;
-  }
-
-  try {
-    const parsed = new URL(trimmed);
-    // Nếu domain không khớp với domain production chính thức
-    const expectedDomain = new URL(publicBase).host;
-    if (parsed.host !== expectedDomain) {
-      return `${publicBase}${parsed.pathname}${parsed.search}`;
-    }
-    return trimmed;
-  } catch {
-    return `${publicBase}/?booking=${code}`;
-  }
+  const code = (bookingCode || decodeBookingIdentifier(rawUrl) || "").trim() || "BR-STUDIO";
+  return `${publicBase}/?booking=${encodeURIComponent(code)}`;
 }
 
 /**

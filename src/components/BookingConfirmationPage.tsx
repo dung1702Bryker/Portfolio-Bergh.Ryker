@@ -209,6 +209,17 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
       console.warn("[BookingConfirm] Tầng 4 scan error:", scanErr);
     }
 
+    // Tầng 4.5: Gọi API Server an toàn (Dự phòng trường hợp thiết bị chặn WebSocket hoặc mạng hạn chế)
+    try {
+      const serverRes = await fetch(`/api/public-booking/${encodeURIComponent(code)}`);
+      if (serverRes.ok) {
+        const sData = await serverRes.json();
+        if (sData?.success && sData?.booking) {
+          return sData.booking;
+        }
+      }
+    } catch (_) {}
+
     // Tầng 5: Tra cứu trong LocalStorage trên thiết bị
     try {
       const localSaved = localStorage.getItem(`booking_details_${code}`);
@@ -257,10 +268,10 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
       setBooking(found);
 
-      // Cập nhật URL sạch trên thanh địa chỉ mà không reload trang
+      // Cập nhật URL sạch trên thanh địa chỉ dạng /?booking= (Tuyệt đối không dùng /booking/... để tránh 404 trên mobile)
       const activeDisplayCode = found.bookingCode || found.id;
       if (window.history.replaceState) {
-        window.history.replaceState({}, "", `/booking/${activeDisplayCode}`);
+        window.history.replaceState({}, "", `/?booking=${encodeURIComponent(activeDisplayCode)}`);
       }
 
       // Đánh dấu đã xem nếu chưa cập nhật
@@ -275,9 +286,9 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
         } catch (_) {}
       }
 
-      // Tạo mã QR từ đường dẫn công khai chuẩn
+      // Tạo mã QR từ đường dẫn công khai chuẩn dạng ?booking= (Mở trực tiếp trên camera điện thoại)
       const publicBase = getPublicBookingBaseUrl();
-      const publicUrl = `${publicBase}/booking/${activeDisplayCode}`;
+      const publicUrl = `${publicBase}/?booking=${encodeURIComponent(activeDisplayCode)}`;
       const qrUrl = await generateQrDataUrl(publicUrl, 1200);
       setQrDataUrl(qrUrl);
     } catch (err) {
@@ -302,7 +313,8 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
   const handleCopyLink = () => {
     const publicBase = getPublicBookingBaseUrl();
-    const publicUrl = `${publicBase}/booking/${booking?.bookingCode || booking?.id || currentCode}`;
+    const code = booking?.bookingCode || booking?.id || currentCode;
+    const publicUrl = `${publicBase}/?booking=${encodeURIComponent(code)}`;
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(publicUrl);
       setCopiedLink(true);
@@ -342,7 +354,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
             {onNavigateHome ? (
               <button
                 onClick={onNavigateHome}
-                className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-400 hover:text-white transition-colors cursor-pointer py-1.5 px-3 rounded-lg hover:bg-zinc-800/60"
+                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-white transition-all cursor-pointer py-2 px-3.5 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Trang Chủ</span>
@@ -350,16 +362,18 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
             ) : (
               <a
                 href="/"
-                className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-400 hover:text-white transition-colors py-1.5 px-3 rounded-lg hover:bg-zinc-800/60"
+                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-white transition-all py-2 px-3.5 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="hidden sm:inline">Trang Chủ</span>
               </a>
             )}
-            <div className="h-4 w-px bg-zinc-800 hidden sm:block" />
-            <div className="flex items-center gap-2">
-              <Camera className="w-4 h-4 text-[#B5945B]" />
-              <span className="font-serif tracking-widest text-sm uppercase text-white font-semibold">
+            <div className="h-4 w-px bg-white/10 hidden sm:block" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-[#B5945B]/15 border border-[#B5945B]/30 flex items-center justify-center text-[#E5C17C]">
+                <Camera className="w-3.5 h-3.5" />
+              </div>
+              <span className="tracking-[0.2em] text-sm uppercase text-white font-bold">
                 BERGH.RYKER
               </span>
             </div>
@@ -368,7 +382,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
           <div className="flex items-center gap-2">
             <button
               onClick={handleCopyLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs font-medium text-zinc-200 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-white/10 bg-zinc-900/80 hover:bg-zinc-800 text-xs font-semibold text-zinc-200 transition-all cursor-pointer shadow-sm"
             >
               {copiedLink ? (
                 <>
@@ -396,12 +410,12 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
             </p>
           </div>
         ) : error || !booking ? (
-          <div className="max-w-lg mx-auto py-10 px-6 sm:px-8 rounded-3xl bg-zinc-900/90 border border-zinc-800/90 shadow-2xl backdrop-blur-xl text-center">
+          <div className="max-w-lg mx-auto py-10 px-6 sm:px-8 rounded-[30px] sm:rounded-[36px] bg-zinc-900/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center">
             <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4 text-amber-400">
               <AlertCircle className="w-8 h-8" />
             </div>
 
-            <h2 className="text-xl font-serif font-bold text-white mb-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight">
               {currentCode ? "Không tìm thấy thông tin đặt lịch" : "Tra cứu xác nhận đặt lịch"}
             </h2>
 
@@ -411,8 +425,8 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
             {/* Thanh tìm kiếm trực tiếp trên trang */}
             <form onSubmit={handleSearchSubmit} className="mb-6">
-              <div className="flex items-center gap-2 p-1.5 bg-zinc-950 border border-zinc-700/80 rounded-2xl focus-within:border-[#B5945B] transition-all">
-                <Search className="w-4 h-4 text-zinc-400 ml-2.5 shrink-0" />
+              <div className="flex items-center gap-2 p-1.5 bg-zinc-950 border border-white/10 rounded-full focus-within:border-[#B5945B] transition-all shadow-inner">
+                <Search className="w-4 h-4 text-zinc-400 ml-3.5 shrink-0" />
                 <input
                   type="text"
                   value={searchInput}
@@ -422,7 +436,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md shrink-0 active:scale-95"
+                  className="px-5 py-2.5 bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold rounded-full text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md shrink-0 active:scale-95"
                 >
                   Tìm Kiếm
                 </button>
@@ -431,7 +445,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
             {/* Đơn gần đây trên máy */}
             {recentCodes.length > 0 && (
-              <div className="mb-6 p-3.5 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 text-left">
+              <div className="mb-6 p-4 rounded-[22px] bg-zinc-950/70 border border-white/5 text-left">
                 <div className="text-[11px] text-zinc-400 font-medium mb-2.5 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-[#E5C17C]" />
                   <span>Đơn đặt lịch gần đây trên thiết bị của bạn:</span>
@@ -445,7 +459,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                         setSearchInput(codeItem);
                         setCurrentCode(codeItem);
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-xs text-[#E5C17C] font-mono border border-zinc-700/60 transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-xs text-[#E5C17C] font-semibold border border-white/10 transition-all cursor-pointer flex items-center gap-1.5"
                     >
                       <RefreshCw className="w-3 h-3" />
                       <span>{codeItem}</span>
@@ -461,7 +475,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 href="https://zalo.me/0365266204"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="flex-1 py-3 px-5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-xs font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
               >
                 <MessageCircle className="w-3.5 h-3.5 text-[#E5C17C]" />
                 <span>Hỗ Trợ Zalo (0365266204)</span>
@@ -471,14 +485,14 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 <button
                   type="button"
                   onClick={onNavigateHome}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                  className="flex-1 py-3 px-5 rounded-full bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
                 >
                   Về Trang Chủ Bergh.Ryker
                 </button>
               ) : (
                 <a
                   href="/"
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center"
+                  className="flex-1 py-3 px-5 rounded-full bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md flex items-center justify-center"
                 >
                   Về Trang Chủ Bergh.Ryker
                 </a>
@@ -488,15 +502,15 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
         ) : (
           <div className="space-y-8">
             {/* Status Hero Card */}
-            <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-zinc-800/80">
+            <div className="relative overflow-hidden rounded-[28px] sm:rounded-[36px] border border-white/10 bg-gradient-to-b from-zinc-900/95 via-zinc-900/85 to-zinc-950/95 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-white/10">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[11px] font-mono uppercase tracking-widest text-[#B5945B] font-semibold">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#B5945B]">
                       THÔNG TIN XÁC NHẬN ĐẶT LỊCH
                     </span>
                   </div>
-                  <h1 className="text-2xl sm:text-3xl font-serif font-bold text-white tracking-tight">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                     {booking.schoolName}
                   </h1>
                   <p className="text-sm text-zinc-400 mt-1">
@@ -510,17 +524,17 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 {/* Status Badge */}
                 <div>
                   {isCancelled ? (
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 font-medium text-sm">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-950/60 border border-red-800/60 text-red-300 font-semibold text-xs sm:text-sm shadow-sm">
                       <XCircle className="w-4 h-4 text-red-400" />
                       <span>Đã hủy</span>
                     </div>
                   ) : isConfirmed ? (
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 font-medium text-sm shadow-inner">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-semibold text-xs sm:text-sm shadow-inner">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                       <span>Đã xác nhận</span>
                     </div>
                   ) : (
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-950/60 border border-amber-800/60 text-amber-300 font-medium text-sm">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-950/60 border border-amber-600/40 text-amber-300 font-semibold text-xs sm:text-sm shadow-sm">
                       <Clock className="w-4 h-4 text-amber-400" />
                       <span>Chờ xác nhận</span>
                     </div>
@@ -531,18 +545,18 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
               {/* Booking Code Banner */}
               <div className="pt-6 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-400 uppercase tracking-wider">
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider font-medium">
                     Mã đặt lịch:
                   </span>
-                  <span className="px-3 py-1 rounded-lg bg-zinc-800/90 text-white font-mono text-sm font-semibold tracking-wider border border-zinc-700/60">
+                  <span className="px-4 py-1.5 rounded-full bg-zinc-800/90 text-[#E5C17C] text-xs sm:text-sm font-bold tracking-wider border border-white/10 shadow-sm">
                     {booking.bookingCode || booking.id}
                   </span>
                 </div>
 
                 {booking.confirmedAt && (
-                  <div className="text-xs text-zinc-400">
+                  <div className="text-xs text-zinc-400 font-medium">
                     Xác nhận lúc:{" "}
-                    <span className="text-zinc-300 font-mono">
+                    <span className="text-zinc-300 font-semibold">
                       {typeof booking.confirmedAt === "string"
                         ? booking.confirmedAt
                         : new Date().toLocaleDateString("vi-VN")}
@@ -554,26 +568,28 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
             {/* Split Grid: Details + QR */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
-              {/* Left Column: Details (8 cols) */}
+              {/* Left Column: Details (7 cols) */}
               <div className="md:col-span-7 space-y-6">
-                <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-7 backdrop-blur-sm space-y-5">
-                  <h2 className="text-xs uppercase tracking-widest text-zinc-400 font-bold flex items-center gap-2">
+                <div className="rounded-[28px] sm:rounded-[36px] border border-white/10 bg-zinc-900/60 p-6 sm:p-7 backdrop-blur-xl space-y-5 shadow-2xl">
+                  <h2 className="text-xs uppercase tracking-[0.2em] text-[#B5945B] font-bold flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-[#B5945B]" />
                     <span>Chi Tiết Lịch Chụp</span>
                   </h2>
 
                   <div className="space-y-4">
                     {/* Date & Time */}
-                    <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                      <Calendar className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                      <div className="flex-1">
+                    <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                      <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <div className="text-xs text-zinc-400 font-medium">
                           Ngày chụp & Khung giờ
                         </div>
-                        <div className="text-sm font-semibold text-white mt-0.5">
+                        <div className="text-sm font-bold text-white mt-0.5">
                           {booking.date}
                           {booking.timeSlot && (
-                            <span className="text-zinc-300 font-normal">
+                            <span className="text-zinc-300 font-medium">
                               {" "}
                               ({booking.timeSlot})
                             </span>
@@ -584,20 +600,22 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
                     {/* Location */}
                     {booking.address && (
-                      <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                        <MapPin className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                        <div className="flex-1">
+                      <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                        <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-xs text-zinc-400 font-medium">
                             Địa điểm chụp
                           </div>
-                          <div className="text-sm font-semibold text-white mt-0.5">
+                          <div className="text-sm font-bold text-white mt-0.5">
                             {booking.address}
                           </div>
                           <a
                             href={createGoogleMapsUrl(booking.address)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-[#B5945B] hover:underline mt-1"
+                            className="inline-flex items-center gap-1 text-[11px] text-[#B5945B] hover:underline mt-1 font-medium"
                           >
                             <span>Xem trên Google Maps</span>
                             <ExternalLink className="w-3 h-3" />
@@ -607,13 +625,15 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                     )}
 
                     {/* Class Size */}
-                    <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                      <Users className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                      <div className="flex-1">
+                    <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                      <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
                         <div className="text-xs text-zinc-400 font-medium">
                           Số lượng người chụp
                         </div>
-                        <div className="text-sm font-semibold text-white mt-0.5">
+                        <div className="text-sm font-bold text-white mt-0.5">
                           {booking.classSize || 1} người
                         </div>
                       </div>
@@ -621,13 +641,15 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
                     {/* Contact Phone */}
                     {(booking.phone || booking.instagramOrZalo) && (
-                      <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                        <Phone className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                        <div className="flex-1">
+                      <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                        <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                          <Phone className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-xs text-zinc-400 font-medium">
                             Liên hệ đặt lịch
                           </div>
-                          <div className="text-sm font-semibold text-white mt-0.5">
+                          <div className="text-sm font-bold text-white mt-0.5">
                             {maskPhoneNumber(booking.phone || booking.instagramOrZalo)}
                           </div>
                         </div>
@@ -636,13 +658,15 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
                     {/* Estimated Cost */}
                     {booking.estimatedCost && (
-                      <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                        <Palette className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                        <div className="flex-1">
+                      <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                        <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                          <Palette className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-xs text-zinc-400 font-medium">
                             Chi phí dự toán
                           </div>
-                          <div className="text-sm font-semibold text-[#E5C17C] mt-0.5">
+                          <div className="text-sm font-bold text-[#E5C17C] mt-0.5">
                             {booking.estimatedCost}
                           </div>
                         </div>
@@ -651,13 +675,15 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
                     {/* Custom Request & Notes */}
                     {(booking.notes || booking.customRequest) && (
-                      <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-zinc-950/60 border border-zinc-800/60">
-                        <FileText className="w-4 h-4 text-[#E5C17C] mt-1 shrink-0" />
-                        <div className="flex-1">
+                      <div className="flex items-start gap-3.5 p-4 sm:p-4.5 rounded-[22px] sm:rounded-[26px] bg-zinc-950/70 border border-white/5 hover:border-[#B5945B]/30 transition-all shadow-sm">
+                        <div className="w-9 h-9 rounded-2xl bg-[#B5945B]/15 border border-[#B5945B]/25 flex items-center justify-center shrink-0 text-[#E5C17C] mt-0.5">
+                          <FileText className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <div className="text-xs text-zinc-400 font-medium">
                             Yêu cầu concept & Ghi chú
                           </div>
-                          <div className="text-xs text-zinc-300 mt-1 leading-relaxed whitespace-pre-wrap">
+                          <div className="text-xs text-zinc-300 mt-1 leading-relaxed whitespace-pre-wrap font-normal">
                             {booking.customRequest || booking.notes}
                           </div>
                         </div>
@@ -667,9 +693,9 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 </div>
 
                 {/* Calendar Add Button */}
-                <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="rounded-[24px] sm:rounded-[28px] border border-white/10 bg-zinc-900/60 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
                   <div>
-                    <h3 className="text-sm font-semibold text-white">
+                    <h3 className="text-sm font-bold text-white tracking-tight">
                       Thêm vào Google Calendar
                     </h3>
                     <p className="text-xs text-zinc-400 mt-0.5">
@@ -680,7 +706,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                     href={createGoogleCalendarUrl(booking)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold border border-zinc-700/80 transition-all cursor-pointer shadow-md"
+                    className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold border border-white/10 transition-all cursor-pointer shadow-md active:scale-95"
                   >
                     <Calendar className="w-3.5 h-3.5 text-[#E5C17C]" />
                     <span>Lưu Vào Lịch</span>
@@ -688,13 +714,13 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 </div>
 
                 {/* Photo Editing Progress Shortcut */}
-                <div className="rounded-3xl border border-[#B5945B]/30 bg-gradient-to-r from-zinc-900/90 to-zinc-950/90 p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+                <div className="rounded-[24px] sm:rounded-[28px] border border-[#B5945B]/30 bg-gradient-to-r from-zinc-900/90 via-zinc-900/80 to-zinc-950/90 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="p-1 rounded bg-[#B5945B]/20 text-[#B5945B]">
+                      <span className="p-1 rounded-full bg-[#B5945B]/20 text-[#B5945B]">
                         <Palette className="w-3.5 h-3.5" />
                       </span>
-                      <h3 className="text-sm font-semibold text-white">
+                      <h3 className="text-sm font-bold text-white tracking-tight">
                         Theo Dõi Tiến Độ Hậu Kỳ & Trả File Ảnh
                       </h3>
                     </div>
@@ -712,7 +738,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                         })
                       );
                     }}
-                    className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#DFB779] to-[#CFA25E] text-zinc-950 text-xs font-bold uppercase tracking-wider transition-all hover:brightness-110 cursor-pointer shadow-md active:scale-95"
+                    className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#DFB779] to-[#CFA25E] text-zinc-950 text-xs font-bold uppercase tracking-wider transition-all hover:brightness-110 cursor-pointer shadow-md active:scale-95"
                   >
                     <Camera className="w-4 h-4" />
                     <span>Xem Tiến Độ Ảnh</span>
@@ -722,37 +748,37 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
               {/* Right Column: QR Code & Verification Pass (5 cols) */}
               <div className="md:col-span-5 space-y-6">
-                <div className="rounded-3xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 p-6 sm:p-7 backdrop-blur-xl shadow-2xl text-center">
-                  <div className="text-[11px] font-mono uppercase tracking-widest text-[#B5945B] font-semibold mb-1">
+                <div className="rounded-[28px] sm:rounded-[36px] border border-white/10 bg-gradient-to-b from-zinc-900/95 via-zinc-900/85 to-zinc-950/95 p-6 sm:p-8 backdrop-blur-2xl shadow-2xl text-center">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#B5945B] mb-1.5">
                     VÉ XÁC NHẬN ĐIỆN TỬ
                   </div>
-                  <h3 className="text-base font-serif font-bold text-white mb-5">
+                  <h3 className="text-lg sm:text-xl font-bold text-white mb-6 tracking-tight">
                     Mã QR Check-in Buổi Chụp
                   </h3>
 
                   {/* QR Image Box */}
-                  <div className="p-4 rounded-2xl bg-white max-w-[240px] mx-auto shadow-2xl border-4 border-zinc-800/30 mb-5">
+                  <div className="p-4 sm:p-5 rounded-[28px] sm:rounded-[32px] bg-white max-w-[240px] mx-auto shadow-2xl border-4 border-white/10 mb-6 overflow-hidden flex items-center justify-center">
                     {qrDataUrl ? (
                       <img
                         src={qrDataUrl}
                         alt="Booking QR Code"
-                        className="w-full h-auto aspect-square object-contain block mx-auto"
+                        className="w-full h-auto aspect-square object-contain block mx-auto rounded-xl"
                       />
                     ) : (
-                      <div className="w-48 h-48 flex items-center justify-center bg-zinc-100 rounded-lg text-zinc-400 text-xs">
+                      <div className="w-48 h-48 flex items-center justify-center bg-zinc-100 rounded-2xl text-zinc-400 text-xs font-medium">
                         Đang tạo QR...
                       </div>
                     )}
                   </div>
 
-                  <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
+                  <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
                     Lưu mã QR về điện thoại. Khi đến buổi chụp, bạn chỉ cần mở ảnh QR để ekip Bergh.Ryker quét check-in.
                   </p>
 
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-3">
                     <button
                       onClick={handleDownloadQr}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95"
+                      className="w-full py-3.5 px-6 rounded-full bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95"
                     >
                       <Download className="w-4 h-4" />
                       <span>Tải Mã QR Về Máy</span>
@@ -760,7 +786,7 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
 
                     <button
                       onClick={handleCopyLink}
-                      className="w-full py-2.5 px-4 rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                      className="w-full py-3.5 px-6 rounded-full border border-white/10 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 shadow-sm"
                     >
                       {copiedLink ? (
                         <>
@@ -778,19 +804,19 @@ export const BookingConfirmationPage: React.FC<BookingConfirmationPageProps> = (
                 </div>
 
                 {/* Studio Guarantee & Support Card */}
-                <div className="rounded-3xl border border-zinc-800/80 bg-zinc-900/40 p-5 space-y-3 text-xs text-zinc-400">
-                  <div className="text-zinc-200 font-semibold flex items-center gap-2">
+                <div className="rounded-[24px] sm:rounded-[28px] border border-white/10 bg-zinc-900/50 p-5.5 space-y-3 text-xs text-zinc-400 shadow-md">
+                  <div className="text-zinc-200 font-bold flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-[#B5945B]" />
                     <span>Cam kết chất lượng Bergh.Ryker</span>
                   </div>
                   <p className="leading-relaxed">
                     Hỗ trợ dời lịch miễn phí trước 24 giờ. File ảnh gốc được lưu trữ bảo mật tối thiểu 6 tháng kể từ ngày chụp.
                   </p>
-                  <div className="pt-1 text-[11px] text-zinc-500">
+                  <div className="pt-1 text-[11px] text-zinc-500 font-medium">
                     Hotline/Zalo hỗ trợ trực tiếp:{" "}
                     <a
                       href="tel:0365266204"
-                      className="text-[#E5C17C] font-mono hover:underline"
+                      className="text-[#E5C17C] font-semibold hover:underline"
                     >
                       0365266204
                     </a>

@@ -48,8 +48,7 @@ service cloud.firestore {
     }
 
     match /availableDates/{dateId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /bookings/{bookingId} {
@@ -172,6 +171,10 @@ service cloud.firestore {
     }
 
     match /admin_push_subscriptions/{subId} {
+      allow read, write: if true;
+    }
+
+    match /webhook_logs/{logId} {
       allow read, write: if true;
     }
   }

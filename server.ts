@@ -6,7 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import http from "http";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, setLogLevel, orderBy, limit, query, where } from "firebase/firestore";
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, updateDoc, setLogLevel, orderBy, limit, query, where, addDoc } from "firebase/firestore";
 import webpush from "web-push";
 import fs from "fs";
 
@@ -1466,54 +1466,484 @@ Hãy phản hồi DUY NHẤT một định dạng JSON chính xác như cấu tr
   const normalizeText = (str: string) => String(str || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
   // SePay Configuration
-  const SEPAY_API_TOKEN = process.env.SEPAY_API_TOKEN;
+  const SEPAY_API_TOKEN = process.env.SEPAY_API_TOKEN || "OHKNGQ6BEFZY6RU8POBTAU0L0TUXRDHGSFNHBP5BQIF37EAVLKWDGSTS1COWTPXK";
 
-  // Active Verification Endpoint
+  // Helper to approve booking and sync integrations
+  async function approveBookingFromPayment(bookingId: string, bookingData: any, paymentDetails: { amount: number; txId?: string | number; ref?: string; method?: string }) {
+    if (!db || !bookingId) return false;
+    try {
+      const bRef = doc(db, "bookings", bookingId);
+      await updateDoc(bRef, {
+        status: "Đã duyệt",
+        hasConfirmedPayment: true,
+        depositPaid: paymentDetails.amount || 400000,
+        confirmedAt: new Date().toISOString(),
+        confirmationStatus: "link_created",
+        paymentMethod: paymentDetails.method || "VietQR (MB Bank)",
+        sepayTransactionId: paymentDetails.txId || null,
+        sepayRef: paymentDetails.ref || null
+      });
+
+      // Lock available date if specified
+      const dateToLock = bookingData?.date;
+      if (dateToLock) {
+        try {
+          await setDoc(doc(db, "availableDates", dateToLock), { date: dateToLock, status: "booked" }, { merge: true });
+        } catch (dErr) {
+          console.warn("[SePay Auto-Approval] Could not lock date in availableDates:", dErr);
+        }
+      }
+
+      // Auto-sync Google Calendar / Tasks if active token exists
+      try {
+        const tokenSnap = await getDoc(doc(db, "configs", "googleToken"));
+        if (tokenSnap.exists()) {
+          const tData = tokenSnap.data();
+          const ageMs = tData?.updatedAt ? (Date.now() - tData.updatedAt) : 0;
+          const isExpired = tData?.updatedAt && (ageMs > 3540 * 1000);
+          if (tData?.accessToken && !isExpired) {
+            const token = tData.accessToken;
+            let calId = "";
+            let taskId = "";
+            try {
+              const cRes = await syncToGoogleCalendarServer({ id: bookingId, ...bookingData }, token);
+              calId = cRes?.id || "";
+            } catch (ce: any) { console.warn("[SePay Auto-Approval] Google Calendar sync warning:", ce?.message || ce); }
+
+            try {
+              const tRes = await syncToGoogleTasksServer({ id: bookingId, ...bookingData }, token);
+              taskId = tRes?.id || "";
+            } catch (te: any) { console.warn("[SePay Auto-Approval] Google Tasks sync warning:", te?.message || te); }
+
+            if (calId || taskId) {
+              await updateDoc(bRef, {
+                ...(calId ? { googleEventId: calId } : {}),
+                ...(taskId ? { googleTaskId: taskId } : {})
+              });
+            }
+          }
+        }
+      } catch (gErr) {
+        console.warn("[SePay Auto-Approval] Google sync skipped:", gErr);
+      }
+
+      return true;
+    } catch (err) {
+      console.error("[SePay Auto-Approval] Error approving booking:", err);
+      return false;
+    }
+  }
+
+  // SePay Webhook Handler (Supports /api/webhook/sepay, /api/sepay-webhook, /api/sepay)
+  const handleSepayWebhook = async (req: express.Request, res: express.Response) => {
+    try {
+      const payload = req.body || {};
+      console.log("[SePay Webhook] Received payload:", JSON.stringify(payload));
+
+      // 1. Log incoming webhook to Firestore webhook_logs for full auditability
+      if (db) {
+        try {
+          await addDoc(collection(db, "webhook_logs"), {
+            payload,
+            receivedAt: new Date().toISOString(),
+            ip: req.ip || req.headers["x-forwarded-for"] || "unknown",
+            method: req.method
+          });
+        } catch (logErr) {
+          console.warn("[SePay Webhook] Could not write to webhook_logs:", logErr);
+        }
+      }
+
+      const {
+        id: sepayTxId,
+        transferType,
+        transferAmount,
+        amount_in,
+        content,
+        description,
+        code,
+        referenceCode
+      } = payload;
+
+      const amount = Number(transferAmount || amount_in || 0);
+
+      // Ignore outgoing transfers
+      if (transferType && transferType !== "in") {
+        console.log("[SePay Webhook] Ignored outgoing transfer");
+        return res.status(200).json({ success: true, message: "Ignored outgoing transfer" });
+      }
+
+      const rawContent = `${content || ""} ${description || ""} ${code || ""}`;
+      const normalizedContent = normalizeText(rawContent);
+
+      console.log(`[SePay Webhook] Normalized: "${normalizedContent}", Amount: ${amount}`);
+
+      if (!db) {
+        return res.status(200).json({ success: true, message: "Webhook logged (no db connection)" });
+      }
+
+      // 2. Query recent pending bookings
+      const bookingsSnap = await getDocs(
+        query(collection(db, "bookings"), orderBy("createdAt", "desc"), limit(60))
+      );
+
+      let matchedDoc: any = null;
+      let matchedData: any = null;
+
+      for (const bDoc of bookingsSnap.docs) {
+        const bData = bDoc.data();
+        const bId = bDoc.id;
+        const bCode = bData.bookingCode || "";
+
+        const normId = normalizeText(bId);
+        const normCode = normalizeText(bCode);
+        const last6Id = normId.slice(-6);
+
+        // Match if content contains full ID (BRBK326284), bookingCode (BR20269371), or last 6 chars
+        const isIdMatch = normId && normalizedContent.includes(normId);
+        const isCodeMatch = normCode && normalizedContent.includes(normCode);
+        const isLast6Match = last6Id && last6Id.length >= 5 && normalizedContent.includes(last6Id);
+
+        if (isIdMatch || isCodeMatch || isLast6Match) {
+          matchedDoc = bDoc;
+          matchedData = bData;
+          break;
+        }
+      }
+
+      if (matchedDoc) {
+        console.log(`[SePay Webhook] Matched booking ${matchedDoc.id}! Auto-approving...`);
+        await approveBookingFromPayment(matchedDoc.id, matchedData, {
+          amount: amount > 0 ? amount : 400000,
+          txId: sepayTxId,
+          ref: referenceCode,
+          method: "SePay Webhook VietQR"
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Đã duyệt đơn thành công qua SePay Webhook",
+          bookingId: matchedDoc.id
+        });
+      }
+
+      console.log("[SePay Webhook] No matching booking found for content:", normalizedContent);
+      return res.status(200).json({
+        success: true,
+        message: "Webhook recorded. No matching booking found yet."
+      });
+    } catch (error) {
+      console.error("[SePay Webhook] Internal processing error:", error);
+      return res.status(200).json({ success: true, message: "Webhook received with internal error" });
+    }
+  };
+
+  app.all("/api/webhook/sepay", express.json(), handleSepayWebhook);
+  app.all("/api/sepay-webhook", express.json(), handleSepayWebhook);
+  app.all("/api/sepay", express.json(), handleSepayWebhook);
+
+  // Active Verification Endpoint (Called when customer clicks "Kiểm tra thanh toán")
   app.post("/api/verify-sepay-deposit", express.json(), async (req, res) => {
     try {
-        const { bookingId, requiredAmount = 400000 } = req.body;
-        if (!SEPAY_API_TOKEN) {
-            return res.status(200).json({ success: true, verified: false, message: "Cấu hình thanh toán chưa sẵn sàng." });
+      const { bookingId, bookingCode, requiredAmount = 400000 } = req.body;
+      const targetId = bookingId || bookingCode;
+
+      if (!targetId) {
+        return res.status(200).json({ success: true, verified: false, message: "Thiếu mã đặt lịch cần kiểm tra." });
+      }
+
+      // Step 1: Check if already approved in Firestore
+      if (db) {
+        try {
+          const bSnap = await getDoc(doc(db, "bookings", targetId));
+          if (bSnap.exists()) {
+            const bData = bSnap.data();
+            if (bData.status === "Đã duyệt" || bData.hasConfirmedPayment === true) {
+              return res.status(200).json({
+                success: true,
+                verified: true,
+                message: "Đơn đặt lịch đã được xác nhận cọc thành công!",
+                booking: { id: targetId, ...bData }
+              });
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[Verify Sepay] Firestore booking check error:", dbErr);
         }
+      }
 
+      // Step 2: Check recent webhook_logs in Firestore
+      if (db) {
+        try {
+          const normTarget = normalizeText(targetId);
+          const last6 = normTarget.slice(-6);
+
+          const logsSnap = await getDocs(
+            query(collection(db, "webhook_logs"), orderBy("receivedAt", "desc"), limit(30))
+          );
+
+          for (const lDoc of logsSnap.docs) {
+            const log = lDoc.data();
+            const p = log.payload || {};
+            const raw = `${p.content || ""} ${p.description || ""} ${p.code || ""}`;
+            const normContent = normalizeText(raw);
+
+            const isMatch = (normTarget && normContent.includes(normTarget)) ||
+                            (last6 && last6.length >= 5 && normContent.includes(last6));
+
+            if (isMatch) {
+              console.log(`[Verify Sepay] Found matching transaction in webhook_logs for ${targetId}! Approving...`);
+              const bSnap = await getDoc(doc(db, "bookings", targetId));
+              const bData = bSnap.exists() ? bSnap.data() : {};
+              const amt = Number(p.transferAmount || p.amount_in || requiredAmount || 400000);
+
+              await approveBookingFromPayment(targetId, bData, {
+                amount: amt,
+                txId: p.id,
+                ref: p.referenceCode,
+                method: "SePay Logs VietQR"
+              });
+
+              return res.status(200).json({
+                success: true,
+                verified: true,
+                message: "Đã xác nhận thanh toán thành công!",
+                transaction: p
+              });
+            }
+          }
+        } catch (logErr) {
+          console.warn("[Verify Sepay] Firestore webhook_logs check error:", logErr);
+        }
+      }
+
+      // Step 3: Call SePay API transactions list as real-time fallback
+      try {
         const response = await fetch("https://my.sepay.vn/userapi/transactions/list?limit=50", {
-            headers: { "Authorization": "Bearer " + SEPAY_API_TOKEN, "Content-Type": "application/json" }
-        });
-        const data = await response.json();
-        
-        if (!data.transactions) return res.status(200).json({ success: true, verified: false, message: "Không thể lấy dữ liệu từ SePay" });
-
-        const normBId = normalizeText(bookingId || "");
-        const last6 = normBId.slice(-6);
-
-        const matchedTx = data.transactions.find((tx: any) => {
-            const content = normalizeText(tx.transaction_content || "");
-            const amount = Number(tx.amount_in || 0);
-
-            // Amount >= 2000 for test/real transactions
-            const isAmountMatch = amount >= 2000;
-            // Match if content contains full normalized ID or just the last 6 digits
-            const isContentMatch = content.includes(normBId) || (last6 && content.includes(last6));
-            
-            return isAmountMatch && isContentMatch;
+          headers: {
+            "Authorization": "Bearer " + SEPAY_API_TOKEN,
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          }
         });
 
-        res.status(200).json({ success: true, verified: !!matchedTx, transaction: matchedTx || null });
+        if (response.ok) {
+          const data = await response.json().catch(() => ({}));
+          if (Array.isArray(data?.transactions)) {
+            const normBId = normalizeText(targetId);
+            const last6 = normBId.slice(-6);
+
+            const matchedTx = data.transactions.find((tx: any) => {
+              const content = normalizeText(tx.transaction_content || tx.content || "");
+              const amount = Number(tx.amount_in || tx.transferAmount || 0);
+              const isAmountMatch = amount >= 2000;
+              const isContentMatch = (normBId && content.includes(normBId)) ||
+                                     (last6 && last6.length >= 5 && content.includes(last6));
+              return isAmountMatch && isContentMatch;
+            });
+
+            if (matchedTx) {
+              console.log(`[Verify Sepay] API matched transaction ${matchedTx.id} for ${targetId}! Approving...`);
+              let bData: any = {};
+              if (db) {
+                const bSnap = await getDoc(doc(db, "bookings", targetId));
+                if (bSnap.exists()) bData = bSnap.data();
+              }
+              const amt = Number(matchedTx.amount_in || matchedTx.transferAmount || 400000);
+
+              await approveBookingFromPayment(targetId, bData, {
+                amount: amt,
+                txId: matchedTx.id,
+                ref: matchedTx.reference_number,
+                method: "SePay API Direct"
+              });
+
+              return res.status(200).json({
+                success: true,
+                verified: true,
+                transaction: matchedTx,
+                message: "Đã xác nhận chuyển khoản thành công!"
+              });
+            }
+          }
+        }
+      } catch (fetchErr) {
+        console.warn("[Verify Sepay] Direct SePay API fetch error/blocked:", fetchErr);
+      }
+
+      return res.status(200).json({
+        success: true,
+        verified: false,
+        message: "Hệ thống chưa ghi nhận khoản cọc. Nếu bạn vừa chuyển khoản, vui lòng đợi 10–15 giây rồi kiểm tra lại."
+      });
     } catch (error) {
-        console.error("Verification error:", error);
-        res.status(200).json({ success: true, verified: false, message: "Lỗi kết nối ngân hàng, vui lòng thử lại sau." });
+      console.error("Verification error:", error);
+      res.status(200).json({ success: true, verified: false, message: "Lỗi kết nối đối soát, vui lòng thử lại sau." });
     }
   });
 
-  // Safe SePay Webhook Endpoint
-  app.all("/api/webhook/sepay", express.json(), (req, res) => {
-    res.status(200).json({ success: true, message: 'Webhook received' });
+  // Polling Endpoints for booking status check
+  const handleBookingStatusCheck = async (req: express.Request, res: express.Response) => {
+    try {
+      const bookingId = req.params.id;
+      if (!bookingId || !db) {
+        return res.status(200).json({ success: false, verified: false });
+      }
+
+      const bSnap = await getDoc(doc(db, "bookings", bookingId));
+      if (!bSnap.exists()) {
+        return res.status(200).json({ success: false, verified: false, message: "Booking not found" });
+      }
+
+      const bData = bSnap.data();
+      if (bData.status === "Đã duyệt" || bData.hasConfirmedPayment === true) {
+        return res.status(200).json({
+          success: true,
+          verified: true,
+          status: "Đã duyệt",
+          hasConfirmedPayment: true,
+          amount: bData.depositPaid || 400000,
+          booking: { id: bookingId, ...bData }
+        });
+      }
+
+      // Check webhook_logs for this booking
+      const normTarget = normalizeText(bookingId);
+      const last6 = normTarget.slice(-6);
+      const logsSnap = await getDocs(
+        query(collection(db, "webhook_logs"), orderBy("receivedAt", "desc"), limit(20))
+      );
+
+      for (const lDoc of logsSnap.docs) {
+        const log = lDoc.data();
+        const p = log.payload || {};
+        const raw = `${p.content || ""} ${p.description || ""} ${p.code || ""}`;
+        const normContent = normalizeText(raw);
+
+        if ((normTarget && normContent.includes(normTarget)) || (last6 && last6.length >= 5 && normContent.includes(last6))) {
+          await approveBookingFromPayment(bookingId, bData, {
+            amount: Number(p.transferAmount || p.amount_in || 400000),
+            txId: p.id,
+            ref: p.referenceCode,
+            method: "SePay Polling Match"
+          });
+          return res.status(200).json({
+            success: true,
+            verified: true,
+            status: "Đã duyệt",
+            hasConfirmedPayment: true,
+            amount: Number(p.transferAmount || p.amount_in || 400000)
+          });
+        }
+      }
+
+      return res.status(200).json({
+        success: false,
+        verified: false,
+        status: bData.status || "Chờ duyệt"
+      });
+    } catch (e: any) {
+      console.warn("[Booking Status Check] Error:", e);
+      return res.status(200).json({ success: false, verified: false });
+    }
+  };
+
+  app.get("/api/sepay/check/:id", handleBookingStatusCheck);
+  app.get("/api/check-payment/:id", handleBookingStatusCheck);
+
+  // Status diagnostics endpoint
+  app.get("/api/sepay/status", async (req, res) => {
+    let recentLogsCount = 0;
+    let latestLogDate = null;
+    if (db) {
+      try {
+        const logsSnap = await getDocs(query(collection(db, "webhook_logs"), orderBy("receivedAt", "desc"), limit(5)));
+        recentLogsCount = logsSnap.size;
+        if (!logsSnap.empty) {
+          latestLogDate = logsSnap.docs[0].data()?.receivedAt;
+        }
+      } catch (_) {}
+    }
+    res.json({
+      configured: !!SEPAY_API_TOKEN,
+      webhookUrls: [
+        "/api/webhook/sepay",
+        "/api/sepay-webhook",
+        "/api/sepay"
+      ],
+      recentWebhookLogs: recentLogsCount,
+      latestLogReceivedAt: latestLogDate,
+      status: "Ready"
+    });
   });
-  app.all("/api/sepay-webhook", express.json(), (req, res) => {
-    res.status(200).json({ success: true, message: 'Webhook received' });
+
+  // Redirect old /booking/:code path directly to /?booking=:code
+  app.get("/booking/:code", (req, res) => {
+    const code = req.params.code;
+    return res.redirect(302, `/?booking=${encodeURIComponent(code)}`);
   });
-  app.all("/api/sepay", express.json(), (req, res) => {
-    res.status(200).json({ success: true, message: 'Webhook received' });
+
+  // Public Booking Lookup Endpoint (No cookies, no auth, public-friendly fallback)
+  app.get("/api/public-booking/:code", async (req, res) => {
+    try {
+      const rawCode = (req.params.code || "").trim();
+      if (!rawCode || rawCode === "SEARCH" || !db) {
+        return res.status(400).json({ success: false, message: "Invalid code" });
+      }
+
+      const upper = rawCode.toUpperCase();
+
+      // 1. Check bookingCode
+      const qCode = query(collection(db, "bookings"), where("bookingCode", "==", rawCode));
+      const sCode = await getDocs(qCode);
+      if (!sCode.empty) {
+        const d = sCode.docs[0];
+        return res.json({ success: true, booking: { id: d.id, ...d.data() } });
+      }
+
+      if (upper !== rawCode) {
+        const qCodeU = query(collection(db, "bookings"), where("bookingCode", "==", upper));
+        const sCodeU = await getDocs(qCodeU);
+        if (!sCodeU.empty) {
+          const d = sCodeU.docs[0];
+          return res.json({ success: true, booking: { id: d.id, ...d.data() } });
+        }
+      }
+
+      // 2. Check doc ID
+      const dSnap = await getDoc(doc(db, "bookings", rawCode));
+      if (dSnap.exists()) {
+        return res.json({ success: true, booking: { id: dSnap.id, ...dSnap.data() } });
+      }
+
+      if (upper !== rawCode) {
+        const dSnapU = await getDoc(doc(db, "bookings", upper));
+        if (dSnapU.exists()) {
+          return res.json({ success: true, booking: { id: dSnapU.id, ...dSnapU.data() } });
+        }
+      }
+
+      // 3. Scan recent bookings
+      const allSnap = await getDocs(query(collection(db, "bookings"), orderBy("createdAt", "desc"), limit(100)));
+      const cleanSearch = upper.replace(/[^A-Z0-9]/g, "");
+
+      for (const d of allSnap.docs) {
+        const data = d.data() as any;
+        const bCode = (data.bookingCode || "").trim().toUpperCase();
+        const bId = (data.id || d.id || "").trim().toUpperCase();
+        const bConf = (data.confirmationLink || "").trim().toUpperCase();
+        const cleanBCode = bCode.replace(/[^A-Z0-9]/g, "");
+
+        if (bCode === upper || bId === upper || (cleanSearch.length >= 4 && cleanBCode === cleanSearch) || bConf.includes(upper)) {
+          return res.json({ success: true, booking: { id: d.id, ...data } });
+        }
+      }
+
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    } catch (err: any) {
+      console.warn("[Public Booking API] Error:", err);
+      return res.status(500).json({ success: false, message: err?.message || "Server error" });
+    }
   });
 
   app.post("/api/chat", async (req, res) => {

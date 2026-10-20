@@ -31,6 +31,10 @@ interface AvailabilityCalendarProps {
   onSelectDate: (dateStr: string) => void;
   selectedDate?: string;
   isAdminMode?: boolean;
+  initialAvailableDates?: Record<
+    string,
+    { status: "available" | "booked" | "unavailable"; reason?: string | null }
+  >;
 }
 
 export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
@@ -39,11 +43,12 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
   onSelectDate,
   selectedDate,
   isAdminMode = false,
+  initialAvailableDates,
 }) => {
-  // Collection of available dates from Firestore
+  // Collection of available dates from Firestore - prefilled from props for 0ms instant display
   const [availableDates, setAvailableDates] = useState<
     Record<string, { status: "available" | "booked" | "unavailable"; reason?: string | null }>
-  >({});
+  >(() => initialAvailableDates || {});
   const [currentDate, setCurrentDate] = useState(() => {
     if (selectedDate) {
       const parts = selectedDate.split("-");
@@ -54,7 +59,7 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
     return new Date();
   });
   const [tempSelectedDate, setTempSelectedDate] = useState<string>(selectedDate || "");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // ALWAYS false for zero-delay instant render
 
   // Sync tempSelectedDate when selectedDate changes or modal opens
   useEffect(() => {
@@ -115,8 +120,6 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
     const safetyTimer = setTimeout(() => { setIsLoading(false); }, 5000);
     return () => { unsubscribe(); clearTimeout(safetyTimer); };
   }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -252,11 +255,14 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
     return `${dayNames[d.getDay()]}, ${parts[2]}/${parts[1]}/${parts[0]}`;
   }, [tempSelectedDate]);
 
+  if (!isOpen) return null;
+
   return (
     <AnimatePresence>
       <div
         key="availability-calendar-modal"
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm font-sans touch-action-pan-y"
+        className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm font-sans touch-none"
+        style={{ touchAction: "pan-y" }}
       >
         {/* Backdrop click to close */}
         <motion.div
@@ -367,14 +373,14 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
             ))}
           </div>
 
-          {/* DAYS GRID */}
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-8 space-y-2">
-              <div className="w-6 h-6 border-2 border-t-[#B5945B] border-white/10 rounded-full animate-spin" />
-              <span className="text-xs text-zinc-300 font-medium">Đang tải lịch...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+          {/* DAYS GRID (Always render immediately) */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5 relative">
+            {isLoading && (
+               <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 backdrop-blur-[2px] rounded-2xl pointer-events-none">
+                 <div className="w-6 h-6 border-2 border-t-[#B5945B] border-white/10 rounded-full animate-spin" />
+               </div>
+            )}
+
               {gridSlots.map((slot, idx) => {
                 if (!slot) {
                   return (
@@ -465,7 +471,6 @@ export const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
                 );
               })}
             </div>
-          )}
 
           {/* COMPACT LEGEND BAR */}
           <div className="flex items-center justify-center gap-4 pt-2 pb-1 border-t border-white/[0.06] text-xs text-zinc-300">

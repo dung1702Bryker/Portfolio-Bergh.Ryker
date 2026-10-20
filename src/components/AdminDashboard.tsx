@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Calendar,
+  CalendarDays,
   Trash2,
   Check,
   X,
   RefreshCw,
   Sliders,
+  SlidersHorizontal,
   Palette,
   ExternalLink,
   Sparkles,
@@ -14,6 +16,11 @@ import {
   FileSpreadsheet,
   MessageSquare,
   Clock,
+  ArrowLeftRight,
+  UserPlus,
+  BarChart3,
+  Settings,
+  Plus,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
@@ -27,7 +34,6 @@ import { AdminPhotoProgressModal } from "./AdminPhotoProgressModal";
 import { BookingConfirmationQrSection } from "./admin/BookingConfirmationQrSection";
 import { AdminCreateBookingModal } from "./admin/AdminCreateBookingModal";
 import { AdminBatchImportModal } from "./admin/AdminBatchImportModal";
-import { BookingDiagnosticPanel } from "./admin/BookingDiagnosticPanel";
 
 interface AdminDashboardProps {
   isAdminMode: boolean;
@@ -90,6 +96,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isBatchImportModalOpen, setIsBatchImportModalOpen] = useState(false);
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
 
   const handleSavePhotoProgress = async (bookingId: string, progressData: Partial<Booking>) => {
     try {
@@ -224,143 +233,233 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
+  const handleBatchSyncCalendar = async () => {
+    let activeToken = googleToken ?? (await getAccessToken());
+    if (!activeToken) {
+      triggerConfirm(
+        "Yêu cầu cấp quyền Google Calendar",
+        "Hệ thống Bergh.Ryker cần liên kết Google Calendar của bạn để tự động đẩy và đồng bộ lịch trình. Vui lòng chọn Xác nhận để liên kết với tài khoản Google admin của bạn.",
+        async () => {
+          try {
+            const signinRes = await googleSignIn();
+            if (signinRes && signinRes.accessToken) {
+              setGoogleToken(signinRes.accessToken);
+              await onProceedWithBatchSync(signinRes.accessToken);
+            } else {
+              showToast("Xác thực Google thất bại.", "error");
+            }
+          } catch (err: any) {
+            showToast("Đăng nhập Google thất bại: " + err.message, "error");
+          }
+        },
+        () => {
+          showToast(
+            "Bị từ chối đồng bộ Google Calendar do không được duyệt quyền.",
+            "error",
+          );
+        },
+        "Xác thực",
+        "Hủy",
+      );
+    } else {
+      await onProceedWithBatchSync(activeToken);
+    }
+  };
+
+  const handleTwoWaySync = async () => {
+    let activeToken = googleToken;
+    if (!activeToken) {
+      triggerConfirm(
+        "Yêu cầu cấp quyền Google",
+        "Hệ thống cần liên kết Google Calendar/Tasks của bạn để kiểm tra và tiến hành đồng bộ 2 chiều.",
+        async () => {
+          try {
+            const signinRes = await googleSignIn();
+            if (signinRes && signinRes.accessToken) {
+              setGoogleToken(signinRes.accessToken);
+              await onPerformTwoWaySync(signinRes.accessToken);
+            } else {
+              showToast("Xác thực Google thất bại.", "error");
+            }
+          } catch (err: any) {
+            showToast(
+              "Đăng nhập Google thất bại: " + err.message,
+              "error",
+            );
+          }
+        },
+        undefined,
+        "Xác thực",
+        "Hủy",
+      );
+    } else {
+      await onPerformTwoWaySync(activeToken);
+    }
+  };
+
+  const handleOpenIntroEditor = () => {
+    window.dispatchEvent(new CustomEvent("openIntroEditor"));
+  };
+
   if (!isAdminMode) return null;
 
   return (
-    <div className="lg:col-span-5 flex flex-col gap-5 h-full">
-      {/* MINIMALIST ICON-ONLY ADMIN DOCK WITH TOOLTIPS */}
-      <div className="flex items-center justify-between bg-zinc-950/80 liquid-glass p-1.5 rounded-2xl border border-white/10 shadow-2xl relative w-full mb-2 z-20 shrink-0 gap-1.5">
-        {/* Navigation Tabs (Icon-only with Tooltip) */}
-        <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
-          {/* 1. Lịch trình */}
+    <div className="lg:col-span-5 flex flex-col gap-4 h-full">
+      {/* UNIFIED FLOATING DOCK */}
+      <div className="w-full flex justify-center mb-3 sticky top-2 z-40 !overflow-visible">
+        <div className="relative !overflow-visible inline-flex items-center gap-1.5 sm:gap-2.5 p-1.5 sm:p-2 rounded-full border border-white/20 bg-zinc-950/90 backdrop-blur-2xl shadow-[0_12px_36px_rgba(0,0,0,0.65)]">
+
+          {/* 1. Quản lý Lịch / Booking */}
           <div className="relative group">
             <button
               type="button"
               onClick={() => setAdminActiveTab("schedule")}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
                 adminActiveTab === "schedule"
-                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  ? "bg-gradient-to-br from-[#DFB779] to-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
                   : "text-zinc-400 hover:text-white hover:bg-white/10"
               }`}
-              aria-label="Lịch trình đặt lịch & Khách hàng"
+              aria-label="Quản lý Lịch / Booking"
             >
-              <Calendar className="w-4 h-4" />
+              <Calendar className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Lịch trình đặt lịch
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Quản lý Lịch / Booking
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
 
-          {/* 2. Tin nhắn */}
+          {/* 2. Tin nhắn / Chat */}
           <div className="relative group">
             <button
               type="button"
               onClick={() => setAdminActiveTab("chat")}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
                 adminActiveTab === "chat"
-                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  ? "bg-gradient-to-br from-[#DFB779] to-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
                   : "text-zinc-400 hover:text-white hover:bg-white/10"
               }`}
-              aria-label="Tin nhắn trực tuyến (Live Chat)"
+              aria-label="Tin nhắn / Chat"
             >
-              <MessageSquare className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Tin nhắn trực tiếp
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Tin nhắn / Chat
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
 
-          {/* 3. Ca làm */}
-          <div className="relative group">
-            <button
-              type="button"
-              onClick={() => setAdminActiveTab("school_sync")}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                adminActiveTab === "school_sync"
-                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
-                  : "text-zinc-400 hover:text-white hover:bg-white/10"
-              }`}
-              aria-label="Lịch học & Ca làm FAP"
-            >
-              <Clock className="w-4 h-4" />
-            </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Ca làm & Lịch học
-            </div>
-          </div>
-
-          {/* 4. Slot */}
+          {/* 3. Cấu hình Slot / Thời gian */}
           <div className="relative group">
             <button
               type="button"
               onClick={() => setAdminActiveTab("availability_config")}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
                 adminActiveTab === "availability_config"
-                  ? "bg-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  ? "bg-gradient-to-br from-[#DFB779] to-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
                   : "text-zinc-400 hover:text-white hover:bg-white/10"
               }`}
-              aria-label="Quản lý slot & Khả dụng"
+              aria-label="Cấu hình Slot / Thời gian"
             >
-              <Sliders className="w-4 h-4" />
+              <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Cấu hình Slot & Ngày
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Cấu hình Slot / Thời gian
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
-        </div>
 
-        {/* Quick Action Icons with Tooltips */}
-        <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
-          {/* Thêm booking */}
+          {/* 4. Thêm mới Booking */}
           <div className="relative group">
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
-              className="w-9 h-9 rounded-lg bg-[#B5945B]/20 hover:bg-[#B5945B] text-[#E5C17C] hover:text-zinc-950 border border-[#B5945B]/30 transition-all flex items-center justify-center cursor-pointer shadow-sm"
-              aria-label="Tạo đơn đặt lịch mới"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#B5945B]/20 hover:bg-[#B5945B] text-[#E5C17C] hover:text-zinc-950 border border-[#B5945B]/40 transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+              aria-label="Thêm mới Booking"
             >
-              <PlusCircle className="w-4 h-4" />
+              <Plus className="w-4 h-4 sm:w-4.5 sm:h-4.5 font-bold" />
             </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Tạo đơn đặt lịch mới
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Thêm mới Booking
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
 
-          {/* Mở lịch */}
+          {/* 5. Đồng bộ hệ thống & 2 chiều */}
           <div className="relative group">
             <button
               type="button"
-              onClick={onOpenCalendar}
-              className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/15 text-zinc-300 hover:text-white border border-white/10 transition-all flex items-center justify-center cursor-pointer"
-              aria-label="Mở lịch biểu"
+              onClick={() => setIsSyncModalOpen(true)}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                isSyncModalOpen || isSyncingSheets
+                  ? "bg-blue-500/25 text-blue-300 border border-blue-500/40 shadow-sm"
+                  : "text-zinc-400 hover:text-blue-300 hover:bg-blue-500/10"
+              }`}
+              aria-label="Đồng bộ hệ thống & 2 chiều"
             >
-              <Calendar className="w-4 h-4" />
+              <RefreshCw className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isSyncingSheets ? "animate-spin text-blue-400" : ""}`} />
             </button>
-            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Mở lịch biểu
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Đồng bộ hệ thống & 2 chiều
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
 
-          {/* Đồng bộ Google Sheets */}
+          {/* 6. Thống kê */}
           <div className="relative group">
             <button
               type="button"
-              onClick={handleSyncAllToGoogleSheet}
-              disabled={isSyncingSheets}
-              className="w-9 h-9 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
-              aria-label="Đồng bộ Google Sheets"
+              onClick={() => setIsStatsModalOpen(true)}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                isStatsModalOpen
+                  ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm"
+                  : "text-zinc-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+              }`}
+              aria-label="Thống kê"
             >
-              <FileSpreadsheet className={`w-4 h-4 ${isSyncingSheets ? "animate-spin" : ""}`} />
+              <BarChart3 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
-            <div className="absolute top-full mt-2 right-0 hidden group-hover:flex items-center px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/10 rounded-lg shadow-2xl whitespace-nowrap z-50 pointer-events-none backdrop-blur-md">
-              Đồng bộ Google Sheets
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Thống kê
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
+            </div>
+          </div>
+
+          {/* 7. Cài đặt */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                isSettingsModalOpen
+                  ? "bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-sm"
+                  : "text-zinc-400 hover:text-amber-300 hover:bg-amber-500/10"
+              }`}
+              aria-label="Cài đặt"
+            >
+              <Settings className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                Cài đặt & Tiện ích
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
             </div>
           </div>
         </div>
       </div>
-
-      {/* HIDDEN DIAGNOSTIC PANEL FOR PUBLIC BOOKING BASE URL & RECENT BOOKINGS */}
-      <BookingDiagnosticPanel showToast={showToast} />
 
       {/* TAB CONTENT: CHAT */}
       {adminActiveTab === "chat" &&
@@ -401,203 +500,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className="bg-zinc-950 border border-white/5 p-5 rounded-2xl relative min-h-[160px] flex flex-col justify-between shadow-sm"
             >
               <div>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 pb-3 border-b border-white/5 gap-3">
-                  <div className="flex flex-col">
-                    <span className="font-sans text-[11px] text-[#B5945B] font-medium uppercase tracking-wide flex items-center gap-2">
-                      Lịch trình{" "}
-                      <span className="bg-white/10 px-1.5 py-0.5 rounded text-[11px]">
-                        {displayedBookings.length}
-                      </span>
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-sans text-xs text-[#E5C17C] font-bold uppercase tracking-wider flex items-center gap-2">
+                      Lịch trình
                     </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={() => setIsCreateModalOpen(true)}
-                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#B5945B] hover:bg-[#a3844e] text-zinc-950 font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shadow-[#B5945B]/15"
-                        title="Nhập thông tin khách từ Facebook Messenger và tự động sinh mã QR xác nhận"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        + Nhập Booking
-                      </button>
-                    )}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={onOpenCalendar}
-                        className="text-[12px] uppercase tracking-wide px-2 py-1 rounded bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-1 cursor-pointer"
-                      >
-                        <Calendar className="w-3 h-3" />
-                        Lịch
-                      </button>
-                    )}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={() => setAdminActiveTab("availability_config")}
-                        className="text-[12px] uppercase tracking-wide px-2 py-1 rounded bg-zinc-900 border border-[#B5945B]/30 text-[#B5945B] hover:text-white hover:bg-white/5 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Cấu hình trạng thái khả dụng cho từng slot"
-                      >
-                        <Sliders className="w-3 h-3" />
-                        Cấu hình Slot
-                      </button>
-                    )}
-                    {/* Sync Button */}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          let activeToken =
-                            googleToken ?? (await getAccessToken());
-                          if (!activeToken) {
-                            triggerConfirm(
-                              "Yêu cầu cấp quyền Google Calendar",
-                              "Hệ thống Bergh.Ryker cần liên kết Google Calendar của bạn để tự động đẩy và đồng bộ lịch trình. Vui lòng chọn Xác nhận để liên kết với tài khoản Google admin của bạn.",
-                              async () => {
-                                try {
-                                  const signinRes = await googleSignIn();
-                                  if (
-                                    signinRes &&
-                                    signinRes.accessToken
-                                  ) {
-                                    setGoogleToken(signinRes.accessToken);
-                                    await onProceedWithBatchSync(
-                                      signinRes.accessToken,
-                                    );
-                                  } else {
-                                    showToast(
-                                      "Xác thực Google thất bại.",
-                                      "error",
-                                    );
-                                  }
-                                } catch (err: any) {
-                                  showToast(
-                                    "Đăng nhập Google thất bại:" +
-                                      err.message,
-                                    "error",
-                                  );
-                                }
-                              },
-                              () => {
-                                showToast(
-                                  "Bị từ chối đồng bộ Google Calendar do không được duyệt quyền.",
-                                  "error",
-                                );
-                              },
-                              "Xác thực",
-                              "Hủy",
-                            );
-                          } else {
-                            await onProceedWithBatchSync(activeToken);
-                          }
-                        }}
-                        className="text-[12px] uppercase tracking-wide px-2 py-1 rounded bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Đồng bộ Google Calendar"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        Đồng bộ
-                      </button>
-                    )}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          let activeToken = googleToken;
-                          if (!activeToken) {
-                            triggerConfirm(
-                              "Yêu cầu cấp quyền Google",
-                              "Hệ thống cần liên kết Google Calendar/Tasks của bạn để kiểm tra và tiến hành đồng bộ 2 chiều.",
-                              async () => {
-                                try {
-                                  const signinRes = await googleSignIn();
-                                  if (
-                                    signinRes &&
-                                    signinRes.accessToken
-                                  ) {
-                                    setGoogleToken(signinRes.accessToken);
-                                    await onPerformTwoWaySync(
-                                      signinRes.accessToken,
-                                    );
-                                  } else {
-                                    showToast(
-                                      "Xác thực Google thất bại.",
-                                      "error",
-                                    );
-                                  }
-                                } catch (err: any) {
-                                  showToast(
-                                    "Đăng nhập Google thất bại: " +
-                                      err.message,
-                                    "error",
-                                  );
-                                }
-                              },
-                              undefined,
-                              "Xác thực",
-                              "Hủy",
-                            );
-                          } else {
-                            await onPerformTwoWaySync(activeToken);
-                          }
-                        }}
-                        className="text-[12px] uppercase tracking-wide px-2 py-1 rounded bg-[#B5945B]/10 border border-[#B5945B]/30 text-[#B5945B] hover:bg-[#B5945B]/20 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Kiểm tra 2 chiều từ Google"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                        Kiểm tra 2 chiều
-                      </button>
-                    )}
-                    {/* Google Sheets Sync All Button */}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        disabled={isSyncingSheets}
-                        onClick={handleSyncAllToGoogleSheet}
-                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#1F3A5F] hover:bg-[#2F5D8C] text-white border border-[#2F6FED]/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
-                        title="Đẩy toàn bộ danh sách lịch trình khách hàng lên Google Sheet (tab KH_Data)"
-                      >
-                        <FileSpreadsheet className={`w-3.5 h-3.5 text-[#E5C17C] ${isSyncingSheets ? "animate-spin" : ""}`} />
-                        <span>{isSyncingSheets ? "Đang đẩy Sheet..." : "Đẩy lên Sheet"}</span>
-                      </button>
-                    )}
-                    {/* Import / Sync Old Customers Modal Button */}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={() => setIsBatchImportModalOpen(true)}
-                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#B5945B]/15 hover:bg-[#B5945B]/30 text-[#E5C17C] border border-[#B5945B]/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                        title="Quét Google Calendar hoặc Dán Excel để nhập & bổ sung SĐT khách hàng cũ lên Sheet"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C]" />
-                        <span>Nhập Khách Cũ</span>
-                      </button>
-                    )}
-                    {/* Intro Editor Trigger Button */}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        onClick={() => window.dispatchEvent(new CustomEvent("openIntroEditor"))}
-                        className="text-[12px] uppercase tracking-wide px-2.5 py-1 rounded bg-[#2A2315] hover:bg-[#3D321F] text-[#E5C17C] border border-[#B5945B]/50 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                        title="Tùy chỉnh 5 thẻ ảnh và logo của màn hình Intro mở đầu"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C]" />
-                        <span>Sửa Intro</span>
-                      </button>
-                    )}
-                    {/* Dọn Lịch Cũ Button */}
-                    {isAdminMode && (
-                      <button
-                        type="button"
-                        disabled={isCleaningUp}
-                        onClick={onCleanupOldBookings}
-                        className="text-[12px] uppercase tracking-wide px-2 py-1 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition-colors flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        {isCleaningUp ? "..." : "Dọn dẹp"}
-                      </button>
-                    )}
+                    <span className="bg-white/10 text-zinc-300 font-semibold px-2.5 py-0.5 rounded-full text-xs border border-white/10">
+                      {displayedBookings.length}
+                    </span>
                   </div>
                 </div>
 
@@ -984,6 +894,392 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           // bookings will update automatically via Firestore snapshot
         }}
       />
+
+      {/* STATISTICS MODAL */}
+      {isStatsModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg bg-zinc-950 border border-white/15 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Thống Kê & Báo Cáo</h3>
+                    <p className="text-xs text-zinc-400">Tổng quan chỉ số hiệu suất đặt lịch</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsStatsModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Status Grid */}
+              <div className="grid grid-cols-4 gap-2.5 mb-5">
+                <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-center">
+                  <div className="text-[11px] font-medium text-zinc-400 uppercase">Tổng</div>
+                  <div className="text-lg font-bold text-white mt-0.5">{bookings.length}</div>
+                </div>
+                <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-[11px] font-medium text-emerald-400 uppercase">Đã duyệt</div>
+                  <div className="text-lg font-bold text-emerald-300 mt-0.5">
+                    {bookings.filter((b) => b.status === "Đã duyệt").length}
+                  </div>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center">
+                  <div className="text-[11px] font-medium text-amber-400 uppercase">Chờ duyệt</div>
+                  <div className="text-lg font-bold text-amber-300 mt-0.5">
+                    {bookings.filter((b) => b.status === "Chờ duyệt").length}
+                  </div>
+                </div>
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-center">
+                  <div className="text-[11px] font-medium text-rose-400 uppercase">Từ chối</div>
+                  <div className="text-lg font-bold text-rose-300 mt-0.5">
+                    {bookings.filter((b) => b.status === "Từ chối").length}
+                  </div>
+                </div>
+              </div>
+
+              {/* Concept breakdown */}
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 mb-5">
+                <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-3">
+                  Phân bố Concept chụp
+                </div>
+                <div className="space-y-2.5">
+                  {[
+                    { label: "Kỷ yếu THPT", count: bookings.filter((b) => b.conceptType === "THPT").length, color: "bg-blue-400" },
+                    { label: "Kỷ yếu Đại học", count: bookings.filter((b) => b.conceptType === "University").length, color: "bg-purple-400" },
+                    { label: "Event & Prom Night", count: bookings.filter((b) => b.conceptType === "Event").length, color: "bg-amber-400" },
+                    { label: "Yêu cầu tùy chọn", count: bookings.filter((b) => b.conceptType === "Custom").length, color: "bg-emerald-400" },
+                  ].map((item) => {
+                    const pct = bookings.length > 0 ? Math.round((item.count / bookings.length) * 100) : 0;
+                    return (
+                      <div key={item.label}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-zinc-300">{item.label}</span>
+                          <span className="text-zinc-400 font-medium">{item.count} ({pct}%)</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                          <div className={`h-full ${item.color} rounded-full`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Footer action */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStatsModalOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
+
+      {/* SYNC & 2-WAY SYNC MODAL */}
+      {isSyncModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg bg-zinc-950 border border-white/15 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                    <RefreshCw className={`w-5 h-5 ${isSyncingSheets ? "animate-spin" : ""}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Đồng Bộ Hệ Thống</h3>
+                    <p className="text-xs text-zinc-400">Đồng bộ Google Calendar, 2 chiều & Google Sheet</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Action Cards */}
+              <div className="space-y-3 mb-5">
+                {/* 1. Kiểm tra 2 chiều Google */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSyncModalOpen(false);
+                    handleTwoWaySync();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <ArrowLeftRight className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-purple-200">
+                        Kiểm tra & Đồng bộ 2 chiều
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Đối chiếu lịch hẹn từ Google Calendar/Tasks về hệ thống
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-purple-400 bg-purple-500/15 px-3 py-1.5 rounded-xl border border-purple-500/30 shrink-0">
+                    Thực hiện
+                  </span>
+                </button>
+
+                {/* 2. Đồng bộ Google Calendar */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSyncModalOpen(false);
+                    handleBatchSyncCalendar();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <RefreshCw className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-blue-200">
+                        Đồng bộ lên Google Calendar
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Đẩy toàn bộ lịch hẹn vào ứng dụng Google Calendar
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-blue-400 bg-blue-500/15 px-3 py-1.5 rounded-xl border border-blue-500/30 shrink-0">
+                    Đồng bộ
+                  </span>
+                </button>
+
+                {/* 3. Đẩy lên Google Sheets */}
+                <button
+                  type="button"
+                  disabled={isSyncingSheets}
+                  onClick={() => {
+                    setIsSyncModalOpen(false);
+                    handleSyncAllToGoogleSheet();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all text-left cursor-pointer group disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <FileSpreadsheet className={`w-5 h-5 ${isSyncingSheets ? "animate-spin" : ""}`} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-emerald-200">
+                        Đẩy lên Google Sheet
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Ghi danh sách và cập nhật bảng tính KH_Data báo cáo
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-500/30 shrink-0">
+                    {isSyncingSheets ? "Đang đẩy..." : "Xuất Sheet"}
+                  </span>
+                </button>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
+
+      {/* SETTINGS & UTILITIES MODAL */}
+      {isSettingsModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg bg-zinc-950 border border-white/15 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Cài Đặt & Tiện Ích</h3>
+                    <p className="text-xs text-zinc-400">Tùy biến màn hình, nhập dữ liệu và bảo trì</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Action Cards */}
+              <div className="space-y-3 mb-5">
+                {/* 1. Sửa Intro mở đầu */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsModalOpen(false);
+                    handleOpenIntroEditor();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-amber-200">
+                        Chỉnh sửa Intro mở đầu
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Tùy biến câu chào, chữ và hiệu ứng màn hình mở đầu
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-400 bg-amber-500/15 px-3 py-1.5 rounded-xl border border-amber-500/30 shrink-0">
+                    Mở sửa
+                  </span>
+                </button>
+
+                {/* 2. Nhập khách cũ & Quét Excel */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsModalOpen(false);
+                    setIsBatchImportModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-cyan-200">
+                        Nhập khách cũ / Quét Excel
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Quét dữ liệu cũ từ Calendar hoặc dán từ file Excel
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-cyan-400 bg-cyan-500/15 px-3 py-1.5 rounded-xl border border-cyan-500/30 shrink-0">
+                    Nhập dữ liệu
+                  </span>
+                </button>
+
+                {/* 3. Ca làm & Lịch học FAP */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsModalOpen(false);
+                    setAdminActiveTab("school_sync");
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-indigo-200">
+                        Ca làm & Lịch học FAP
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Xem và đồng bộ lịch học/bận của studio
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-indigo-400 bg-indigo-500/15 px-3 py-1.5 rounded-xl border border-indigo-500/30 shrink-0">
+                    Xem lịch
+                  </span>
+                </button>
+
+                {/* 4. Dọn dẹp lịch cũ */}
+                <button
+                  type="button"
+                  disabled={isCleaningUp}
+                  onClick={() => {
+                    setIsSettingsModalOpen(false);
+                    onCleanupOldBookings();
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition-all text-left cursor-pointer group disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <Trash2 className={`w-5 h-5 ${isCleaningUp ? "animate-pulse" : ""}`} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-rose-200">
+                        Dọn dẹp lịch cũ quá hạn
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Giải phóng bộ nhớ và dọn dẹp các lịch đã qua
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-rose-400 bg-rose-500/15 px-3 py-1.5 rounded-xl border border-rose-500/30 shrink-0">
+                    {isCleaningUp ? "Đang xóa..." : "Dọn dẹp"}
+                  </span>
+                </button>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsModalOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition-all cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

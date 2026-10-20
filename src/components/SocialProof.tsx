@@ -165,8 +165,8 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  onMouseLeave={() => setIsPaused(false)}
  >
  {/* Central Animated Viewport */}
- <div className="w-full overflow-hidden relative z-10 px-1 min-h-[290px] xs:min-h-[250px] sm:min-h-[220px] md:min-h-[200px] flex items-center justify-center">
- <AnimatePresence mode="popLayout"custom={direction}>
+ <div className="w-full relative z-10 px-1 min-h-[300px] xs:min-h-[280px] sm:min-h-[260px] md:min-h-[250px] overflow-hidden flex items-center justify-center">
+ <AnimatePresence mode="wait" custom={direction}>
  {testimonials[activeIndex] && (
  <motion.div
  key={`testimonial-${testimonials[activeIndex].id || activeIndex}`}
@@ -201,7 +201,7 @@ export const SocialProof: React.FC<{ isAdminGlobal?: boolean }> = ({ isAdminGlob
  initial="initial"
  animate="animate"
  exit="exit"
- className="w-full liquid-glass border-0 p-4 xs:p-6 sm:p-10 rounded-2xl sm:rounded-3xl relative flex flex-col justify-between gap-5 sm:gap-6 cursor-grab active:cursor-grabbing shadow-none"
+ className="w-full h-full absolute inset-0 liquid-glass border-0 p-4 xs:p-6 sm:p-10 rounded-2xl sm:rounded-3xl flex flex-col justify-between gap-5 sm:gap-6 cursor-grab active:cursor-grabbing shadow-none overflow-y-auto"
  drag="x"
  dragConstraints={{ left: 0, right: 0 }}
  dragElastic={0.3}

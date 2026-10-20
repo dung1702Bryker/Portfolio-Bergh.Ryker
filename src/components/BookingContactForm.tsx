@@ -63,9 +63,7 @@ import { resolveImage } from "../utils/imageMapper";
 import { useToast } from "../hooks/useToast";
 import { ToastContainer } from "./ToastContainer";
 
-const AvailabilityCalendar = React.lazy(() =>
-  import("./AvailabilityCalendar").then((m) => ({ default: m.AvailabilityCalendar }))
-);
+import { AvailabilityCalendar } from "./AvailabilityCalendar";
 const FapWeeklyCalendar = React.lazy(() =>
   import("./FapWeeklyCalendar").then((m) => ({ default: m.FapWeeklyCalendar }))
 );
@@ -192,6 +190,9 @@ export const BookingContactForm: React.FC<BookingContactFormProps> = ({
     message: string;
   } | null>(null);
   const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
 
   // Custom visual state-based confirmation modal to bypass iframe window.confirm blocks
   const [confirmModal, setConfirmModal] = useState<{
@@ -1456,11 +1457,7 @@ Mã Booking: ${booking.id}`;
     }
 
     const generatedCode = generateBookingCode();
-    const origin = getPublicBookingBaseUrl();
-    const confLink = ensureValidPublicBookingUrl(
-      `${origin}/booking/${generatedCode}`,
-      generatedCode
-    );
+    const confLink = ensureValidPublicBookingUrl(undefined, generatedCode);
 
     const newBooking: Booking = {
       id: bookingId,
@@ -2617,20 +2614,16 @@ Mã Booking: ${booking.id}`;
             </div>
           </form>
 
-          {isCalendarOpen && (
-            <React.Suspense fallback={null}>
-              <AvailabilityCalendar
-                isOpen={isCalendarOpen}
-                onClose={() => setIsCalendarOpen(false)}
-                selectedDate={date}
-                onSelectDate={(selectedDateStr) => {
-                  setDate(selectedDateStr);
-                  setIsCalendarOpen(false);
-                }}
-                isAdminMode={isAdminMode}
-              />
-            </React.Suspense>
-          )}
+          <AvailabilityCalendar
+            isOpen={isCalendarOpen}
+            onClose={() => setIsCalendarOpen(false)}
+            selectedDate={date}
+            onSelectDate={(selectedDateStr) => {
+              setDate(selectedDateStr);
+              setIsCalendarOpen(false);
+            }}
+            isAdminMode={isAdminMode}
+          />
 
           {isFapCalendarOpen && (
             <React.Suspense fallback={null}>
@@ -2687,6 +2680,7 @@ Mã Booking: ${booking.id}`;
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5 }}
+                      className="w-full flex justify-center"
                     >
                       <DigitalPassCard booking={submittedData} />
                     </motion.div>
@@ -2739,46 +2733,90 @@ Mã Booking: ${booking.id}`;
                           
                           {/* Manual Verification */}
                           <div className="flex flex-col gap-2 mt-2">
-                             <button
-                                type="button"
-                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-lg text-xs uppercase flex items-center justify-center gap-2 cursor-pointer transition-all"
-                                onClick={async (e) => {
-                                    const btn = e.target as HTMLButtonElement;
-                                    btn.innerText = "Đang kiểm tra...";
-                                    const res = await fetch("/api/verify-sepay-deposit", {
-                                        method: "POST",
-                                        headers: {"Content-Type": "application/json"},
-                                        body: JSON.stringify({
-                                            bookingId: submittedData.id,
-                                            requiredAmount: 2000 // Test mode allowed
-                                        })
-                                    });
-                                    const data = await res.json();
-                                    if (data.verified) {
-                                        // Update Firestore directly
-                                        await updateDoc(doc(db, "bookings", submittedData.id), {
-                                            status: "Đã duyệt",
-                                            hasConfirmedPayment: true,
-                                            confirmationStatus: "link_created",
-                                            confirmedAt: new Date().toISOString()
-                                        });
-                                        setSubmittedData(prev => ({...prev, status: "Đã duyệt", hasConfirmedPayment: true}));
-                                        // success screen will be rendered automatically via status check in parent
-                                    } else {
-                                        btn.innerText = "🔄 Kiểm tra thanh toán & Nhận vé QR";
-                                        alert("⚠️ Hệ thống chưa ghi nhận khoản cọc. Nếu bạn vừa chuyển khoản xong, vui lòng chờ 10–15 giây rồi bấm Kiểm tra lại. Hoặc tải ảnh biên lai.");
+                            <input
+                              type="file"
+                              ref={receiptInputRef}
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !submittedData) return;
+                                try {
+                                  setIsUploadingReceipt(true);
+                                  showToast("Đang tải ảnh biên lai lên...", "info");
+                                  const reader = new FileReader();
+                                  reader.onload = async (uploadEv) => {
+                                    const base64 = uploadEv.target?.result as string;
+                                    if (base64) {
+                                      await updateDoc(doc(db, "bookings", submittedData.id), {
+                                        paymentReceipt: base64,
+                                        hasTransferred: true,
+                                        transferredAt: new Date().toISOString()
+                                      });
+                                      showToast("Đã tải ảnh biên lai thành công! Studio sẽ kiểm tra duyệt ngay.", "success");
                                     }
-                                }}
-                             >
-                                <RefreshCw className="w-3.5 h-3.5" /> 🔄 Kiểm tra thanh toán & Nhận vé QR
-                             </button>
-                             <button
-                                type="button"
-                                className="text-zinc-400 hover:text-white text-[11px] underline mt-1"
-                                onClick={() => { /* Logic to open image upload */ }}
-                             >
-                                📤 Tải ảnh biên lai chuyển khoản để duyệt ngay
-                             </button>
+                                    setIsUploadingReceipt(false);
+                                  };
+                                  reader.readAsDataURL(file);
+                                } catch (upErr: any) {
+                                  console.error("Receipt upload error:", upErr);
+                                  showToast("Lỗi tải ảnh biên lai: " + (upErr?.message || ""), "error");
+                                  setIsUploadingReceipt(false);
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              disabled={isCheckingPayment}
+                              className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-70 text-white font-bold py-3 px-4 rounded-lg text-xs uppercase flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-emerald-950/40"
+                              onClick={async () => {
+                                if (isCheckingPayment || !submittedData) return;
+                                setIsCheckingPayment(true);
+                                try {
+                                  const res = await fetch("/api/verify-sepay-deposit", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      bookingId: submittedData.id,
+                                      bookingCode: submittedData.bookingCode,
+                                      requiredAmount: 2000 // Test mode allowed
+                                    })
+                                  });
+                                  const data = await res.json();
+                                  if (data.verified) {
+                                    // Update Firestore directly
+                                    await updateDoc(doc(db, "bookings", submittedData.id), {
+                                      status: "Đã duyệt",
+                                      hasConfirmedPayment: true,
+                                      confirmationStatus: "link_created",
+                                      confirmedAt: new Date().toISOString()
+                                    });
+                                    setSubmittedData(prev => prev ? ({ ...prev, status: "Đã duyệt", hasConfirmedPayment: true }) : null);
+                                    showToast("Đã xác nhận cọc thành công! Thẻ vé điện tử đã được tạo.", "success");
+                                  } else {
+                                    showToast(data.message || "⚠️ Hệ thống chưa ghi nhận khoản cọc. Nếu bạn vừa chuyển khoản, vui lòng đợi 10–15 giây rồi kiểm tra lại nhé!", "warning");
+                                  }
+                                } catch (err: any) {
+                                  console.error("Verify deposit error:", err);
+                                  showToast("Lỗi kết nối đối soát. Vui lòng thử lại sau.", "error");
+                                } finally {
+                                  setIsCheckingPayment(false);
+                                }
+                              }}
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${isCheckingPayment ? "animate-spin" : ""}`} />
+                              {isCheckingPayment ? "Đang đối soát SePay..." : "🔄 Tôi đã chuyển khoản — Kiểm tra & Nhận vé QR"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isUploadingReceipt}
+                              className="text-zinc-400 hover:text-white text-[11px] underline mt-1 cursor-pointer transition-colors"
+                              onClick={() => {
+                                receiptInputRef.current?.click();
+                              }}
+                            >
+                              {isUploadingReceipt ? "⏳ Đang tải ảnh biên lai..." : "📤 Tải ảnh biên lai chuyển khoản để duyệt ngay"}
+                            </button>
                           </div>
                         </div>
                       </motion.div>

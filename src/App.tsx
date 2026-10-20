@@ -283,7 +283,35 @@ export default function App() {
     } catch (_) {}
     return null;
   });
- // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps (Quy tắc 4)
+
+  // Lắng nghe thay đổi URL (popstate) để nhận diện tham số ?booking= công khai ngay lập tức
+  useEffect(() => {
+    const checkBookingFromUrl = () => {
+      try {
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          const qCode = params.get("booking") || params.get("bookingCode") || params.get("bookingId") || params.get("code");
+          if (qCode && qCode.trim()) {
+            setBookingConfirmationCode(qCode.trim());
+            return;
+          }
+          const path = window.location.pathname;
+          if (path.startsWith("/booking/")) {
+            const code = path.replace("/booking/", "").trim();
+            if (code) {
+              setBookingConfirmationCode(decodeURIComponent(code));
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+    };
+
+    window.addEventListener("popstate", checkBookingFromUrl);
+    return () => window.removeEventListener("popstate", checkBookingFromUrl);
+  }, []);
+
+  // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps (Quy tắc 4)
   // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps - Chỉ chạy trên Desktop
   useEffect(() => {
     if (typeof window === "undefined" || window.innerWidth < 1024 || "ontouchstart" in window) {
@@ -881,6 +909,8 @@ export default function App() {
  />
 
   {/* 1. GLASSMORPHISM NAVIGATION HEADER */}
+  {!bookingConfirmationCode && (
+    <>
   <header className="sticky top-0 left-0 w-full z-40 bg-[rgba(18,18,20,0.75)] backdrop-blur-[16px] border-b border-[rgba(255,255,255,0.08)] pt-[max(env(safe-area-inset-top),0px)]">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-3 flex flex-row justify-between items-center gap-2">
       {/* Logo brand */}
@@ -1053,6 +1083,8 @@ export default function App() {
  );
  })}
  </div>
+ </>
+ )}
 
  {/* 3. MAIN FULL SCREEN SLIDES CONTAINER */}
   <main className="w-full relative touch-action-pan-y">
@@ -1144,6 +1176,8 @@ export default function App() {
   </main>
 
  {/* 4. FOOTER WITH INTEGRATED GLOBAL ADMINISTRATIVE SWITCH */}
+ {!bookingConfirmationCode && (
+ <>
  <footer className="w-full bg-zinc-950/20 backdrop-blur-md border-t border-white/5 pt-8 pb-[calc(1.25rem+env(safe-area-inset-bottom,16px))] md:pt-10 md:pb-8 text-center font-sans text-[12px] text-gray-500 leading-relaxed relative z-20">
  <div className="max-w-2xl mx-auto px-6 space-y-4">
  {/* Admin Switcher & Console Button at very bottom as requested */}
@@ -1317,6 +1351,8 @@ export default function App() {
  <React.Suspense fallback={null}>
   <Chatbot />
  </React.Suspense>
+ </>
+ )}
 
 
 

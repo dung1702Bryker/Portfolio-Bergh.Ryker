@@ -106,10 +106,7 @@ export const BookingConfirmationQrSection: React.FC<
       setIsProcessing(true);
 
       const bookingCode = booking.bookingCode || generateBookingCode();
-      const newConfirmationLink = ensureValidPublicBookingUrl(
-        `${baseUrl}/booking/${bookingCode}`,
-        bookingCode
-      );
+      const newConfirmationLink = ensureValidPublicBookingUrl(undefined, bookingCode);
       const newQrUrl = await generateQrDataUrl(newConfirmationLink, 1200);
       const confirmedAt = new Date().toLocaleString("vi-VN");
 

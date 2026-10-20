@@ -1193,6 +1193,7 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
     try {
       if (direction === "drop") {
+        const newCollections = [...collections];
         const [draggedItem] = newCollections.splice(albumIdx, 1);
         newCollections.splice(targetDropIdx!, 0, draggedItem);
         const updates = newCollections.map((col, i) => ({
