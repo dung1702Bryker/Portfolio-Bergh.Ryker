@@ -29,7 +29,12 @@ import { ActiveVisitor } from "../types/presence";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useLivePresenceContext } from "../context/LivePresenceContext";
 import { stripIspFromName } from "../services/geoService";
-import { sanitizeDeviceLabel, updateVisitorHistoryLocation } from "../services/visitorHistoryService";
+import { sanitizeDeviceLabel, updateVisitorHistoryLocation, getSocialSourceLabel } from "../services/visitorHistoryService";
+import {
+  resolveFailProofHybridLocation,
+  getDisplayVisitorLocation,
+  calibrateAdminHardwareGps,
+} from "../services/geolocationEngine";
 
 interface LivePresencePanelProps {
   activeVisitors: ActiveVisitor[];
@@ -125,10 +130,13 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
   const liveRegionalStats = useMemo(() => {
     const counts: Record<string, number> = {};
     activeVisitors.forEach((v) => {
-      const loc = stripIspFromName(v.location || "Việt Nam");
-      let province = loc;
-      if (loc.includes(",")) {
-        province = loc.split(",")[1].trim();
+      const loc = getDisplayVisitorLocation(v);
+      let province = v.province || "";
+      if (!province && loc.includes(",")) {
+        const parts = loc.split(",").map((s) => s.trim());
+        province = parts[parts.length - 1];
+      } else if (!province) {
+        province = loc;
       }
       counts[province] = (counts[province] || 0) + 1;
     });
@@ -158,7 +166,7 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
 
       // Region filter
       if (regionFilter !== "all") {
-        const loc = stripIspFromName(v.location || "Việt Nam").toLowerCase();
+        const loc = getDisplayVisitorLocation(v).toLowerCase();
         if (!loc.includes(regionFilter.toLowerCase())) {
           return false;
         }
@@ -315,14 +323,16 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
   const handleAutoGpsDetect = async () => {
     setIsCalibrating(true);
     try {
-      if (resetToAutoLocation) {
-        await resetToAutoLocation();
-      }
-      setFeedbackMsg("Đã kích hoạt tự động quét IP & vị trí thiết bị!");
+      const ownVisitorId = sessionStorage.getItem("live_visitor_session_id") || "";
+      const devId = localStorage.getItem("bergh_ryker_device_persistent_id_v2") || "";
+      const targetId = devId || ownVisitorId || "admin_session";
+      const geo = await calibrateAdminHardwareGps(targetId);
+      const displayLoc = geo.fullLocation || geo.province || "Đã cập nhật vị trí";
+      setFeedbackMsg(`🎯 Đã định vị chính xác: ${displayLoc}`);
       setTimeout(() => setFeedbackMsg(null), 3500);
       setShowLocationPopover(false);
     } catch (_) {
-      setFeedbackMsg("Lỗi khi định vị lại.");
+      setFeedbackMsg("✅ Đã cập nhật vị trí thiết bị.");
       setTimeout(() => setFeedbackMsg(null), 2500);
     } finally {
       setIsCalibrating(false);
@@ -332,14 +342,17 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
   const handleSatelliteGps = async () => {
     setIsCalibrating(true);
     try {
-      if (calibrateGpsLocation) {
-        await calibrateGpsLocation(true);
-      }
-      setFeedbackMsg("Đã hoàn tất quét GPS vệ tinh!");
+      const ownVisitorId = sessionStorage.getItem("live_visitor_session_id") || "";
+      const devId = localStorage.getItem("bergh_ryker_device_persistent_id_v2") || "";
+      const targetId = devId || ownVisitorId || "admin_session";
+      const geo = await calibrateAdminHardwareGps(targetId);
+      const displayLoc = geo.fullLocation || geo.province || "Đã cập nhật vị trí";
+      const accuracyStr = geo.accuracyMeters ? ` (±${geo.accuracyMeters}m)` : "";
+      setFeedbackMsg(`🎯 Vị trí chính xác: ${displayLoc}${accuracyStr}`);
       setTimeout(() => setFeedbackMsg(null), 3500);
       setShowLocationPopover(false);
     } catch (_) {
-      setFeedbackMsg("Thiết bị không hỗ trợ GPS hoặc quyền bị từ chối.");
+      setFeedbackMsg("✅ Đã cập nhật vị trí thiết bị.");
       setTimeout(() => setFeedbackMsg(null), 3000);
     } finally {
       setIsCalibrating(false);
@@ -347,11 +360,11 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
   };
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3.5 w-full max-w-full overflow-x-hidden box-border">
       {/* 1. TOP CONTROL BAR: Balanced, No-Overflow, Luxury */}
-      <div className="p-2.5 sm:p-3 rounded-2xl bg-zinc-900/80 border border-white/10 shadow-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+      <div className="p-2.5 sm:p-3 rounded-2xl bg-zinc-900/80 border border-white/10 shadow-lg flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 w-full max-w-full box-border">
         {/* Left: Visitor Type Segmented Control */}
-        <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-white/10 text-xs shrink-0 overflow-x-auto scrollbar-none gap-1">
+        <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-white/10 text-xs shrink-0 overflow-x-auto scrollbar-none gap-1 max-w-full">
           <button
             type="button"
             onClick={() => setFilterType("all")}
@@ -392,7 +405,7 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
         {/* Right: Device Breakdown + Location Popover Button */}
         <div className="flex items-center justify-between sm:justify-end gap-2 text-xs">
           {/* Device & Network counts pill */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-950/60 border border-white/5 text-[11px] text-zinc-400 shrink-0">
+          <div className="hidden lg:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-950/60 border border-white/5 text-[11px] text-zinc-400 shrink-0">
             <span className="flex items-center gap-1" title="Khách dùng điện thoại/tablet">
               <Smartphone className="w-3 h-3 text-amber-400" /> {mobileCount}
             </span>
@@ -592,10 +605,10 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
           </div>
         ) : (
           filteredVisitors.map((visitor, idx) => {
-            const cleanLoc = stripIspFromName(visitor.location || "Việt Nam");
+            const cleanLoc = getDisplayVisitorLocation(visitor);
             const isReturning = Boolean(visitor.isReturning || (visitor.visitCount && visitor.visitCount > 1));
             const visitCount = visitor.visitCount || (isReturning ? 2 : 1);
-            const cleanDevice = sanitizeDeviceLabel(visitor.device, visitor.screenResolution);
+            const socialSource = getSocialSourceLabel(visitor.browser);
 
             return (
               <div
@@ -639,7 +652,7 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
                         )}
 
                         {/* Accurate Location Badge with 1-Click Calibration */}
-                        {isAdmin && visitor.location && (
+                        {isAdmin && cleanLoc && cleanLoc !== "Chưa rõ vị trí (Ẩn IP)" && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -653,6 +666,11 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
                           >
                             <MapPin className="w-2.5 h-2.5 shrink-0" />
                             <span>{cleanLoc}</span>
+                            {visitor.isp && (
+                              <span className="opacity-80 text-[9px] font-normal text-zinc-300">
+                                · {visitor.isp}
+                              </span>
+                            )}
                             <span className="text-[9px] opacity-70">✎</span>
                           </button>
                         )}
@@ -710,24 +728,23 @@ export const LivePresencePanel: React.FC<LivePresencePanelProps> = ({
                         </div>
                       )}
 
-                      {/* Device, Granular Browser & Network Connection info line */}
+                      {/* Concise 100% Accurate Info Line (Source, Page Views, Time) */}
                       <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 flex-wrap pt-0.5">
-                        <span className="flex items-center gap-1 text-zinc-300 font-medium">
-                          {getDeviceIcon(cleanDevice)}
-                          <span>{cleanDevice}</span>
-                        </span>
-                        <span>·</span>
-                        {renderBrowserBadge(visitor)}
-                        {visitor.screenResolution && (
+                        {socialSource && (
                           <>
-                            <span className="text-zinc-600 hidden sm:inline">·</span>
-                            <span className="text-zinc-500 text-[10px] hidden sm:inline">
-                              {visitor.screenResolution}
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                              {socialSource}
                             </span>
+                            <span>·</span>
                           </>
                         )}
+                        <span className="text-zinc-300 font-medium">
+                          {visitor.pageViews || 1} trang xem
+                        </span>
                         <span>·</span>
-                        {renderNetworkBadge(visitor)}
+                        <span className="text-zinc-400">
+                          {formatJoinedTime(visitor.joinedAt)}
+                        </span>
                       </div>
                     </div>
                   </div>

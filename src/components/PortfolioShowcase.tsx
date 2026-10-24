@@ -44,12 +44,30 @@ import {
   Tag,
   SlidersHorizontal,
   LayoutGrid,
+  Camera,
+  FolderKanban,
+  PenTool,
+  Sliders,
+  HardDrive,
+  Upload,
+  Download,
+  ShieldCheck,
+  Copy,
+  Star,
+  List,
+  Loader2,
 } from "lucide-react";
 import { PortfolioSkeleton } from "./PortfolioSkeleton";
+import { GooglePickerButton } from "./GooglePickerButton";
 const GoogleDrivePicker = React.lazy(() =>
   import("./GoogleDrivePicker").then((m) => ({ default: m.GoogleDrivePicker }))
 );
 import { motion, AnimatePresence } from "motion/react";
+import {
+  exportMasterBackupJSON,
+  importMasterBackupJSON,
+  generateContentDataCode,
+} from "../services/backupService";
 import { SlideData, ImageResolutions } from "../types";
 import { resolveImage, buildLightboxSources } from "../utils/imageMapper";
 import { getOptimizedImageUrl, markImageLoadedInCache } from "../utils/imageOptimizer";
@@ -73,6 +91,7 @@ import {
   isWebP,
 } from "../utils/imageCompressor";
 import { ImageWithFallback } from "./ImageWithFallback";
+import { LazyImage } from "./LazyImage";
 import { Album3DScrollytellingViewer } from "./Album3DScrollytellingViewer";
 import { Horizontal3DCollectionTrack } from "./Horizontal3DCollectionTrack";
 import { ImagePositionControl } from "./ImagePositionControl";
@@ -217,6 +236,83 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     onConfirm: () => {},
   });
 
+  // Master Backup Vault & Anti-Data-Loss States
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
+  const [importBackupProgress, setImportBackupProgress] = useState<{ message: string; percent: number } | null>(null);
+  const [freezeCodeModal, setFreezeCodeModal] = useState<{ isOpen: boolean; code: string; isCopied: boolean }>({
+    isOpen: false,
+    code: "",
+    isCopied: false,
+  });
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportBackup = async () => {
+    setIsExportingBackup(true);
+    try {
+      const res = await exportMasterBackupJSON();
+      showToast(
+        `Đã xuất bản sao lưu "${res.filename}" thành công! (${res.summary.totalAlbums} album, ${res.summary.totalPhotos} ảnh, ${res.summary.totalBookings} bookings)`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error(err);
+      showToast("Lỗi khi tải bản sao lưu: " + (err.message || "Không xác định"), "error");
+    } finally {
+      setIsExportingBackup(false);
+    }
+  };
+
+  const handleImportBackupFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!window.confirm("⚠️ Khôi phục dữ liệu sẽ cập nhật và đồng bộ toàn bộ Album, Ảnh, Cấu hình và Lịch trình vào Cloud Firestore từ file đã chọn. Bạn có chắc chắn muốn tiến hành?")) {
+      e.target.value = "";
+      return;
+    }
+
+    setIsImportingBackup(true);
+    setImportBackupProgress({ message: "Đang đọc file...", percent: 10 });
+
+    try {
+      const text = await file.text();
+      const result = await importMasterBackupJSON(text, (msg, pct) => {
+        setImportBackupProgress({ message: msg, percent: pct });
+      });
+      showToast(
+        `Khôi phục thành công: ${result.restoredAlbums} album, ${result.restoredPhotos} ảnh, ${result.restoredBookings} bookings, ${result.restoredSlides} slides! Đang làm mới...`,
+        "success"
+      );
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      showToast("Lỗi khi khôi phục dữ liệu: " + (err.message || "File không đúng định dạng"), "error");
+      setIsImportingBackup(false);
+      setImportBackupProgress(null);
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleFreezeToCode = async () => {
+    try {
+      showToast("Đang tạo mã nguồn Freeze to Code...", "info");
+      const code = await generateContentDataCode(slide?.slides);
+      try {
+        await navigator.clipboard.writeText(code);
+        setFreezeCodeModal({ isOpen: true, code, isCopied: true });
+        showToast("Đã sao chép mã nguồn vào clipboard! Bạn có thể dán thẳng vào src/data/contentData.ts", "success");
+      } catch (_) {
+        setFreezeCodeModal({ isOpen: true, code, isCopied: false });
+      }
+    } catch (err: any) {
+      showToast("Lỗi khi tạo mã nguồn: " + (err.message || "Không xác định"), "error");
+    }
+  };
+
   const [activeCollectionIdx, setActiveCollectionIdx] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedWorkIdx, setSelectedWorkIdx] = useState(0);
@@ -231,6 +327,33 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
       setIsAdminMode(isAdminGlobal);
     }
   }, [isAdminGlobal]);
+
+  // Global triggers to directly invoke Freeze to Code or jump to Master Backup Vault from anywhere
+  useEffect(() => {
+    if (firestoreCollection !== "albums") return;
+    const handleTriggerFreeze = () => {
+      handleFreezeToCode();
+    };
+    const handleOpenVault = () => {
+      setIsAdminMode(true);
+      setAdminActiveTab("settings");
+      setTimeout(() => {
+        const el = document.getElementById("admin-control-hub");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth" });
+        } else {
+          document.getElementById("S4")?.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
+    };
+
+    window.addEventListener("triggerFreezeToCode", handleTriggerFreeze);
+    window.addEventListener("openMasterBackupTab", handleOpenVault);
+    return () => {
+      window.removeEventListener("triggerFreezeToCode", handleTriggerFreeze);
+      window.removeEventListener("openMasterBackupTab", handleOpenVault);
+    };
+  }, [firestoreCollection, slide?.slides]);
 
   // View mode and Search states for advanced grid/detail navigation and filters
   const [viewMode, setViewMode] = useState<"grid" | "detail">("grid");
@@ -391,6 +514,16 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     string[]
   >([]);
   const [newGalleryUrlInput, setNewGalleryUrlInput] = useState("");
+
+  // Master-Detail Studio Workspace states
+  const [framesViewMode, setFramesViewMode] = useState<"list" | "grid">("list");
+  const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
+  const [quickAddUrlsInput, setQuickAddUrlsInput] = useState("");
+  const [isUploadingQuickFiles, setIsUploadingQuickFiles] = useState(false);
+  const [isSavingPhotoFrame, setIsSavingPhotoFrame] = useState(false);
+  const [lastSavedPhotoId, setLastSavedPhotoId] = useState<string | null>(null);
+  const [isApplyingRatioAll, setIsApplyingRatioAll] = useState(false);
+  const [isMobileInspectorOpen, setIsMobileInspectorOpen] = useState(false);
 
   // Form inputs for editing active album info
   const [editColTitle, setEditColTitle] = useState("");
@@ -1309,13 +1442,28 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     });
   };
 
-  const handleSavePhotoEdit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const selectPhotoForInspector = (idx: number) => {
+    if (!activeCollection || !activeCollection.images[idx]) return;
+    const img = activeCollection.images[idx];
+    setPhotoToEditIdx(idx);
+    setEditPhotoTitle(img.title || "");
+    setEditPhotoDesc(img.desc || "");
+    setEditPhotoObjectPosition(
+      img.imagePosition || img.objectPosition || "center",
+    );
+    setEditPhotoAspectRatio(img.aspectRatio || "16/9");
+    setEditPhotoScale(img.imageScale ?? 1.0);
+    setEditPhotoGalleryImages(img.galleryImages || []);
+  };
+
+  const handleSavePhotoEdit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!activeCollection || photoToEditIdx === null) return;
 
     const photoTarget = activeCollection.images[photoToEditIdx];
     if (!photoTarget?.id) return;
 
+    setIsSavingPhotoFrame(true);
     updatePhoto(activeCollection.id, photoTarget.id, {
       title: editPhotoTitle,
       desc: editPhotoDesc,
@@ -1326,8 +1474,9 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
       galleryImages: editPhotoGalleryImages,
     })
       .then(() => {
-        setPhotoToEditIdx(null);
-        showToast("Cập nhật thông tin khung hình thành công!", "success");
+        setLastSavedPhotoId(photoTarget.id);
+        showToast("✅ Đã lưu thứ tự & khung hình!", "success");
+        setTimeout(() => setLastSavedPhotoId(null), 3500);
       })
       .catch((error) => {
         handleFirestoreError(
@@ -1335,8 +1484,156 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
           OperationType.UPDATE,
           `${firestoreCollection}/${activeCollection.id}`,
         );
-        showToast("Lỗi khi cập nhật khung hình:" + error.message, "error");
+        showToast("Lỗi khi cập nhật khung hình: " + error.message, "error");
+      })
+      .finally(() => {
+        setIsSavingPhotoFrame(false);
       });
+  };
+
+  const handleSetAsAlbumCover = async (photo: CustomPhoto) => {
+    if (!activeCollection) return;
+    try {
+      await updateAlbumMeta(activeCollection.id, {
+        coverImageSrc: photo.src,
+        coverImagePosition:
+          photo.imagePosition || photo.objectPosition || "center",
+      });
+      setEditColCoverSrc(photo.src);
+      showToast("⭐ Đã đặt ảnh này làm ảnh bìa Album!", "success");
+    } catch (err: any) {
+      showToast("Lỗi khi đặt ảnh bìa: " + err.message, "error");
+    }
+  };
+
+  const handleApplyRatioToAllAlbum = async () => {
+    if (!activeCollection || !activeCollection.images.length) return;
+    if (
+      !window.confirm(
+        `Áp dụng tỷ lệ khung "${editPhotoAspectRatio}" cho toàn bộ ${activeCollection.images.length} ảnh trong album "${activeCollection.title}"?`,
+      )
+    )
+      return;
+
+    setIsApplyingRatioAll(true);
+    try {
+      for (const img of activeCollection.images) {
+        if (img.id) {
+          await updatePhoto(activeCollection.id, img.id, {
+            aspectRatio: editPhotoAspectRatio,
+          });
+        }
+      }
+      showToast(
+        `✅ Đã áp dụng tỷ lệ "${editPhotoAspectRatio}" cho toàn bộ ${activeCollection.images.length} ảnh trong Album!`,
+        "success",
+      );
+    } catch (err: any) {
+      showToast("Lỗi khi áp dụng tỷ lệ cho album: " + err.message, "error");
+    } finally {
+      setIsApplyingRatioAll(false);
+    }
+  };
+
+  const handleQuickAddFromDrive = async (urls: string[]) => {
+    if (!activeCollection || urls.length === 0) return;
+    const currentCount = activeCollection.images.length;
+    const newPhotosToAdd = urls.map((url, i) => ({
+      src: ensureWebPUrl(url),
+      alt: `Khung hình ${currentCount + i + 1}`,
+      title: `Khung hình ${currentCount + i + 1}`,
+      desc: "",
+      focal: "50mm F/1.8",
+      iso: "100",
+      aspectRatio: editPhotoAspectRatio || "16/9",
+      objectPosition: "center",
+      imagePosition: "center",
+      imageScale: 1.0,
+      galleryImages: [],
+    }));
+
+    try {
+      await addPhotos(activeCollection.id, newPhotosToAdd);
+      showToast(
+        `Đã thêm ${urls.length} ảnh trực tiếp từ Google Drive vào Album!`,
+        "success",
+      );
+      selectPhotoForInspector(currentCount);
+    } catch (err: any) {
+      showToast("Lỗi khi thêm ảnh từ Drive: " + err.message, "error");
+    }
+  };
+
+  const handleQuickAddUrls = async () => {
+    if (!activeCollection || !quickAddUrlsInput.trim()) return;
+    const urls = quickAddUrlsInput
+      .split(/[,;\s\n]+/)
+      .map((u) => u.trim())
+      .filter((u) => u.length > 0 && validateUrl(u));
+    if (urls.length === 0) {
+      showToast("Vui lòng nhập ít nhất một liên kết ảnh hợp lệ!", "error");
+      return;
+    }
+    const currentCount = activeCollection.images.length;
+    const newPhotos = urls.map((url, i) => ({
+      src: ensureWebPUrl(url),
+      alt: `Khung hình ${currentCount + i + 1}`,
+      title: `Khung hình ${currentCount + i + 1}`,
+      desc: "",
+      focal: "50mm F/1.8",
+      iso: "100",
+      aspectRatio: editPhotoAspectRatio || "16/9",
+      objectPosition: "center",
+      imagePosition: "center",
+      imageScale: 1.0,
+      galleryImages: [],
+    }));
+
+    try {
+      await addPhotos(activeCollection.id, newPhotos);
+      setQuickAddUrlsInput("");
+      setIsQuickAddModalOpen(false);
+      showToast(`Đã thêm ${urls.length} ảnh vào Album!`, "success");
+      selectPhotoForInspector(currentCount);
+    } catch (err: any) {
+      showToast("Lỗi khi thêm ảnh: " + err.message, "error");
+    }
+  };
+
+  const handleQuickAddLocalFiles = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(e.target.files || []) as File[];
+    if (!activeCollection || files.length === 0) return;
+    setIsUploadingQuickFiles(true);
+    try {
+      const compressedUrls = await Promise.all(
+        files.map((f: File) => compressImage(f)),
+      );
+      const currentCount = activeCollection.images.length;
+      const newPhotos = compressedUrls.map((src, i) => ({
+        src,
+        alt: `Khung hình ${currentCount + i + 1}`,
+        title: `Khung hình ${currentCount + i + 1}`,
+        desc: "",
+        focal: "50mm F/1.8",
+        iso: "100",
+        aspectRatio: editPhotoAspectRatio || "16/9",
+        objectPosition: "center",
+        imagePosition: "center",
+        imageScale: 1.0,
+        galleryImages: [],
+      }));
+      await addPhotos(activeCollection.id, newPhotos);
+      setIsQuickAddModalOpen(false);
+      showToast(`Đã nén và thêm ${files.length} ảnh vào Album!`, "success");
+      selectPhotoForInspector(currentCount);
+    } catch (err: any) {
+      showToast("Lỗi khi tải ảnh: " + err.message, "error");
+    } finally {
+      setIsUploadingQuickFiles(false);
+      e.target.value = "";
+    }
   };
 
   const handleUpdateCollectionInfo = (e: React.FormEvent) => {
@@ -1868,9 +2165,10 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                   >
                     <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-black/30 border border-white/10">
                       {prevCol.coverImageSrc || (prevCol.images && prevCol.images[0]) ? (
-                        <img
-                          src={resolveImage(prevCol.coverImageSrc || prevCol.images[0].src)}
+                        <LazyImage
+                          src={prevCol.coverImageSrc || prevCol.images[0].src}
                           alt={prevCol.title}
+                          preset="thumbnail"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
                       ) : (
@@ -1918,9 +2216,10 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </div>
                     <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-black/30 border border-white/10">
                       {nextCol.coverImageSrc || (nextCol.images && nextCol.images[0]) ? (
-                        <img
-                          src={resolveImage(nextCol.coverImageSrc || nextCol.images[0].src)}
+                        <LazyImage
+                          src={nextCol.coverImageSrc || nextCol.images[0].src}
                           alt={nextCol.title}
+                          preset="thumbnail"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                         />
                       ) : (
@@ -1966,42 +2265,42 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
               </div>
             </div>
 
-            {/* Hub Workspace Tabs Navigation */}
-            <div className="flex flex-wrap overflow-x-auto gap-2 border-b border-white/5 pb-4 mt-2 scrollbar-none snap-x">
-              {[
-                { id: "photo", label: "Ảnh chụp", icon: "📸" },
-                { id: "manage-albums", label: "Quản lý Album", icon: "📁" },
-                { id: "edit-meta", label: "Đổi Tóm tắt", icon: "✏️" },
-                { id: "edit-frames", label: "Chỉnh Frames", icon: "🖼️" },
-                { id: "settings", label: "Hệ thống", icon: "⚙️" },
-                { id: "google-drive", label: "Google Drive", icon: "☁️" },
-              ].map((tab, tIdx) => (
-                <button
-                  key={`tab-opt-${tab.id}-${tIdx}`}
-                  onClick={() => setAdminActiveTab(tab.id as any)}
-                  className={`relative flex-shrink-0 px-4 py-2.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-2 overflow-hidden snap-start ${
-                    adminActiveTab === tab.id
-                      ? "text-amber-400 shadow-md"
-                      : "text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent"
-                  }`}
-                >
-                  <span className="z-10 tracking-wide uppercase">
-                    {tab.icon} {tab.label}
-                  </span>
-                  {adminActiveTab === tab.id && (
-                    <motion.div
-                      layoutId="adminActiveTabIndicator"
-                      className="absolute inset-0 bg-zinc-800/80 border border-white/10 rounded-xl shadow-inner backdrop-blur-sm"
-                      initial={false}
-                      transition={{
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 30,
-                      }}
-                    />
-                  )}
-                </button>
-              ))}
+            {/* Hub Workspace Tabs Navigation - Segmented Liquid Glass Pill Bar */}
+            <div className="w-full overflow-x-auto no-scrollbar pb-1 border-b border-white/5">
+              <div className="inline-flex sm:flex items-center gap-1.5 p-1.5 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 min-w-full sm:min-w-0 snap-x">
+                {[
+                  { id: "photo", label: "Ảnh chụp", icon: Camera },
+                  { id: "manage-albums", label: "Quản lý Album", icon: FolderKanban },
+                  { id: "edit-meta", label: "Đổi Tóm tắt", icon: PenTool },
+                  { id: "edit-frames", label: "Chỉnh Frames", icon: LayoutGrid },
+                  { id: "settings", label: "Hệ thống", icon: Sliders },
+                  { id: "google-drive", label: "Google Drive", icon: HardDrive },
+                ].map((tab) => {
+                  const IconComp = tab.icon;
+                  const isActive = adminActiveTab === tab.id;
+                  return (
+                    <button
+                      key={`tab-opt-${tab.id}`}
+                      type="button"
+                      onClick={() => setAdminActiveTab(tab.id as any)}
+                      className={`relative min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap snap-start shrink-0 active:scale-95 ${
+                        isActive
+                          ? "bg-gradient-to-r from-[#B5945B] to-[#d4af37] text-zinc-950 font-bold shadow-lg shadow-[#B5945B]/20"
+                          : "text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent"
+                      }`}
+                    >
+                      <IconComp
+                        className={`w-4 h-4 shrink-0 transition-transform ${
+                          isActive ? "text-zinc-950 scale-105" : "text-[#B5945B]"
+                        }`}
+                      />
+                      <span className="tracking-wide uppercase text-[11px] sm:text-xs">
+                        {tab.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* TAB CONTENT 1: Add Image tool */}
@@ -2016,23 +2315,23 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       {activeCollection.title}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       disabled={isOptimizingWebP}
                       onClick={handleBatchOptimizeWebP}
-                      className="px-3 py-1 liquid-glass-btn border-[#B5945B]/40 hover:border-[#B5945B] text-amber-300 hover:text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow active:scale-95 uppercase"
+                      className="w-full sm:w-auto min-h-[40px] px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-zinc-300 hover:text-white text-[11px] sm:text-xs font-bold border border-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm uppercase whitespace-nowrap"
                       title="Tự động quét và chuyển đổi toàn bộ ảnh sang định dạng WebP chất lượng cao giúp tăng tốc tải trang"
                     >
                       {isOptimizingWebP ? (
                         <>
-                          <RefreshCw className="w-3 h-3 animate-spin text-[#B5945B]" />
-                          <span>Đang nén WebP ({optimizeProgress.current}/{optimizeProgress.total})</span>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#B5945B]" />
+                          <span>Đang nén ({optimizeProgress.current}/{optimizeProgress.total})</span>
                         </>
                       ) : (
                         <>
-                          <Sparkles className="w-3 h-3 text-[#B5945B]" />
-                          <span>Chuyển WebP Tăng Tốc</span>
+                          <Sparkles className="w-3.5 h-3.5 text-[#B5945B]" />
+                          <span>Tối Ưu Toàn Bộ WebP</span>
                         </>
                       )}
                     </button>
@@ -2041,14 +2340,14 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       type="button"
                       disabled={isAiPhotoGenerating}
                       onClick={handleAiSuggestPhoto}
-                      className="px-3 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white text-[12px] font-bold rounded-lg flex items-center gap-1 cursor-pointer transition-all border border-violet-500/30 shadow shadow-violet-500/20 uppercase"
+                      className="w-full sm:w-auto min-h-[40px] px-4 py-2 rounded-xl bg-[#B5945B]/15 hover:bg-[#B5945B]/25 active:scale-95 text-[#E5C17C] hover:text-white text-[11px] sm:text-xs font-bold border border-[#B5945B]/40 hover:border-[#B5945B] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(181,148,91,0.2)] uppercase whitespace-nowrap backdrop-blur-md disabled:opacity-50"
                     >
                       {isAiPhotoGenerating ? (
-                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E5C17C]" />
                       ) : (
-                        <Sparkles className="w-3 h-3" />
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C] animate-pulse" />
                       )}
-                      AI Gợi Ý Ảnh
+                      <span>AI Gợi Ý Ảnh ✨</span>
                     </button>
                   </div>
                 </div>
@@ -2102,9 +2401,29 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </div>
 
                     <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                      <label className="block text-[12px] items-center gap-1 font-sans text-[#B5945B] font-semibold flex">
-                        <span>🔗 Dán LINK Ảnh Gốc Chất Lượng Cao</span>
-                      </label>
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                        <label className="text-[12px] items-center gap-1 font-sans text-[#B5945B] font-semibold flex">
+                          <span>🔗 Dán LINK Ảnh Gốc Chất Lượng Cao</span>
+                        </label>
+                        <GooglePickerButton
+                          mode="images"
+                          multiselect={true}
+                          size="sm"
+                          buttonText="📁 Quét chọn ảnh từ Drive"
+                          onSelectMultiple={(urls) => {
+                            setNewPhotoUrlInput((prev) =>
+                              prev.trim() ? `${prev.trim()}\n${urls.join("\n")}` : urls.join("\n")
+                            );
+                            showToast(`Đã thêm ${urls.length} link ảnh từ Google Drive!`, "success");
+                          }}
+                          onSelect={(url) => {
+                            setNewPhotoUrlInput((prev) =>
+                              prev.trim() ? `${prev.trim()}\n${url}` : url
+                            );
+                            showToast("Đã chọn ảnh từ Google Drive!", "success");
+                          }}
+                        />
+                      </div>
                       <input
                         type="text"
                         value={newPhotoUrlInput}
@@ -2142,13 +2461,13 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       />
                     </div>
                   </div>
-                  <div className="w-full pt-3">
+                  <div className="w-full pt-3 pb-2">
                     <button
                       type="submit"
-                      className="w-full py-4 bg-white text-black hover:bg-zinc-200 font-bold text-[13px] border border-white/10 uppercase tracking-wide rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                      className="w-full h-13 rounded-2xl bg-gradient-to-r from-[#B5945B] via-[#c9a769] to-[#B5945B] hover:brightness-110 active:scale-[0.99] hover:scale-[1.01] text-zinc-950 font-extrabold text-xs sm:text-sm tracking-wider uppercase shadow-[0_10px_30px_rgba(181,148,91,0.3)] hover:shadow-[0_12px_35px_rgba(181,148,91,0.45)] transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" /> THÊM KHUNG HÌNH MỚI VÀO BỘ
-                      SƯU TẬP
+                      <Plus className="w-5 h-5 stroke-[2.5]" />
+                      <span>THÊM KHUNG HÌNH MỚI VÀO BỘ SƯU TẬP</span>
                     </button>
                   </div>
                 </form>
@@ -2271,24 +2590,36 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 onSubmit={handleCreateCollection}
-                className="space-y-4"
+                className="space-y-5"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3">
-                  <span className="block text-xs text-amber-500 font-medium uppercase tracking-wide flex items-center gap-2">
-                    📂 THIẾT LẬP ALBUM KỶ YẾU / SỰ KIỆN NGHỆ THUẬT MỚI
-                  </span>
-                  <div className="flex items-center gap-2">
+                {/* Header & Quick Action Buttons */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#B5945B]/15 border border-[#B5945B]/30 flex items-center justify-center text-[#E5C17C] shrink-0">
+                      <FolderKanban className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-[#E5C17C] uppercase tracking-wider block">
+                        ✦ Album Creator
+                      </span>
+                      <h4 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wide">
+                        Thiết lập Album Kỷ Yếu / Sự kiện nghệ thuật mới
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       disabled={isOptimizingWebP}
                       onClick={handleBatchOptimizeWebP}
-                      className="px-3.5 py-1.5 liquid-glass-btn border-[#B5945B]/40 hover:border-[#B5945B] text-amber-300 hover:text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all shadow active:scale-95 uppercase"
+                      className="w-full sm:w-auto min-h-[40px] px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-zinc-300 hover:text-white text-[11px] sm:text-xs font-bold border border-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm uppercase whitespace-nowrap"
                       title="Tự động quét và chuyển đổi toàn bộ ảnh sang định dạng WebP chất lượng cao giúp tăng tốc tải trang"
                     >
                       {isOptimizingWebP ? (
                         <>
                           <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#B5945B]" />
-                          <span>Đang nén WebP ({optimizeProgress.current}/{optimizeProgress.total})</span>
+                          <span>Đang nén ({optimizeProgress.current}/{optimizeProgress.total})</span>
                         </>
                       ) : (
                         <>
@@ -2302,12 +2633,12 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       type="button"
                       disabled={isAiGenerating}
                       onClick={() => handleAiSuggest("create")}
-                      className="px-4 py-1.5 bg-gradient-to-r from-violet-600/80 to-indigo-600/80 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all border border-violet-500/30 shadow-lg shadow-violet-500/20 uppercase backdrop-blur-md"
+                      className="w-full sm:w-auto min-h-[40px] px-4 py-2 rounded-xl bg-[#B5945B]/15 hover:bg-[#B5945B]/25 active:scale-95 text-[#E5C17C] hover:text-white text-[11px] sm:text-xs font-bold border border-[#B5945B]/40 hover:border-[#B5945B] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(181,148,91,0.2)] uppercase whitespace-nowrap backdrop-blur-md disabled:opacity-50"
                     >
                       {isAiGenerating ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E5C17C]" />
                       ) : (
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C] animate-pulse" />
                       )}
                       <span>
                         {isAiGenerating
@@ -2318,159 +2649,239 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
-                      Tên Album mới
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Vd: Kỷ Yếu THPT Trần Phú 12B5"
-                      required
-                      value={newColTitle}
-                      onChange={(e) => setNewColTitle(e.target.value)}
-                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
-                      Tiêu đề phụ giới thiệu
-                    </label>
-                    <input
-                      type="text"
-                      value={newColSubtitle}
-                      onChange={(e) => setNewColSubtitle(e.target.value)}
-                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Năm thực hiện</span>
-                    </label>
-                    <div className="flex items-center gap-2">
+                {/* Tactile Form Controls - Unified Liquid Glass Container */}
+                <div className="rounded-3xl bg-zinc-900/50 backdrop-blur-2xl border border-white/10 p-5 md:p-7 shadow-2xl">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Tên Album mới */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <FolderKanban className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Tên Album mới <span className="text-amber-400">*</span></span>
+                      </label>
                       <input
                         type="text"
-                        value={newColYear}
-                        onChange={(e) => setNewColYear(e.target.value)}
-                        className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                        placeholder="Vd: Kỷ Yếu THPT Trần Phú 12B5"
+                        required
+                        value={newColTitle}
+                        onChange={(e) => setNewColTitle(e.target.value)}
+                        className="w-full min-h-[48px] bg-black/40 text-zinc-100 px-4 py-3 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner"
                       />
-                      <div className="flex items-center gap-1 shrink-0">
-                        {["2026", "2025", "2024"].map((yr) => (
+                    </div>
+
+                    {/* Tiêu đề phụ giới thiệu */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <PenTool className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Tiêu đề phụ giới thiệu</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Vd: Kỷ niệm thanh xuân niên khóa 2023 - 2026"
+                        value={newColSubtitle}
+                        onChange={(e) => setNewColSubtitle(e.target.value)}
+                        className="w-full min-h-[48px] bg-black/40 text-zinc-100 px-4 py-3 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner"
+                      />
+                    </div>
+
+                    {/* Năm thực hiện with integrated 2026 | 2025 | 2024 chips */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Năm thực hiện</span>
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          placeholder="2026"
+                          value={newColYear}
+                          onChange={(e) => setNewColYear(e.target.value)}
+                          className="w-full min-h-[48px] bg-black/40 text-zinc-100 pl-4 pr-36 py-3 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner"
+                        />
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-white/10 shadow-sm">
+                          {["2026", "2025", "2024"].map((yr) => (
+                            <button
+                              key={yr}
+                              type="button"
+                              onClick={() => setNewColYear(yr)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                                newColYear === yr
+                                  ? "bg-gradient-to-r from-[#B5945B] to-[#d4af37] text-zinc-950 shadow-sm"
+                                  : "text-zinc-400 hover:text-white hover:bg-white/10"
+                              }`}
+                            >
+                              {yr}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Loại hình sự kiện / Concept with quick chips */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Loại hình sự kiện / Concept</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Vd: Kỷ Yếu THPT / Prom Night"
+                        value={newColEventType}
+                        onChange={(e) => setNewColEventType(e.target.value)}
+                        className="w-full min-h-[48px] bg-black/40 text-zinc-100 px-4 py-3 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner"
+                      />
+                      {/* Quick Chips for mobile & desktop */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {[
+                          "Kỷ Yếu THPT",
+                          "Pre-Graduation",
+                          "Prom Night",
+                          "Concept Tự Do",
+                        ].map((concept) => (
                           <button
-                            key={yr}
+                            key={concept}
                             type="button"
-                            onClick={() => setNewColYear(yr)}
-                            className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
-                              newColYear === yr
-                                ? "bg-amber-500 text-black border-amber-400"
-                                : "bg-zinc-800 text-zinc-300 border-white/10 hover:text-white"
+                            onClick={() => setNewColEventType(concept)}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer border ${
+                              newColEventType === concept
+                                ? "bg-[#B5945B]/20 text-[#E5C17C] border-[#B5945B]/50 shadow-sm"
+                                : "bg-white/[0.03] text-zinc-400 border-white/8 hover:text-zinc-200 hover:bg-white/[0.08]"
                             }`}
                           >
-                            {yr}
+                            + {concept}
                           </button>
                         ))}
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
-                      <Tag className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Loại hình sự kiện / Concept</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={newColEventType}
-                      onChange={(e) => setNewColEventType(e.target.value)}
-                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
-                      Đường dẫn Google Drive của Album
-                    </label>
-                    <input
-                      type="url"
-                      required
-                      value={newColDrive}
-                      onChange={(e) => setNewColDrive(e.target.value)}
-                      className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 font-sans transition-all shadow-inner placeholder:text-zinc-600"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold mb-1">
-                      Ảnh bìa cho Album (Tải lên / Dán link Drive)
-                    </label>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden shrink-0 bg-zinc-900 shadow-inner">
-                          {newColCoverSrc && (
-                            <img
-                              src={resolveImage(newColCoverSrc)}
-                              alt="preview"
-                              referrerPolicy="no-referrer"
-                              loading="lazy"
-                              decoding="async"
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              try {
-                                const compressedDataUrl =
-                                  await compressImage(file);
-                                setNewColCoverSrc(compressedDataUrl);
-                              } catch (err) {
-                                console.error("Image compression failed", err);
-                              }
-                            }
+                    {/* Đường dẫn Google Drive của Album */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <HardDrive className="w-3.5 h-3.5 text-[#B5945B]" />
+                          <span>Đường dẫn Google Drive của Album <span className="text-amber-400">*</span></span>
+                        </label>
+                        <GooglePickerButton
+                          mode="folders"
+                          size="sm"
+                          buttonText="📁 Chọn từ Google Drive"
+                          onSelect={(url) => {
+                            setNewColDrive(url);
+                            showToast("Đã lấy liên kết thư mục Google Drive thành công!", "success");
                           }}
-                          className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[11px] file:font-bold  file:bg-amber-500/20 file:text-amber-400 hover:file:bg-amber-500/30 cursor-pointer transition-all file:shadow-md"
                         />
                       </div>
                       <input
-                        type="text"
-                        value={newColCoverSrc}
-                        onChange={(e) => setNewColCoverSrc(e.target.value)}
-                        className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-2 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
+                        type="url"
+                        placeholder="https://drive.google.com/drive/folders/..."
+                        required
+                        value={newColDrive}
+                        onChange={(e) => setNewColDrive(e.target.value)}
+                        className="w-full min-h-[48px] bg-black/40 text-zinc-100 px-4 py-3 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 font-sans transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner"
+                      />
+                    </div>
+
+                    {/* Ảnh bìa cho Album (Tải lên / Dán link Drive) - Unified Block */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Ảnh bìa cho Album (Tải lên / Chọn Drive)</span>
+                      </label>
+                      <div className="p-3 sm:p-3.5 rounded-2xl bg-black/40 border border-white/12 space-y-3">
+                        <div className="flex items-center gap-3">
+                          {/* Thumbnail preview with rounded-2xl */}
+                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border border-white/15 overflow-hidden shrink-0 bg-zinc-900/80 flex items-center justify-center relative shadow-inner">
+                            {newColCoverSrc ? (
+                              <img
+                                src={resolveImage(newColCoverSrc)}
+                                alt="Album cover preview"
+                                referrerPolicy="no-referrer"
+                                loading="lazy"
+                                decoding="async"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="w-6 h-6 text-zinc-600" />
+                            )}
+                          </div>
+
+                          {/* Upload button & Google Drive Picker */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <label className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-[#B5945B]/15 hover:bg-[#B5945B]/25 active:scale-95 text-[#E5C17C] text-xs font-bold border border-[#B5945B]/30 transition-all cursor-pointer shadow-sm">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Tải ảnh lên</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        const compressedDataUrl =
+                                          await compressImage(file);
+                                        setNewColCoverSrc(compressedDataUrl);
+                                      } catch (err) {
+                                        console.error("Image compression failed", err);
+                                      }
+                                    }
+                                  }}
+                                />
+                              </label>
+                              <GooglePickerButton
+                                mode="images"
+                                size="sm"
+                                buttonText="Chọn từ Drive"
+                                onSelect={(url) => {
+                                  setNewColCoverSrc(url);
+                                  showToast("Đã chọn ảnh bìa từ Google Drive!", "success");
+                                }}
+                              />
+                            </div>
+                            <p className="text-[11px] text-zinc-500 mt-1 truncate">
+                              {newColCoverSrc ? "Đã có ảnh bìa xem trước" : "Hỗ trợ JPEG, PNG, WebP hoặc chọn trực tiếp từ Drive"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Paste link input */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Hoặc dán URL / link Google Drive ảnh bìa tại đây..."
+                            value={newColCoverSrc}
+                            onChange={(e) => setNewColCoverSrc(e.target.value)}
+                            className="w-full min-h-[44px] bg-zinc-950/70 text-zinc-100 px-3.5 py-2 rounded-xl border border-white/10 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs placeholder:text-zinc-600 shadow-inner"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Lời giới thiệu / Câu chuyện của Album (Span 2 cols) */}
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <PenTool className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>Lời giới thiệu / Câu chuyện của Album</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="Viết đôi dòng cảm xúc về album này, hoặc bấm 'AI GỢI Ý MÔ TẢ' ở góc trên để AI tự động soạn thảo..."
+                        value={newColBody}
+                        onChange={(e) => setNewColBody(e.target.value)}
+                        className="w-full min-h-[96px] bg-black/40 text-zinc-100 p-4 rounded-2xl border border-white/12 focus:outline-none focus:border-[#B5945B] focus:ring-1 focus:ring-[#B5945B]/50 transition-all text-xs sm:text-sm placeholder:text-zinc-600 shadow-inner leading-relaxed"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                  <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
-                    Lời giới thiệu / Câu chuyện của Album
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newColBody}
-                    onChange={(e) => setNewColBody(e.target.value)}
-                    className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-3 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
-                  />
-                </div>
-
-                <div className="pt-2">
+                {/* Sticky Bottom Action Button */}
+                <div className="pt-2 pb-6">
                   <button
                     type="submit"
-                    className="w-full py-4 bg-white text-black hover:bg-zinc-200 font-bold text-[13px] border border-white/10 uppercase tracking-wide rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                    className="w-full h-13 rounded-2xl bg-gradient-to-r from-[#B5945B] via-[#c9a769] to-[#B5945B] hover:brightness-110 active:scale-[0.99] hover:scale-[1.01] text-zinc-950 font-extrabold text-xs sm:text-sm tracking-wider uppercase shadow-[0_10px_30px_rgba(181,148,91,0.3)] hover:shadow-[0_12px_35px_rgba(181,148,91,0.45)] transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Plus className="w-5 h-5" /> KHỞI TẠO VÀ ĐỒNG BỘ LÊN CLOUD
-                    FIRESTORE
+                    <Plus className="w-5 h-5 stroke-[2.5]" />
+                    <span>KHỞI TẠO VÀ ĐỒNG BỘ LÊN CLOUD FIRESTORE</span>
                   </button>
                 </div>
               </motion.form>
@@ -2495,15 +2906,14 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                       type="button"
                       disabled={isAiGenerating}
                       onClick={() => handleAiSuggest("edit")}
-                      className="px-4 py-1.5 bg-gradient-to-r from-violet-600/80 to-indigo-600/80 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white text-[12px] font-bold rounded-lg flex items-center gap-1.5 cursor-pointer transition-all border border-violet-500/30 shadow-lg shadow-violet-500/20 uppercase backdrop-blur-md"
+                      className="px-4 py-2 rounded-xl bg-[#B5945B]/15 hover:bg-[#B5945B]/25 active:scale-95 text-[#E5C17C] hover:text-white text-[11px] sm:text-xs font-bold border border-[#B5945B]/40 hover:border-[#B5945B] transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(181,148,91,0.2)] uppercase whitespace-nowrap backdrop-blur-md disabled:opacity-50"
                     >
                       {isAiGenerating ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E5C17C]" />
                       ) : (
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                        <Sparkles className="w-3.5 h-3.5 text-[#E5C17C] animate-pulse" />
                       )}
-                      <span>
-                      </span>
+                      <span>{isAiGenerating ? "Đang tạo..." : "AI Gợi Ý Mô Tả ✨"}</span>
                     </button>
                     <button
                       type="button"
@@ -2590,9 +3000,21 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                 </div>
 
                 <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-white/10 rounded-xl p-3 bg-zinc-800/20 border border-transparent transition-all">
-                  <label className="block text-[12px] font-sans text-zinc-400 font-semibold">
-                    Đường dẫn Google Drive
-                  </label>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="block text-[12px] font-sans text-zinc-400 font-semibold flex items-center gap-1.5">
+                      <HardDrive className="w-3.5 h-3.5 text-[#B5945B]" />
+                      <span>Đường dẫn Google Drive</span>
+                    </label>
+                    <GooglePickerButton
+                      mode="folders"
+                      size="sm"
+                      buttonText="📁 Chọn từ Drive"
+                      onSelect={(url) => {
+                        setEditColDrive(url);
+                        showToast("Đã chọn thư mục Google Drive!", "success");
+                      }}
+                    />
+                  </div>
                   <input
                     type="url"
                     required
@@ -2649,30 +3071,42 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                               />
                             )}
                           </div>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                try {
-                                  const compressedDataUrl =
-                                    await compressImage(file);
-                                  setEditColCoverSrc(compressedDataUrl);
-                                } catch (err) {
-                                  console.error(
-                                    "Image compression failed",
-                                    err,
-                                  );
-                                  showToast("Lỗi nén ảnh bìa", "error");
+                          <div className="flex flex-col gap-2 flex-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  try {
+                                    const compressedDataUrl =
+                                      await compressImage(file);
+                                    setEditColCoverSrc(compressedDataUrl);
+                                  } catch (err) {
+                                    console.error(
+                                      "Image compression failed",
+                                      err,
+                                    );
+                                    showToast("Lỗi nén ảnh bìa", "error");
+                                  }
                                 }
-                              }
-                            }}
-                            className="block w-full text-xs text-zinc-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:text-white hover:file:bg-zinc-700 transition-all cursor-pointer"
-                          />
+                              }}
+                              className="block w-full text-xs text-zinc-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:text-white hover:file:bg-zinc-700 transition-all cursor-pointer"
+                            />
+                            <GooglePickerButton
+                              mode="images"
+                              size="sm"
+                              buttonText="Chọn ảnh bìa từ Drive"
+                              onSelect={(url) => {
+                                setEditColCoverSrc(url);
+                                showToast("Đã chọn ảnh bìa từ Google Drive!", "success");
+                              }}
+                            />
+                          </div>
                         </div>
                         <input
                           type="text"
+                          placeholder="Hoặc dán URL / link Google Drive ảnh bìa..."
                           value={editColCoverSrc}
                           onChange={(e) => setEditColCoverSrc(e.target.value)}
                           className="w-full text-xs bg-zinc-900/50 text-zinc-100 px-3.5 py-2 rounded-lg border border-white/10 focus:outline-none focus:border-amber-500 transition-all shadow-inner placeholder:text-zinc-600"
@@ -2702,468 +3136,901 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                     </div>
                   )}
 
-                <div className="pt-2">
+                <div className="pt-2 pb-6">
                   <button
                     type="submit"
-                    className="w-full py-4 bg-white text-black hover:bg-zinc-200 font-bold text-[13px] border border-white/10 uppercase tracking-wide rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+                    className="w-full h-13 rounded-2xl bg-gradient-to-r from-[#B5945B] via-[#c9a769] to-[#B5945B] hover:brightness-110 active:scale-[0.99] hover:scale-[1.01] text-zinc-950 font-extrabold text-xs sm:text-sm tracking-wider uppercase shadow-[0_10px_30px_rgba(181,148,91,0.3)] hover:shadow-[0_12px_35px_rgba(181,148,91,0.45)] transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Save className="w-5 h-5" /> LƯU THAY ĐỔI
+                    <Save className="w-5 h-5 stroke-[2.5]" />
+                    <span>LƯU THAY ĐỔI VÀ ĐỒNG BỘ FIRESTORE</span>
                   </button>
                 </div>
               </motion.form>
             )}
 
-            {/* TAB CONTENT 6: Edit frames info */}
-            {adminActiveTab === "edit-frames" && activeCollection && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-4"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-3">
-                  <div className="flex flex-col gap-1.5 text-left">
-                    <span className="block text-xs text-amber-500 font-medium uppercase tracking-wide flex items-center gap-2">
-                      🖼️ CHỈNH SỬA DANH SÁCH KHUNG HÌNH (
-                      {activeCollection.images.length})
-                    </span>
-                    <p className="text-zinc-400 text-[12px] bg-white/5 px-2.5 py-1.5 rounded-md inline-block w-fit border border-white/5">
-                      Sửa Tiêu đề, Mô tả hiển thị hoặc kéo thả{" "}
-                      <GripVertical className="w-3 h-3 inline text-zinc-500" />{" "}
-                      để đổi thứ tự hình ảnh trong &quot;
-                      <span className="text-amber-100 font-bold">
-                        {activeCollection.title}
-                      </span>
-                      &quot;
-                    </p>
-                  </div>
+            {/* TAB CONTENT 6: Master-Detail Studio Workspace - CHỈNH FRAMES */}
+            {adminActiveTab === "edit-frames" && activeCollection && (() => {
+              const filteredPhotos = activeCollection.images
+                .map((img, idx) => ({ img, idx }))
+                .filter(({ img }) => {
+                  if (!quickSearchPhotoQuery.trim()) return true;
+                  const q = quickSearchPhotoQuery.toLowerCase();
+                  const titleMatch = img.title && img.title.toLowerCase().includes(q);
+                  const descMatch = img.desc && img.desc.toLowerCase().includes(q);
+                  return titleMatch || descMatch;
+                });
 
-                  {/* Thanh tìm kiếm nhanh các khung hình */}
-                  <div className="relative w-full sm:max-w-xs shrink-0">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                    <input
-                      type="text"
-                      value={quickSearchPhotoQuery}
-                      onChange={(e) => setQuickSearchPhotoQuery(e.target.value)}
-                      className="w-full pl-8 pr-8 py-2 bg-zinc-950 text-zinc-200 text-[11px] rounded-lg border border-white/5 focus:border-amber-500 focus:outline-none transition-all placeholder:text-slate-650"
-                    />
-                    {quickSearchPhotoQuery && (
-                      <button
-                        onClick={() => setQuickSearchPhotoQuery("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] uppercase font-medium text-zinc-500 hover:text-zinc-300"
-                      >
-                        Xóa
-                      </button>
-                    )}
-                  </div>
-                </div>
+              const inspectedIdx =
+                photoToEditIdx !== null && activeCollection.images[photoToEditIdx]
+                  ? photoToEditIdx
+                  : activeCollection.images.length > 0
+                  ? 0
+                  : null;
+              const inspectedPhoto =
+                inspectedIdx !== null ? activeCollection.images[inspectedIdx] : null;
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[450px] overflow-y-auto pr-2 scrollbar-thin">
-                  {activeCollection.images
-                    .map((img, idx) => ({ img, idx }))
-                    .filter(({ img }) => {
-                      if (!quickSearchPhotoQuery) return true;
-                      const titleMatch =
-                        img.title &&
-                        img.title
-                          .toLowerCase()
-                          .includes(quickSearchPhotoQuery.toLowerCase());
-                      const descMatch =
-                        img.desc &&
-                        img.desc
-                          .toLowerCase()
-                          .includes(quickSearchPhotoQuery.toLowerCase());
-                      return titleMatch || descMatch;
-                    })
-                    .map(({ img, idx }) => (
+              // Shared Inspector Component for Desktop Sticky Column & Mobile Bottom Sheet
+              const renderInspectorContent = (isMobile = false) => {
+                if (!inspectedPhoto || inspectedIdx === null) {
+                  return (
+                    <div className="p-8 text-center text-zinc-500 text-xs">
+                      Chưa chọn khung hình nào. Hãy click vào ảnh bên trái để chỉnh sửa.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4 text-left">
+                    {/* Header with Title and Sequential Navigation */}
+                    <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#B5945B] block">
+                          Khung hình #{inspectedIdx + 1} / {activeCollection.images.length}
+                        </span>
+                        <p className="text-xs font-semibold text-zinc-100 truncate max-w-[200px] sm:max-w-[240px]">
+                          {inspectedPhoto.title || "(Chưa có tiêu đề)"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={inspectedIdx <= 0}
+                          onClick={() => selectPhotoForInspector(inspectedIdx - 1)}
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 text-zinc-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                          title="Chuyển sang ảnh trước"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Trước</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={inspectedIdx >= activeCollection.images.length - 1}
+                          onClick={() => selectPhotoForInspector(inspectedIdx + 1)}
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 text-zinc-200 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+                          title="Chuyển sang ảnh tiếp theo"
+                        >
+                          <span className="hidden sm:inline">Sau</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                        {isMobile && (
+                          <button
+                            type="button"
+                            onClick={() => setIsMobileInspectorOpen(false)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white ml-1"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interactive Drag-to-Pan Position Preview */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-400 uppercase font-semibold tracking-wider flex items-center gap-1.5">
+                          <Crop className="w-3.5 h-3.5 text-[#B5945B]" />
+                          Khu vực căn chỉnh vị trí
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditPhotoObjectPosition("center");
+                            setEditPhotoScale(1.0);
+                          }}
+                          className="text-zinc-400 hover:text-[#E5C17C] flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Đặt lại vị trí giữa và zoom 100%"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Đặt lại gốc</span>
+                        </button>
+                      </div>
+
                       <div
-                        key={`edit-frame-photo-${img.src}-${idx}`}
-                        draggable={photoToEditIdx !== idx}
-                        onDragStart={() => setDraggedPhotoIdx(idx)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.add(
-                            "border-amber-500",
-                            "bg-amber-500/10",
-                          );
+                        className="w-full max-w-[280px] sm:max-w-[320px] mx-auto rounded-2xl overflow-hidden bg-zinc-950 border border-white/15 relative shadow-inner flex items-center justify-center transition-all"
+                        style={{
+                          aspectRatio: editPhotoAspectRatio
+                            ? editPhotoAspectRatio.replace("/", " / ")
+                            : "16/9",
                         }}
-                        onDragLeave={(e) => {
-                          e.currentTarget.classList.remove(
-                            "border-amber-500",
-                            "bg-amber-500/10",
-                          );
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.currentTarget.classList.remove(
-                            "border-amber-500",
-                            "bg-amber-500/10",
-                          );
-                          if (
-                            draggedPhotoIdx !== null &&
-                            draggedPhotoIdx !== idx
-                          ) {
-                            handleReorderPhoto(draggedPhotoIdx, "drop", idx);
-                          }
-                          setDraggedPhotoIdx(null);
-                        }}
-                        className={`flex flex-col border ${draggedPhotoIdx === idx ? "border-amber-500/50 opacity-50 bg-amber-500/5" : "border-white/10 bg-zinc-900/50 hover:border-white/20 hover:bg-zinc-800/60"} p-3 rounded-xl gap-3 transition-all shadow-sm group cursor-move`}
                       >
-                        {photoToEditIdx !== idx ? (
+                        <ImagePositionControl
+                          src={resolveImage(inspectedPhoto.src)}
+                          value={editPhotoObjectPosition || "center"}
+                          onChange={(val) => setEditPhotoObjectPosition(val)}
+                          scale={editPhotoScale}
+                          aspectRatio={editPhotoAspectRatio}
+                        />
+                      </div>
+                      <p className="text-center text-[10.5px] text-zinc-500 italic">
+                        * Nhấn giữ và rê chuột/ngón tay trên ảnh để di chuyển vị trí trọng tâm
+                      </p>
+                    </div>
+
+                    {/* 1. ASPECT RATIO PILL BUTTONS + BATCH SHORTCUT */}
+                    <div className="space-y-2 pt-1 border-t border-white/5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">
+                          1. Tỷ lệ khung (Aspect Ratio):
+                        </label>
+                        <span className="text-[11px] font-mono font-bold text-[#E5C17C] bg-[#B5945B]/10 px-2 py-0.5 rounded border border-[#B5945B]/20">
+                          {editPhotoAspectRatio}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {["16/9", "4/3", "1/1", "3/4", "9/16"].map((ratio) => (
+                          <button
+                            key={`ratio-pill-${ratio}`}
+                            type="button"
+                            onClick={() => setEditPhotoAspectRatio(ratio)}
+                            className={`py-1.5 text-xs font-mono font-bold rounded-xl border transition-all cursor-pointer ${
+                              editPhotoAspectRatio === ratio
+                                ? "bg-gradient-to-r from-[#B5945B] to-[#d4af37] text-zinc-950 border-[#B5945B] shadow-md shadow-[#B5945B]/25"
+                                : "bg-zinc-950 hover:bg-zinc-800 text-zinc-300 border-white/10"
+                            }`}
+                          >
+                            {ratio}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Apply Ratio to All Photos in Album */}
+                      <button
+                        type="button"
+                        onClick={handleApplyRatioToAllAlbum}
+                        disabled={isApplyingRatioAll}
+                        className="w-full py-1.5 px-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-[11px] font-bold text-[#E5C17C] hover:text-white border border-[#B5945B]/30 hover:border-[#B5945B] flex items-center justify-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        title="Đồng bộ tỷ lệ khung hình này cho toàn bộ ảnh trong album"
+                      >
+                        {isApplyingRatioAll ? (
                           <>
-                            <div className="flex gap-3 relative min-h-[96px]">
-                              <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing text-zinc-500 hover:text-amber-400 p-0.5 rounded transition-all opacity-20 sm:opacity-50 group-hover:opacity-100 z-10">
-                                <GripVertical className="w-3.5 h-3.5" />
-                              </div>
+                            <RefreshCw className="w-3 h-3 animate-spin text-[#B5945B]" />
+                            <span>Đang áp dụng...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 text-[#B5945B]" />
+                            <span>Áp dụng tỷ lệ "{editPhotoAspectRatio}" cho toàn bộ Album</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
-                              {/* Standard Static Thumbnail (LARGER SIZE) */}
-                              <div className="ml-2 w-36 sm:w-44 shrink-0 rounded-lg overflow-hidden bg-zinc-900 border border-white/10 relative shadow-inner h-24 sm:h-28">
-                                <img
-                                  src={resolveImage(img.src)}
-                                  alt={img.alt}
-                                  className="absolute inset-0 w-full h-full object-cover pointer-events-none transition-all origin-center"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                  decoding="async"
-                                  style={{
-                                    objectPosition:
-                                      img.imagePosition ||
-                                      img.objectPosition ||
-                                      "center",
-                                    transform: `scale(${img.imageScale || 1.0})`,
-                                  }}
-                                />
-                              </div>
-                              <div className="flex-1 min-w-0 flex flex-col justify-start pt-1">
-                                <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                  <span className="bg-zinc-950 text-amber-500 px-1.5 py-0.5 rounded text-[11px] font-sans border border-white/5">
-                                    #{idx + 1}
-                                  </span>
-                                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold px-1.5 py-0.5 rounded">
-                                    ĐÃ LƯU
-                                  </span>
-                                </div>
-                                <p
-                                  className="text-xs font-bold text-zinc-100 truncate uppercase mt-0.5 text-left"
-                                  title={img.title}
-                                >
-                                  {img.title || "(Chưa có tiêu đề)"}
-                                </p>
-                                <p
-                                  className="text-[12px] text-zinc-500 line-clamp-2 leading-snug mt-1 text-left"
-                                  title={img.desc}
-                                >
-                                  {img.desc || "(Chưa có mô tả chi tiết)"}
-                                </p>
-                              </div>
-                            </div>
+                    {/* 2. ZOOM / SCALE CONTROL */}
+                    <div className="space-y-1.5 pt-1 border-t border-white/5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">
+                          2. Độ Zoom / Scale ảnh:
+                        </label>
+                        <span className="text-xs font-mono font-bold text-[#E5C17C] bg-[#B5945B]/10 px-2 py-0.5 rounded border border-[#B5945B]/20">
+                          {Math.round(editPhotoScale * 100)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-zinc-950/80 p-2.5 rounded-xl border border-white/10 shadow-inner">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditPhotoScale((prev) =>
+                              Math.max(1.0, +(prev - 0.05).toFixed(2))
+                            )
+                          }
+                          className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 shrink-0"
+                          title="Giảm 5%"
+                        >
+                          -
+                        </button>
+                        <span className="text-[10.5px] font-mono text-zinc-500">100%</span>
+                        <input
+                          type="range"
+                          min="1.0"
+                          max="2.0"
+                          step="0.05"
+                          value={editPhotoScale}
+                          onChange={(e) => setEditPhotoScale(parseFloat(e.target.value))}
+                          className="flex-1 accent-[#B5945B] h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <span className="text-[10.5px] font-mono text-zinc-500">200%</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditPhotoScale((prev) =>
+                              Math.min(2.0, +(prev + 0.05).toFixed(2))
+                            )
+                          }
+                          className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold flex items-center justify-center cursor-pointer transition-all active:scale-95 shrink-0"
+                          title="Tăng 5%"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
 
-                            <div className="pt-2 mt-auto border-t border-white/5 space-y-2">
+                    {/* 3. TITLE & DESCRIPTION */}
+                    <div className="space-y-2 pt-1 border-t border-white/5">
+                      <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide block">
+                        3. Thông tin khung hình:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Tiêu đề tác phẩm..."
+                        value={editPhotoTitle}
+                        onChange={(e) => setEditPhotoTitle(e.target.value)}
+                        className="w-full text-xs bg-zinc-950 text-white px-3.5 py-2.5 rounded-xl border border-white/10 focus:border-[#B5945B] focus:outline-none placeholder-zinc-600 transition-all shadow-inner"
+                      />
+                      <textarea
+                        placeholder="Mô tả chi tiết khoảnh khắc..."
+                        value={editPhotoDesc}
+                        onChange={(e) => setEditPhotoDesc(e.target.value)}
+                        rows={2}
+                        className="w-full text-xs bg-zinc-950 text-white px-3.5 py-2.5 rounded-xl border border-white/10 focus:border-[#B5945B] focus:outline-none placeholder-zinc-600 resize-none transition-all shadow-inner"
+                      />
+                    </div>
+
+                    {/* 4. SUB-PHOTOS GALLERY */}
+                    <div className="space-y-2 pt-1 border-t border-white/5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-zinc-300 uppercase tracking-wide">
+                          4. Ảnh chi tiết Album ({editPhotoGalleryImages.length}):
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          placeholder="Dán link ảnh chi tiết..."
+                          value={newGalleryUrlInput}
+                          onChange={(e) => setNewGalleryUrlInput(e.target.value)}
+                          className="flex-1 text-[11px] bg-zinc-950 text-white px-3 py-2 rounded-xl border border-white/10 focus:border-[#B5945B] focus:outline-none placeholder-zinc-600 transition-all min-h-[36px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newGalleryUrlInput.trim()) return;
+                            setEditPhotoGalleryImages((prev) => [
+                              ...prev,
+                              newGalleryUrlInput.trim(),
+                            ]);
+                            setNewGalleryUrlInput("");
+                            showToast("Đã thêm link ảnh chi tiết!", "success");
+                          }}
+                          className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-[#B5945B]/30 text-[#E5C17C] font-bold text-[11px] rounded-xl transition-all min-h-[36px] shrink-0 cursor-pointer"
+                        >
+                          Thêm
+                        </button>
+                        <GooglePickerButton
+                          mode="images"
+                          multiselect={true}
+                          size="sm"
+                          buttonText="📁 Drive"
+                          onSelectMultiple={(urls) => {
+                            setEditPhotoGalleryImages((prev) => [...prev, ...urls]);
+                            showToast(
+                              `Đã thêm ${urls.length} ảnh chi tiết từ Google Drive!`,
+                              "success"
+                            );
+                          }}
+                          onSelect={(url) => {
+                            setEditPhotoGalleryImages((prev) => [...prev, url]);
+                            showToast("Đã thêm ảnh chi tiết từ Google Drive!", "success");
+                          }}
+                        />
+                      </div>
+
+                      {/* Sub-photo thumbnail list */}
+                      {editPhotoGalleryImages.length > 0 && (
+                        <div className="grid grid-cols-4 gap-1.5 pt-1 max-h-[110px] overflow-y-auto pr-1 custom-scrollbar">
+                          {editPhotoGalleryImages.map((gSrc, gIdx) => (
+                            <div
+                              key={`sub-${gSrc}-${gIdx}`}
+                              className="relative group/sub aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-950"
+                            >
+                              <img
+                                src={resolveImage(gSrc)}
+                                alt={`sub-${gIdx}`}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setPhotoToEditIdx(idx);
-                                  setEditPhotoTitle(img.title);
-                                  setEditPhotoDesc(img.desc);
-                                  setEditPhotoObjectPosition(
-                                    img.imagePosition ||
-                                      img.objectPosition ||
-                                      "center",
+                                  setEditPhotoGalleryImages((prev) =>
+                                    prev.filter((_, idx) => idx !== gIdx)
                                   );
-                                  setEditPhotoAspectRatio(
-                                    img.aspectRatio || "16/9",
-                                  );
-                                  setEditPhotoScale(img.imageScale ?? 1.0);
-                                  setEditPhotoGalleryImages(
-                                    img.galleryImages || [],
-                                  );
+                                  showToast("Đã gỡ ảnh chi tiết", "success");
                                 }}
-                                className="w-full py-2.5 text-[10.5px] bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-lg flex items-center justify-center gap-2 transition-all outline-none shadow-md shadow-amber-500/10 active:scale-95"
+                                className="absolute inset-0 bg-red-600/90 opacity-0 group-hover/sub:opacity-100 flex items-center justify-center text-white text-[10px] font-bold uppercase transition-opacity cursor-pointer"
                               >
-                                <Crop className="w-3.5 h-3.5" /> CHỈNH CHI TIẾT
-                                & CĂN VỊ TRÍ ẢNH
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeletePhoto(idx)}
-                                className="w-full py-1.5 text-[12px] text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
-                              >
-                                Thùng rác
+                                Xoá
                               </button>
                             </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 5. SAVE BUTTON & FEEDBACK */}
+                    <div className="pt-2 border-t border-white/10 space-y-2">
+                      <button
+                        type="button"
+                        onClick={handleSavePhotoEdit}
+                        disabled={isSavingPhotoFrame}
+                        className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#B5945B] via-[#c5a367] to-[#B5945B] hover:brightness-110 active:scale-[0.98] text-zinc-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-[#B5945B]/25 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isSavingPhotoFrame ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin text-zinc-950" />
+                            <span>Đang lưu khung hình...</span>
                           </>
                         ) : (
-                          <div className="flex flex-col gap-3.5 bg-zinc-900 border border-amber-500/20 p-4 rounded-xl shadow-lg">
-                            <label className="text-[11px] font-medium text-amber-500 flex items-center gap-1.5 border-b border-white/5 pb-2">
-                              <Crop className="w-3.5 h-3.5 text-amber-400" />{" "}
-                              CHỈNH CHI TIẾT HÌNH #{idx + 1}
-                            </label>
+                          <>
+                            <Check className="w-4 h-4 stroke-[3]" />
+                            <span>Khóa Lưu Khung Hình</span>
+                          </>
+                        )}
+                      </button>
 
-                            {/* Dynamic Grid Aspect Control Preview */}
-                            <div className="flex flex-col gap-1.5">
-                              <span className="text-[11px] text-zinc-400 uppercase font-medium tracking-wide block">
-                                Khu Vực Căn Chỉnh Vị Trí:
-                              </span>
-                              <div
-                                className="w-full max-w-[280px] mx-auto rounded-lg overflow-hidden bg-zinc-950 border border-white/10 relative shadow-inner flex items-center justify-center transition-all"
-                                style={{
-                                  aspectRatio: editPhotoAspectRatio
-                                    ? editPhotoAspectRatio.replace("/", " / ")
-                                    : "16/9",
-                                }}
-                              >
-                                <ImagePositionControl
-                                  src={resolveImage(img.src)}
-                                  value={editPhotoObjectPosition || "center"}
-                                  onChange={(val) =>
-                                    setEditPhotoObjectPosition(val)
-                                  }
-                                  scale={editPhotoScale}
-                                  aspectRatio={editPhotoAspectRatio}
-                                />
-                              </div>
-                              <span className="text-center text-[11px] text-amber-400/80 italic mt-0.5 font-sans">
-                                * Nhấn giữ và kéo chuột/tay trên ảnh để di
-                                chuyển căn vị trí
-                              </span>
-                            </div>
+                      {lastSavedPhotoId === inspectedPhoto.id && (
+                        <div className="text-center text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 py-1.5 px-3 rounded-xl flex items-center justify-center gap-1.5 animate-fadeIn">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>✅ Đã lưu thứ tự & khung hình thành công!</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              };
 
-                            {/* Fast Selection Aspect Ratios */}
-                            <div className="space-y-1.5">
-                              <label className="text-[11px] font-medium text-zinc-300 block">
-                                1. TỶ LỆ KHUNG (ASPECT RATIO):
-                              </label>
-                              <div className="grid grid-cols-5 gap-1.5">
-                                {["16/9", "4/3", "1/1", "3/4", "9/16"].map(
-                                  (ratio, rIdx) => (
-                                    <button
-                                      key={`ratio-${ratio}-${rIdx}`}
-                                      type="button"
-                                      onClick={() =>
-                                        setEditPhotoAspectRatio(ratio)
-                                      }
-                                      className={`py-1.5 text-[11px] font-sans rounded-md border transition-all ${
-                                        editPhotoAspectRatio === ratio
-                                          ? "bg-amber-500 border-amber-400 text-zinc-950 font-bold shadow-md"
-                                          : "bg-zinc-950 hover:bg-slate-850 border-white/5 text-zinc-400"
-                                      }`}
-                                    >
-                                      {ratio}
-                                    </button>
-                                  ),
-                                )}
-                              </div>
-                            </div>
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-5"
+                >
+                  {/* 1. TOP ACTION BAR (ALBUM SELECTOR + QUICK ADD PHOTOS) */}
+                  <div className="rounded-3xl p-4 bg-zinc-900/70 backdrop-blur-2xl border border-white/10 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+                    {/* Left: Album Selector Dropdown & Search */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#B5945B] shrink-0 flex items-center gap-1.5">
+                          <FolderKanban className="w-4 h-4" /> Album:
+                        </span>
+                        <select
+                          value={activeCollectionIdx}
+                          onChange={(e) => {
+                            const newIdx = Number(e.target.value);
+                            setActiveCollectionIdx(newIdx);
+                            setSelectedIndex(0);
+                            selectPhotoForInspector(0);
+                          }}
+                          className="bg-zinc-950 text-zinc-100 text-xs font-semibold px-3 py-2 rounded-xl border border-white/10 hover:border-[#B5945B]/50 focus:border-[#B5945B] focus:outline-none transition-all cursor-pointer truncate max-w-xs sm:max-w-sm shadow-inner"
+                        >
+                          {collections.map((col, idx) => (
+                            <option
+                              key={`album-select-opt-${col.id}-${idx}`}
+                              value={idx}
+                              className="bg-zinc-900 text-zinc-100"
+                            >
+                              {col.title} ({col.images?.length || 0} ảnh)
+                            </option>
+                          ))}
+                        </select>
+                        <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 border border-white/10 text-zinc-400 font-mono shrink-0">
+                          {activeCollection.images.length} frames
+                        </span>
+                      </div>
 
-                            {/* ZOOM / SCALE control */}
-                            <div className="space-y-1.5">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[11px] font-medium text-zinc-300 block">
-                                  2. ĐỘ ZOOM / SCALE ẢNH:
-                                </label>
-                                <span className="text-[12px] font-sans text-amber-400 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded">
-                                  {Math.round(editPhotoScale * 100)}%
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 bg-zinc-950 p-2 rounded-lg border border-white/5">
-                                <span className="text-[11px] font-sans text-zinc-500">
-                                  100%
-                                </span>
-                                <input
-                                  type="range"
-                                  min="1.0"
-                                  max="2.0"
-                                  step="0.05"
-                                  value={editPhotoScale}
-                                  onChange={(e) =>
-                                    setEditPhotoScale(
-                                      parseFloat(e.target.value),
-                                    )
-                                  }
-                                  className="flex-1 accent-amber-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-                                />
-                                <span className="text-[11px] font-sans text-zinc-500">
-                                  200%
-                                </span>
-                              </div>
-                            </div>
+                      {/* Compact Search */}
+                      <div className="relative w-full sm:w-48 shrink-0">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Tìm khung hình..."
+                          value={quickSearchPhotoQuery}
+                          onChange={(e) => setQuickSearchPhotoQuery(e.target.value)}
+                          className="w-full pl-8 pr-7 py-2 bg-zinc-950 text-zinc-200 text-xs rounded-xl border border-white/10 focus:border-[#B5945B] focus:outline-none transition-all placeholder:text-zinc-600 shadow-inner"
+                        />
+                        {quickSearchPhotoQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setQuickSearchPhotoQuery("")}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                            {/* Title & Desc */}
-                            <div className="space-y-2">
-                              <label className="text-[11px] font-medium text-zinc-300 block">
-                                3. THÔNG TIN KHUNG HÌNH:
-                              </label>
-                              <input
-                                title="Tiêu đề"
-                                value={editPhotoTitle}
-                                onChange={(e) =>
-                                  setEditPhotoTitle(e.target.value)
-                                }
-                                className="w-full text-[10.5px] bg-zinc-950 text-white px-3 py-2.5 rounded-lg border border-white/10 focus:border-amber-500 focus:outline-none placeholder-zinc-600 transition-all shadow-inner"
+                    {/* Right: Quick Add Action Buttons */}
+                    <div className="flex items-center gap-2 flex-wrap shrink-0">
+                      <GooglePickerButton
+                        mode="images"
+                        multiselect={true}
+                        size="md"
+                        buttonText="📁 + Thêm từ Google Drive"
+                        onSelectMultiple={handleQuickAddFromDrive}
+                        onSelect={(url) => handleQuickAddFromDrive([url])}
+                        className="shadow-md shadow-[#B5945B]/15"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsQuickAddModalOpen(true)}
+                        className="px-3.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 text-[#E5C17C] hover:text-white border border-[#B5945B]/30 hover:border-[#B5945B] text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap min-h-[40px] cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <span>+ Tải ảnh lên / Dán Link</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. TWO-COLUMN MASTER-DETAIL WORKSPACE */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    {/* LEFT COLUMN: Compact Reorderable Photo List (lg:col-span-7) */}
+                    <div className="lg:col-span-7 flex flex-col space-y-3 min-w-0">
+                      {/* Sub-header with Count & View Mode Toggle */}
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+                            <LayoutGrid className="w-3.5 h-3.5 text-[#B5945B]" />
+                            <span>Danh sách khung hình</span>
+                          </span>
+                          <span className="text-[11px] font-mono text-zinc-500">
+                            ({filteredPhotos.length} / {activeCollection.images.length})
+                          </span>
+                        </div>
+
+                        {/* View Mode Toggle: List vs Grid */}
+                        <div className="flex items-center p-0.5 rounded-xl bg-white/[0.04] border border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => setFramesViewMode("list")}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                              framesViewMode === "list"
+                                ? "bg-[#B5945B] text-zinc-950 font-bold shadow-sm"
+                                : "text-zinc-400 hover:text-white"
+                            }`}
+                            title="Chế độ Danh sách thu gọn"
+                          >
+                            <List className="w-3.5 h-3.5" />
+                            <span className="text-[11px]">Danh sách</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFramesViewMode("grid")}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                              framesViewMode === "grid"
+                                ? "bg-[#B5945B] text-zinc-950 font-bold shadow-sm"
+                                : "text-zinc-400 hover:text-white"
+                            }`}
+                            title="Chế độ Lưới thu nhỏ"
+                          >
+                            <Grid className="w-3.5 h-3.5" />
+                            <span className="text-[11px]">Lưới</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Smooth Scrollable Container */}
+                      <div className="max-h-[72vh] overflow-y-auto pr-1.5 custom-scrollbar space-y-2">
+                        {filteredPhotos.length === 0 ? (
+                          <div className="p-10 rounded-2xl bg-zinc-900/40 border border-dashed border-white/10 text-center space-y-3">
+                            <ImageIcon className="w-8 h-8 text-zinc-600 mx-auto" />
+                            <p className="text-zinc-400 text-xs">
+                              {quickSearchPhotoQuery
+                                ? "Không tìm thấy khung hình nào khớp với từ khóa."
+                                : "Album này hiện chưa có khung hình nào."}
+                            </p>
+                            <div className="flex items-center justify-center gap-2">
+                              <GooglePickerButton
+                                mode="images"
+                                multiselect={true}
+                                size="sm"
+                                buttonText="📁 Chọn ảnh từ Google Drive"
+                                onSelectMultiple={handleQuickAddFromDrive}
                               />
-                              <textarea
-                                title="Mô tả chi tiết"
-                                value={editPhotoDesc}
-                                onChange={(e) =>
-                                  setEditPhotoDesc(e.target.value)
-                                }
-                                rows={2}
-                                wrap="hard"
-                                className="w-full text-[10.5px] bg-zinc-950 text-white px-3 py-2.5 rounded-lg border border-white/10 focus:border-amber-500 focus:outline-none placeholder-zinc-600 resize-none scrollbar-thin transition-all shadow-inner"
-                              />
-                            </div>
-
-                            {/* Gallery/Sub-photos Section */}
-                            <div className="space-y-3 pt-2 border-t border-white/5 text-left">
-                              <div className="flex justify-between items-center">
-                                <label className="text-[11px] font-medium text-zinc-300 block">
-                                  4. DANH SÁCH ẢNH CHI TIẾT (
-                                  {editPhotoGalleryImages.length}):
-                                </label>
-                              </div>
-
-                              {/* Image link input */}
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={newGalleryUrlInput}
-                                  onChange={(e) =>
-                                    setNewGalleryUrlInput(e.target.value)
-                                  }
-                                  className="flex-1 text-[10.5px] bg-zinc-950 text-white px-3 py-2 rounded-lg border border-white/10 focus:border-amber-500 focus:outline-none placeholder-slate-650 transition-all shadow-inner"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!newGalleryUrlInput.trim()) return;
-                                    setEditPhotoGalleryImages((prev) => [
-                                      newGalleryUrlInput.trim(),
-                                    ]);
-                                    setNewGalleryUrlInput("");
-                                    showToast(
-                                      "Đã thêm link ảnh chi tiết!",
-                                      "success",
-                                    );
-                                  }}
-                                  className="px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-[#B5945B]/10 text-amber-400 font-bold text-[12px] rounded-lg transition-all"
-                                >
-                                  Thêm Link
-                                </button>
-                              </div>
-
-                              {/* Compressed file upload support */}
-                              <div className="bg-zinc-950/40 p-2.5 rounded-lg border border-dashed border-white/10 flex flex-col items-center justify-center gap-2">
-                                <span className="text-[11px] text-zinc-500 uppercase font-sans tracking-wide">
-                                  Hoặc chọn file ảnh trực tiếp (tự động nén)
-                                </span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  onChange={async (e) => {
-                                    const files = Array.from(
-                                      e.target.files || [],
-                                    ) as File[];
-                                    if (files.length > 0) {
-                                      try {
-                                        const compressedUrls =
-                                          await Promise.all(
-                                            files.map((file) =>
-                                              compressImage(file),
-                                            ),
-                                          );
-                                        setEditPhotoGalleryImages((prev) => [
-                                        ]);
-                                        showToast(
-                                          `Đã tải lên và nén thành công ${files.length} ảnh!`,
-                                          "success",
-                                        );
-                                      } catch (err) {
-                                        console.error(
-                                          "Compression failed",
-                                          err,
-                                        );
-                                        showToast(
-                                          "Lỗi nén ảnh chi tiết!",
-                                          "error",
-                                        );
-                                      }
-                                    }
-                                  }}
-                                  className="w-full text-[12px] text-zinc-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-bold  file:bg-white/5 file:text-zinc-300 hover:file:bg-white/10 cursor-pointer"
-                                />
-                              </div>
-
-                              {/* Thumbnail list of current gallery sub-photos */}
-                              {editPhotoGalleryImages.length > 0 ? (
-                                <div className="grid grid-cols-4 gap-2 pt-1 max-h-[140px] overflow-y-auto pr-1 scrollbar-thin">
-                                  {editPhotoGalleryImages.map((gSrc, gIdx) => (
-                                    <div
-                                      key={`${gSrc}-${gIdx}`}
-                                      className="relative group/gallery aspect-square rounded-lg overflow-hidden border border-white/10 bg-zinc-950"
-                                    >
-                                      <img
-                                        src={resolveImage(gSrc)}
-                                        alt={`sub-${gIdx}`}
-                                        className="w-full h-full object-cover"
-                                        referrerPolicy="no-referrer"
-                                        loading="lazy"
-                                        decoding="async"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditPhotoGalleryImages((prev) =>
-                                            prev.filter(
-                                              (_, idx) => idx !== gIdx,
-                                            ),
-                                          );
-                                          showToast(
-                                            "Đã ẩn/xoá liên kết ảnh chi tiết",
-                                            "success",
-                                          );
-                                        }}
-                                        className="absolute inset-0 bg-red-600/95 opacity-0 group-hover/gallery:opacity-100 flex items-center justify-center text-white text-[11px] font-medium uppercase transition-opacity duration-200"
-                                      >
-                                        Xoá
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-[11px] text-zinc-500 italic">
-                                  Tác phẩm này chưa có ảnh chi tiết nào. Thêm
-                                  link ở trên để tạo Fullscreen Album.
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Save / Cancel Action block */}
-                            <div className="flex gap-2 justify-end pt-3 border-t border-white/5">
                               <button
                                 type="button"
-                                onClick={() => setPhotoToEditIdx(null)}
-                                className="flex-1 py-2.5 bg-zinc-800 hover:bg-slate-705 text-zinc-300 text-[12px] font-bold rounded-lg transition-colors border border-white/5 uppercase tracking-wide"
+                                onClick={() => setIsQuickAddModalOpen(true)}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 text-xs text-zinc-300 hover:text-white border border-white/10"
                               >
-                                Hủy bỏ
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleSavePhotoEdit}
-                                className="flex-1 py-2.5 bg-[#1DA869] hover:bg-[#13804F] text-white text-[10.5px] font-bold rounded-lg shadow-md transition-all uppercase tracking-wide flex items-center justify-center gap-1.5 active:scale-95"
-                              >
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />{" "}
-                                Khóa lưu
+                                Dán Link / Tải ảnh lên
                               </button>
                             </div>
                           </div>
+                        ) : framesViewMode === "list" ? (
+                          /* Compact List View (Height ~72px, rounded-2xl) */
+                          filteredPhotos.map(({ img, idx }) => {
+                            const isSelected = inspectedIdx === idx;
+                            const isAlbumCover =
+                              activeCollection.coverImageSrc === img.src ||
+                              (!activeCollection.coverImageSrc && idx === 0);
+
+                            return (
+                              <div
+                                key={`compact-photo-row-${img.src}-${idx}`}
+                                draggable
+                                onDragStart={() => setDraggedPhotoIdx(idx)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.add(
+                                    "border-[#B5945B]",
+                                    "bg-[#B5945B]/10"
+                                  );
+                                }}
+                                onDragLeave={(e) => {
+                                  e.currentTarget.classList.remove(
+                                    "border-[#B5945B]",
+                                    "bg-[#B5945B]/10"
+                                  );
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.currentTarget.classList.remove(
+                                    "border-[#B5945B]",
+                                    "bg-[#B5945B]/10"
+                                  );
+                                  if (
+                                    draggedPhotoIdx !== null &&
+                                    draggedPhotoIdx !== idx
+                                  ) {
+                                    handleReorderPhoto(draggedPhotoIdx, "drop", idx);
+                                  }
+                                  setDraggedPhotoIdx(null);
+                                }}
+                                onClick={() => {
+                                  selectPhotoForInspector(idx);
+                                  setIsMobileInspectorOpen(true);
+                                }}
+                                className={`h-[72px] rounded-2xl p-2.5 flex items-center justify-between gap-3 border transition-all cursor-pointer select-none group ${
+                                  isSelected
+                                    ? "border-[#E5C17C] bg-[#B5945B]/15 shadow-[0_0_20px_rgba(181,148,91,0.2)]"
+                                    : "border-white/10 bg-zinc-900/60 hover:bg-zinc-800/80 hover:border-white/20"
+                                }`}
+                              >
+                                {/* Left: Drag handle, Index, Thumbnail, Info */}
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  {/* Drag Handle */}
+                                  <div
+                                    className="cursor-grab active:cursor-grabbing text-zinc-500 hover:text-[#E5C17C] p-1 rounded transition-colors shrink-0"
+                                    title="Kéo thả để đổi thứ tự ảnh"
+                                  >
+                                    <GripVertical className="w-3.5 h-3.5" />
+                                  </div>
+
+                                  {/* Index Badge */}
+                                  <span className="w-6 h-6 rounded-lg bg-zinc-950 border border-white/10 text-amber-500 text-[11px] font-mono font-bold flex items-center justify-center shrink-0">
+                                    #{idx + 1}
+                                  </span>
+
+                                  {/* Small Thumbnail Reflecting Crop & Zoom */}
+                                  <div className="w-16 h-12 rounded-lg overflow-hidden bg-zinc-950 border border-white/10 relative shrink-0">
+                                    <LazyImage
+                                      src={img.src}
+                                      alt={img.alt || `Khung hình #${idx + 1}`}
+                                      preset="thumbnail"
+                                      className="w-full h-full object-cover transition-transform"
+                                      style={{
+                                        objectPosition:
+                                          img.imagePosition ||
+                                          img.objectPosition ||
+                                          "center",
+                                        transform: `scale(${img.imageScale || 1.0})`,
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Title & Metadata */}
+                                  <div className="min-w-0 flex-1 text-left">
+                                    <p
+                                      className="text-xs font-semibold text-zinc-100 truncate"
+                                      title={img.title}
+                                    >
+                                      {img.title || `Khung hình #${idx + 1}`}
+                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                      <span className="text-[10px] bg-zinc-800/90 text-zinc-400 px-1.5 py-0.2 rounded border border-white/5 font-mono">
+                                        {img.aspectRatio || "16/9"}
+                                      </span>
+                                      {isAlbumCover && (
+                                        <span className="text-[10px] bg-amber-500/20 text-[#E5C17C] border border-[#B5945B]/30 px-1.5 py-0.2 rounded font-bold flex items-center gap-0.5">
+                                          <Star className="w-2.5 h-2.5 fill-current" /> Bìa
+                                        </span>
+                                      )}
+                                      {img.galleryImages && img.galleryImages.length > 0 && (
+                                        <span className="text-[10px] text-zinc-500 font-mono">
+                                          +{img.galleryImages.length} chi tiết
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Right: Quick 1-Click Action Buttons */}
+                                <div
+                                  className="flex items-center gap-1 shrink-0"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {/* Move Up */}
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => handleReorderPhoto(idx, "up")}
+                                    className="w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-[#B5945B]/20 hover:text-[#E5C17C] disabled:opacity-20 text-zinc-300 border border-white/5 flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+                                    title="Di chuyển lên (▲)"
+                                  >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Move Down */}
+                                  <button
+                                    type="button"
+                                    disabled={idx === activeCollection.images.length - 1}
+                                    onClick={() => handleReorderPhoto(idx, "down")}
+                                    className="w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-[#B5945B]/20 hover:text-[#E5C17C] disabled:opacity-20 text-zinc-300 border border-white/5 flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+                                    title="Di chuyển xuống (▼)"
+                                  >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Set as Album Cover */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetAsAlbumCover(img)}
+                                    className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                                      isAlbumCover
+                                        ? "bg-amber-500/20 text-[#E5C17C] border-[#B5945B]"
+                                        : "bg-zinc-800/90 hover:bg-amber-500/20 text-zinc-400 hover:text-[#E5C17C] border-white/5"
+                                    }`}
+                                    title="Đặt làm ảnh bìa Album (⭐)"
+                                  >
+                                    <Star
+                                      className={`w-3.5 h-3.5 ${
+                                        isAlbumCover ? "fill-current" : ""
+                                      }`}
+                                    />
+                                  </button>
+
+                                  {/* Delete */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePhoto(idx)}
+                                    className="w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 border border-white/5 flex items-center justify-center transition-all cursor-pointer"
+                                    title="Xóa khỏi Album (🗑️)"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          /* Thumbnail Grid View */
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {filteredPhotos.map(({ img, idx }) => {
+                              const isSelected = inspectedIdx === idx;
+                              const isAlbumCover =
+                                activeCollection.coverImageSrc === img.src ||
+                                (!activeCollection.coverImageSrc && idx === 0);
+
+                              return (
+                                <div
+                                  key={`grid-photo-card-${img.src}-${idx}`}
+                                  onClick={() => {
+                                    selectPhotoForInspector(idx);
+                                    setIsMobileInspectorOpen(true);
+                                  }}
+                                  className={`rounded-2xl p-2 bg-zinc-900/60 border transition-all cursor-pointer select-none space-y-2 group ${
+                                    isSelected
+                                      ? "border-[#E5C17C] bg-[#B5945B]/15 shadow-[0_0_20px_rgba(181,148,91,0.2)]"
+                                      : "border-white/10 hover:border-white/20 hover:bg-zinc-800/80"
+                                  }`}
+                                >
+                                  {/* Thumbnail */}
+                                  <div className="aspect-[16/10] rounded-xl overflow-hidden bg-zinc-950 border border-white/10 relative">
+                                    <LazyImage
+                                      src={img.src}
+                                      alt={img.alt || `Khung hình #${idx + 1}`}
+                                      preset="thumbnail"
+                                      className="w-full h-full object-cover transition-transform"
+                                      style={{
+                                        objectPosition:
+                                          img.imagePosition ||
+                                          img.objectPosition ||
+                                          "center",
+                                        transform: `scale(${img.imageScale || 1.0})`,
+                                      }}
+                                    />
+                                    <span className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-sm px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-amber-400 border border-white/10">
+                                      #{idx + 1}
+                                    </span>
+                                    {isAlbumCover && (
+                                      <span className="absolute top-1.5 right-1.5 bg-amber-500 text-black px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-0.5">
+                                        <Star className="w-2.5 h-2.5 fill-current" /> Bìa
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Title & Quick Actions */}
+                                  <div className="flex items-center justify-between gap-1 text-left px-0.5">
+                                    <span className="text-[11px] font-semibold text-zinc-200 truncate flex-1">
+                                      {img.title || `Ảnh #${idx + 1}`}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-zinc-500 bg-zinc-800 px-1 py-0.2 rounded">
+                                      {img.aspectRatio || "16/9"}
+                                    </span>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div
+                                    className="flex items-center justify-between pt-1 border-t border-white/5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleReorderPhoto(idx, "up")}
+                                        className="w-6 h-6 rounded bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-20 flex items-center justify-center text-xs"
+                                        title="Lên"
+                                      >
+                                        <ArrowUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === activeCollection.images.length - 1}
+                                        onClick={() => handleReorderPhoto(idx, "down")}
+                                        className="w-6 h-6 rounded bg-zinc-800 text-zinc-300 hover:text-white disabled:opacity-20 flex items-center justify-center text-xs"
+                                        title="Xuống"
+                                      >
+                                        <ArrowDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSetAsAlbumCover(img)}
+                                        className="w-6 h-6 rounded bg-zinc-800 text-amber-400 hover:text-amber-300 flex items-center justify-center text-xs"
+                                        title="Đặt làm ảnh bìa"
+                                      >
+                                        <Star className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePhoto(idx)}
+                                        className="w-6 h-6 rounded bg-zinc-800 text-red-400 hover:text-red-300 flex items-center justify-center text-xs"
+                                        title="Xóa"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-                    ))}
-                </div>
-              </motion.div>
-            )}
+                    </div>
+
+                    {/* RIGHT COLUMN: Sticky Frame & Crop Inspector (lg:col-span-5) */}
+                    <div className="hidden lg:block lg:col-span-5 sticky top-6">
+                      <div className="rounded-3xl bg-zinc-900/80 backdrop-blur-2xl border border-white/10 p-5 shadow-2xl max-h-[82vh] overflow-y-auto custom-scrollbar">
+                        {renderInspectorContent(false)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MOBILE INSPECTOR DRAWER / BOTTOM SHEET (< lg) */}
+                  {isMobileInspectorOpen && (
+                    <div className="fixed inset-0 z-50 lg:hidden bg-black/80 backdrop-blur-md flex flex-col justify-end">
+                      <div className="rounded-t-3xl bg-zinc-900/95 border-t border-white/15 p-5 max-h-[88vh] overflow-y-auto custom-scrollbar shadow-2xl animate-slideUp">
+                        <div className="w-12 h-1.5 rounded-full bg-zinc-700 mx-auto mb-3" />
+                        {renderInspectorContent(true)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QUICK ADD PHOTOS MODAL */}
+                  {isQuickAddModalOpen && (
+                    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                      <div className="w-full max-w-md rounded-3xl bg-zinc-900/95 backdrop-blur-2xl border border-white/15 p-5 sm:p-6 shadow-2xl space-y-4 text-left animate-scaleIn">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-[#B5945B] block">
+                              Thêm ảnh nhanh
+                            </span>
+                            <h3 className="text-sm font-bold text-white truncate">
+                              Album: {activeCollection.title}
+                            </h3>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickAddModalOpen(false)}
+                            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Option 1: Paste Links */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-zinc-200 block">
+                            Dán một hoặc nhiều link ảnh (cách nhau bằng dòng mới hoặc dấu phẩy):
+                          </label>
+                          <textarea
+                            rows={3}
+                            placeholder="https://images.unsplash.com/...&#10;https://drive.google.com/..."
+                            value={quickAddUrlsInput}
+                            onChange={(e) => setQuickAddUrlsInput(e.target.value)}
+                            className="w-full text-xs bg-zinc-950 text-white p-3 rounded-xl border border-white/10 focus:border-[#B5945B] focus:outline-none placeholder-zinc-600 transition-all font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleQuickAddUrls}
+                            className="w-full py-2.5 rounded-xl bg-[#B5945B] hover:bg-[#c5a367] text-zinc-950 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Thêm ảnh từ danh sách link</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2 my-1">
+                          <div className="flex-1 h-px bg-white/10" />
+                          <span className="text-[11px] text-zinc-500 uppercase font-sans">HOẶC</span>
+                          <div className="flex-1 h-px bg-white/10" />
+                        </div>
+
+                        {/* Option 2: Upload local files with auto-compression */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-zinc-200 block">
+                            Tải file ảnh trực tiếp từ máy tính (tự động nén WebP):
+                          </label>
+                          <label className="block p-4 rounded-2xl border border-dashed border-[#B5945B]/40 hover:border-[#B5945B] bg-[#B5945B]/5 hover:bg-[#B5945B]/10 text-center cursor-pointer transition-all">
+                            <Upload className="w-6 h-6 text-[#E5C17C] mx-auto mb-1.5" />
+                            <span className="text-xs font-semibold text-zinc-200 block">
+                              {isUploadingQuickFiles
+                                ? "Đang nén và tải ảnh lên..."
+                                : "Nhấn để chọn file ảnh JPG, PNG, WEBP..."}
+                            </span>
+                            <span className="text-[10.5px] text-zinc-500">
+                              Hỗ trợ chọn cùng lúc nhiều ảnh
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              disabled={isUploadingQuickFiles}
+                              onChange={handleQuickAddLocalFiles}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })()}
 
             {/* TAB CONTENT 5: Manage & Delete Albums */}
             {adminActiveTab === "manage-albums" && (
@@ -3277,14 +4144,12 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                             </div>
                             <div className="w-16 h-12 rounded-md overflow-hidden bg-zinc-950 border border-white/10 shrink-0 shadow-inner relative">
                               {firstImg ? (
-                                <img
+                                <LazyImage
                                   src={firstImg}
                                   alt={col.title}
+                                  preset="thumbnail"
                                   style={{ objectPosition: coverPos }}
                                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                  referrerPolicy="no-referrer"
-                                  loading="lazy"
-                                  decoding="async"
                                 />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-zinc-900">
@@ -3450,7 +4315,98 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
                 transition={{ duration: 0.2 }}
                 className="space-y-4 text-xs text-zinc-300 leading-relaxed font-light"
               >
-                <div className="flex flex-col gap-1.5 border-b border-white/5 pb-3">
+                {/* MASTER BACKUP & ANTI-DATA-LOSS PANEL */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-950/20 via-zinc-900/60 to-black/80 border border-amber-500/25 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-xl bg-gradient-to-br from-[#E5C17C] to-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/20">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                          <span>Trung Tâm Sao Lưu & Chống Mất Dữ Liệu</span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-[#E5C17C] border border-[#B5945B]/30">
+                            Master Backup Vault
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-zinc-400">
+                          Bảo vệ toàn vẹn 100% tất cả ảnh, Album Google Drive, ảnh Founder (S7), Intro và Lịch trình Booking
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Buttons row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    {/* Nút 1: Tải bản sao lưu toàn bộ dữ liệu (.JSON) */}
+                    <button
+                      type="button"
+                      disabled={isExportingBackup}
+                      onClick={handleExportBackup}
+                      className="px-4 py-3 rounded-xl bg-[#B5945B]/20 hover:bg-[#B5945B]/30 text-[#E5C17C] border border-[#B5945B]/40 font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      title="Gom toàn bộ dữ liệu thật hiện có từ Firestore và tải xuống file JSON"
+                    >
+                      {isExportingBackup ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      <span>📥 Tải bản sao lưu toàn bộ (.JSON)</span>
+                    </button>
+
+                    {/* Nút 2: Khôi phục dữ liệu từ file sao lưu */}
+                    <input
+                      type="file"
+                      ref={backupFileInputRef}
+                      onChange={handleImportBackupFile}
+                      accept=".json"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isImportingBackup}
+                      onClick={() => backupFileInputRef.current?.click()}
+                      className="px-4 py-3 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-500/40 font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                      title="Đẩy toàn bộ ảnh, album và lịch trình quay trở lại Cloud Firestore"
+                    >
+                      {isImportingBackup ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4" />
+                      )}
+                      <span>📤 Khôi phục từ file sao lưu</span>
+                    </button>
+
+                    {/* Nút 4: Copy dữ liệu thật làm mặc định (Freeze to Code) */}
+                    <button
+                      type="button"
+                      onClick={handleFreezeToCode}
+                      className="px-4 py-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer"
+                      title="Xuất ra đoạn code JSON chuẩn để dán thẳng vào src/data/contentData.ts để khóa chết vào mã nguồn"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>🔒 Copy dữ liệu thật làm mặc định</span>
+                    </button>
+                  </div>
+
+                  {/* Progress bar during restore */}
+                  {importBackupProgress && (
+                    <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 space-y-1.5 animate-fadeIn">
+                      <div className="flex items-center justify-between text-xs text-blue-200">
+                        <span>{importBackupProgress.message}</span>
+                        <span className="font-bold">{importBackupProgress.percent}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-blue-950 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-[#E5C17C] transition-all duration-300"
+                          style={{ width: `${importBackupProgress.percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5 border-b border-white/5 pb-3 pt-2">
                   <span className="block text-xs text-amber-500 font-medium uppercase tracking-wide flex items-center gap-2">
                     📖 HƯỚNG DẪN ĐỒNG BỘ THỜI GIAN THỰC (REALTIME CLOUD SYNC)
                   </span>
@@ -4267,6 +5223,88 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         onConfirm={confirmDialogState.onConfirm}
         onCancel={() => setConfirmDialogState((prev) => ({ ...prev, isOpen: false }))}
       />
+
+      {/* Freeze to Code Modal */}
+      {freezeCodeModal.isOpen && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md">
+          <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-3xl bg-[#121216] border border-white/15 shadow-2xl text-white overflow-hidden font-sans">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-black/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <span>Đóng Băng Dữ Liệu Vào Mã Nguồn (Freeze to Code)</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Dán đoạn code dưới đây vào file <code className="text-emerald-300 bg-white/5 px-1 py-0.5 rounded">src/data/contentData.ts</code> để khóa chết vào mã nguồn
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFreezeCodeModal((prev) => ({ ...prev, isOpen: false }))}
+                className="p-2 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Code Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
+                <span>Mã nguồn hoàn chỉnh sẵn sàng sao chép:</span>
+                <span className="text-emerald-400 font-semibold">
+                  {freezeCodeModal.isCopied ? "✓ Đã sao chép vào bộ nhớ tạm!" : ""}
+                </span>
+              </div>
+              <pre className="max-h-[55vh] overflow-auto p-4 bg-black/80 font-mono text-[11px] sm:text-xs text-amber-200/90 rounded-2xl border border-white/10 select-all whitespace-pre leading-relaxed">
+                {freezeCodeModal.code}
+              </pre>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-white/10 bg-black/50 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob([freezeCodeModal.code], { type: "text/typescript;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "contentData.ts";
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                  showToast("Đã tải file contentData.ts về máy!", "success");
+                }}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Tải file contentData.ts</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(freezeCodeModal.code);
+                      setFreezeCodeModal((prev) => ({ ...prev, isCopied: true }));
+                      showToast("Đã sao chép vào bộ nhớ tạm!", "success");
+                    } catch (_) {}
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#DFB779] via-[#F4E1B5] to-[#DFB779] text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Copy className="w-4 h-4" />
+                  <span>{freezeCodeModal.isCopied ? "Đã Sao Chép!" : "Sao Chép Toàn Bộ Code"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

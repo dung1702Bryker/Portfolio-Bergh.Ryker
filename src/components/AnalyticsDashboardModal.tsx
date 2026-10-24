@@ -25,11 +25,13 @@ import {
   MapPin,
   Trophy,
   ArrowUp,
+  Navigation,
 } from "lucide-react";
 import { useSectionAnalytics } from "../hooks/useSectionAnalytics";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useLivePresence } from "../hooks/useLivePresence";
 import { formatMonthLabel } from "../services/analyticsService";
+import { calibrateAdminHardwareGps } from "../services/geolocationEngine";
 import { HourlyAnalyticsChart } from "./HourlyAnalyticsChart";
 import { LivePresencePanel } from "./LivePresencePanel";
 import { VisitorHistoryPanel } from "./VisitorHistoryPanel";
@@ -77,6 +79,34 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
 
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isCalibratingAdminGps, setIsCalibratingAdminGps] = useState(false);
+  const [adminLocationLabel, setAdminLocationLabel] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem("visitor_location") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+
+  const handleAdminGpsCalibrate = async () => {
+    setIsCalibratingAdminGps(true);
+    try {
+      const ownVisitorId = sessionStorage.getItem("live_visitor_session_id") || "";
+      const devId = localStorage.getItem("bergh_ryker_device_persistent_id_v2") || "";
+      const targetId = devId || ownVisitorId || "admin_session";
+
+      const geo = await calibrateAdminHardwareGps(targetId);
+      const displayLoc = geo.fullLocation || geo.province || "Đã định vị";
+      setAdminLocationLabel(displayLoc);
+      setCleanMessage(`🎯 Đã định vị GPS chính xác: ${displayLoc}`);
+      setTimeout(() => setCleanMessage(null), 4500);
+    } catch (_) {
+      setCleanMessage("Không thể nhận diện GPS phần cứng.");
+      setTimeout(() => setCleanMessage(null), 3000);
+    } finally {
+      setIsCalibratingAdminGps(false);
+    }
+  };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setShowScrollTop(e.currentTarget.scrollTop > 240);
@@ -177,12 +207,13 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
     }
   };
 
+
   const currentMonthLabel =
     selectedMonth === "all" ? "Tất Cả Thời Gian" : formatMonthLabel(selectedMonth);
 
   return (
     <AnimatePresence>
-      <div key="analytics-dashboard-modal" className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div key="analytics-dashboard-modal" className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-4 md:p-6 overflow-hidden w-full max-w-full box-border">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -198,10 +229,10 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 10 }}
           transition={{ duration: 0.22 }}
-          className="relative w-full max-w-5xl bg-[#0c0d11] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[94vh] sm:h-[90vh] max-h-[94vh] z-10"
+          className="relative w-full max-w-5xl bg-[#0c0d11] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[94vh] sm:h-[90vh] max-h-[94vh] z-10 max-w-full box-border"
         >
           {/* HEADER: Clean, Focused & Elegant (No overflow on mobile or desktop) */}
-          <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-white/10 flex items-center justify-between gap-2 bg-zinc-950/90 shrink-0">
+          <div className="px-3 sm:px-6 py-2.5 sm:py-3.5 border-b border-white/10 flex items-center justify-between gap-2 bg-zinc-950/90 shrink-0 w-full max-w-full box-border">
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
               <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#B5945B]/25 to-amber-600/15 border border-[#B5945B]/35 flex items-center justify-center text-[#B5945B] shrink-0 shadow-sm">
                 <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -215,6 +246,20 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                     <ShieldCheck className="w-3 h-3" />
                     Admin
                   </span>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={handleAdminGpsCalibrate}
+                      disabled={isCalibratingAdminGps}
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-[#B5945B]/25 hover:from-amber-500/30 hover:to-[#B5945B]/35 text-[#F3E0B5] hover:text-white border border-[#B5945B]/40 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                      title="Bấm để cấp quyền GPS và định vị chính xác vị trí máy Quản Trị (Xã/Phường, Quận/Huyện, Tỉnh/Thành)"
+                    >
+                      <Navigation className={`w-3 h-3 text-amber-400 ${isCalibratingAdminGps ? "animate-spin" : ""}`} />
+                      <span className="max-w-[120px] sm:max-w-[200px] truncate">
+                        {isCalibratingAdminGps ? "Đang định vị..." : adminLocationLabel || "Định vị GPS máy này"}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <p className="text-zinc-400 text-[10px] sm:text-xs truncate">
                   Định vị khách xem, hiệu suất bộ sưu tập & giờ vàng
@@ -317,10 +362,10 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
           <div
             ref={scrollBodyRef}
             onScroll={handleScroll}
-            className="p-4 sm:p-6 space-y-5 overflow-y-auto overscroll-contain flex-1 scroll-smooth touch-pan-y [webkit-overflow-scrolling:touch] scrollbar-thin scrollbar-thumb-zinc-700/60 hover:scrollbar-thumb-zinc-600 relative"
+            className="p-3 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto overflow-x-hidden overscroll-contain flex-1 scroll-smooth touch-pan-y [webkit-overflow-scrolling:touch] scrollbar-thin scrollbar-thumb-zinc-700/60 hover:scrollbar-thumb-zinc-600 relative w-full max-w-full box-border"
           >
-            {/* 4 SLEEK KPI SUMMARY METRICS (Compact 1 Row Grid) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+            {/* 4 SLEEK KPI SUMMARY METRICS (Grid-cols-2 on mobile, grid-cols-4 on desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 w-full max-w-full box-border">
               {/* Metric 1: Live Online */}
               <button
                 type="button"
@@ -328,7 +373,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   setActiveTab("visitors");
                   setVisitorSubTab("live");
                 }}
-                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group ${
+                className={`p-2.5 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group w-full min-w-0 max-w-full box-border ${
                   activeTab === "visitors" && visitorSubTab === "live"
                     ? "bg-emerald-950/40 border-emerald-500/60 ring-1 ring-emerald-500/30 shadow-md"
                     : "bg-zinc-900/70 border-white/10 hover:border-emerald-500/40 hover:bg-zinc-900"
@@ -338,21 +383,21 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400">
                     Đang Online
                   </span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                     <Radio className="w-3.5 h-3.5 animate-pulse" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <span className="text-xl sm:text-3xl font-black text-white tracking-tight">
                     {activeCount}
                   </span>
-                  <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="text-[10px] sm:text-[11px] text-emerald-400 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                     Trực tiếp
                   </span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-1 truncate">
-                  Chạm để xem chi tiết khách online
+                  Chạm để xem khách online
                 </p>
               </button>
 
@@ -363,7 +408,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   setActiveTab("visitors");
                   setVisitorSubTab("history");
                 }}
-                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group ${
+                className={`p-2.5 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group w-full min-w-0 max-w-full box-border ${
                   activeTab === "visitors" && visitorSubTab === "history"
                     ? "bg-[#B5945B]/15 border-[#B5945B]/60 ring-1 ring-[#B5945B]/30 shadow-md"
                     : "bg-zinc-900/70 border-white/10 hover:border-[#B5945B]/40 hover:bg-zinc-900"
@@ -373,15 +418,15 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   <span className="text-[10px] uppercase font-bold tracking-wider text-[#B5945B]">
                     Khách Ghé Thăm
                   </span>
-                  <div className="w-7 h-7 rounded-lg bg-[#B5945B]/15 text-[#B5945B] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-[#B5945B]/15 text-[#B5945B] flex items-center justify-center shrink-0">
                     <Users className="w-3.5 h-3.5" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <span className="text-xl sm:text-3xl font-black text-white tracking-tight">
                     {formatViewCount(portfolioVisitorsCount)}
                   </span>
-                  <span className="text-[11px] text-zinc-400">người</span>
+                  <span className="text-[10px] sm:text-[11px] text-zinc-400">người</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-1 truncate">
                   Kỳ: <strong className="text-zinc-300 font-medium">{currentMonthLabel}</strong>
@@ -395,7 +440,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   setActiveTab("content");
                   setContentSubTab("collections");
                 }}
-                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group ${
+                className={`p-2.5 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group w-full min-w-0 max-w-full box-border ${
                   activeTab === "content"
                     ? "bg-amber-950/20 border-amber-500/50 ring-1 ring-amber-500/30 shadow-md"
                     : "bg-zinc-900/70 border-white/10 hover:border-amber-500/30 hover:bg-zinc-900"
@@ -403,17 +448,17 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
               >
                 <div className="flex items-center justify-between text-zinc-400 mb-1.5">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
-                    Tổng Lượt Xem Ảnh
+                    Tổng Lượt Xem
                   </span>
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
                     <Eye className="w-3.5 h-3.5" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  <span className="text-xl sm:text-3xl font-black text-white tracking-tight">
                     {formatViewCount(totalPortfolioViews)}
                   </span>
-                  <span className="text-[11px] text-zinc-400">lượt</span>
+                  <span className="text-[10px] sm:text-[11px] text-zinc-400">lượt</span>
                 </div>
                 <p className="text-[10px] text-zinc-400 mt-1 truncate">
                   {collectionsList.length} BST • {albumsList.length} album
@@ -427,14 +472,14 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
                   setActiveTab("content");
                   setContentSubTab("collections");
                 }}
-                className="p-3.5 rounded-2xl border border-white/10 bg-zinc-900/70 hover:border-[#B5945B]/40 hover:bg-zinc-900 text-left transition-all cursor-pointer relative overflow-hidden group"
+                className="p-2.5 sm:p-3.5 rounded-2xl border border-white/10 bg-zinc-900/70 hover:border-[#B5945B]/40 hover:bg-zinc-900 text-left transition-all cursor-pointer relative overflow-hidden group w-full min-w-0 max-w-full box-border"
               >
                 <div className="flex items-center justify-between text-zinc-400 mb-1.5">
                   <span className="text-[10px] uppercase font-bold tracking-wider text-orange-400 flex items-center gap-1">
                     <Flame className="w-3 h-3 text-orange-400" />
                     Hot Nhất #1
                   </span>
-                  <div className="w-7 h-7 rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center shrink-0">
                     <Trophy className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -448,7 +493,7 @@ export const AnalyticsDashboardModal: React.FC<AnalyticsDashboardModalProps> = (
             </div>
 
             {/* UNIFIED 4 MAIN TABS (Sticky header inside scroll body so tabs are always accessible) */}
-            <div className="sticky top-0 z-30 backdrop-blur-xl bg-[#0c0d11]/95 py-2 -mx-4 sm:-mx-6 px-4 sm:px-6 border-b border-white/10 flex items-center gap-1.5 overflow-x-auto scrollbar-none shadow-sm">
+            <div className="sticky top-0 z-30 backdrop-blur-xl bg-[#0c0d11]/95 py-2 -mx-3 sm:-mx-6 px-3 sm:px-6 border-b border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar scrollbar-none shadow-sm max-w-full box-border">
               {/* Tab 1: Visitors & Geography */}
               <button
                 type="button"

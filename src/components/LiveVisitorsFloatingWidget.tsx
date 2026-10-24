@@ -28,7 +28,8 @@ import { useLivePresenceContext } from "../context/LivePresenceContext";
 import { useAdminAuth } from "../hooks/useAdminAuth";
 import { useAdminNotification } from "../context/AdminNotificationContext";
 import { stripIspFromName } from "../services/geoService";
-import { sanitizeDeviceLabel } from "../services/visitorHistoryService";
+import { sanitizeDeviceLabel, getSocialSourceLabel } from "../services/visitorHistoryService";
+import { getDisplayVisitorLocation } from "../services/geolocationEngine";
 
 interface LiveVisitorsFloatingWidgetProps {
   onOpenAnalytics?: () => void;
@@ -586,31 +587,27 @@ export const LiveVisitorsFloatingWidget: React.FC<LiveVisitorsFloatingWidgetProp
                                   </div>
                                 )}
 
-                                {/* Device & Time */}
+                                {/* Concise Info */}
                                 <div className="flex items-center gap-2 text-[10px] text-zinc-500 pt-0.5 flex-wrap">
-                                  <span className="flex items-center gap-1">
-                                    {getDeviceIcon(sanitizeDeviceLabel(visitor.device, visitor.screenResolution))}
-                                    <span>{sanitizeDeviceLabel(visitor.device, visitor.screenResolution)}</span>
-                                  </span>
-                                  <span>•</span>
-                                  <span className="flex items-center gap-1">
-                                    <Globe className="w-2.5 h-2.5" />
-                                    <span>{visitor.browser}</span>
-                                  </span>
-                                  {visitor.screenResolution && (
+                                  {getSocialSourceLabel(visitor.browser) && (
                                     <>
+                                      <span className="text-blue-300 font-semibold bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 text-[9px]">
+                                        {getSocialSourceLabel(visitor.browser)}
+                                      </span>
                                       <span>•</span>
-                                      <span className="text-zinc-500 text-[9px]">{visitor.screenResolution}</span>
                                     </>
                                   )}
-                                  {isAdmin && visitor.location && (
+                                  <span className="text-zinc-400 font-medium">
+                                    {visitor.pageViews || 1} trang xem
+                                  </span>
+                                  {isAdmin && getDisplayVisitorLocation(visitor) !== "Chưa rõ vị trí (Ẩn IP)" && (
                                     <>
                                       <span>•</span>
                                       <span
-                                        className="text-red-300 bg-red-500/10 px-1.5 py-0.5 rounded font-medium text-[9px] border border-red-500/20"
-                                        title="Vị trí của khách (Chỉ Quản trị viên mới thấy)"
+                                        className="text-amber-200 bg-[#B5945B]/15 px-1.5 py-0.5 rounded font-medium text-[9px] border border-[#B5945B]/30 max-w-[220px] sm:max-w-xs truncate"
+                                        title={`Vị trí của khách: ${getDisplayVisitorLocation(visitor)}${visitor.isp ? ` · Nhà mạng: ${visitor.isp}` : ""}`}
                                       >
-                                        📍 {stripIspFromName(visitor.location)}
+                                        📍 {getDisplayVisitorLocation(visitor)}{visitor.isp ? ` · ${visitor.isp}` : ""}
                                       </span>
                                     </>
                                   )}

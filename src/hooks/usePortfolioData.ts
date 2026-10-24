@@ -22,6 +22,7 @@ import {
 } from "../firebase";
 import { validateUrl } from "../utils/validateUrl";
 import { ImageResolutions, createResolutionsFromUrl } from "../utils/imageMapper";
+import { recordAutoBackup, getSystemBackupVault } from "../services/backupService";
 
 export type AllowedCollection = "albums" | "prom_albums" | "freedom_albums";
 
@@ -107,45 +108,30 @@ export function usePortfolioData(
       albumsRef,
       async (snapshot) => {
         if (snapshot.empty) {
-          if (isAdminGlobal && defaultSeeds && defaultSeeds.length > 0 && !isFirestoreQuotaExceeded()) {
-            try {
-              for (const defaultCol of defaultSeeds) {
-                const albumRef = doc(db, firestoreCollection, defaultCol.id);
-                const { images, ...albumMeta } = defaultCol;
-                const coverSrc = defaultCol.coverImageSrc || (images && images[0]?.src) || null;
-                await setDoc(albumRef, {
-                  ...albumMeta,
-                  coverImageSrc: coverSrc,
-                });
-
-                if (images && images.length > 0) {
-                  const photosRef = collection(db, `${firestoreCollection}/${defaultCol.id}/photos`);
-                  for (let i = 0; i < images.length; i++) {
-                    const photoRef = doc(photosRef);
-                    const p = images[i];
-                    const pResolutions = p.resolutions || createResolutionsFromUrl(p.src);
-                    await setDoc(photoRef, {
-                      ...p,
-                      resolutions: pResolutions,
-                      thumbnail: p.thumbnail || pResolutions.thumbnail,
-                      medium: p.medium || pResolutions.medium,
-                      original: p.original || pResolutions.original,
-                      order: i,
-                    });
-                  }
-                }
-              }
-            } catch (e: any) {
-              if (
-                e?.code === "resource-exhausted" ||
-                e?.message?.includes("Quota limit exceeded")
-              ) {
-                markFirestoreQuotaExceeded();
-              } else {
-                console.error("Error seeding default albums: ", e);
-              }
+          // Anti-Data-Loss: Tuyệt đối không tự động ghi đè ảnh mẫu Unsplash vào Firestore!
+          // Trước tiên đối chiếu với systemBackupVault để khôi phục dữ liệu thật
+          try {
+            const vault = await getSystemBackupVault();
+            const vaultCol = (vault as any)?.collections?.[firestoreCollection] || (vault as any)?.[firestoreCollection];
+            if (vaultCol && Array.isArray(vaultCol) && vaultCol.length > 0) {
+              const mappedFromVault = vaultCol.map((vItem: any) => ({
+                id: vItem.id,
+                title: vItem.title || "Album",
+                subtitle: vItem.subtitle || "",
+                body: vItem.body || "",
+                driveLink: vItem.driveLink || "",
+                coverImageSrc: vItem.coverImageSrc || "",
+                images: vItem.photos || vItem.images || [],
+                coverImagePosition: vItem.coverImagePosition || "center",
+              }));
+              setCollectionsData(mappedFromVault);
+              setIsLoadingData(false);
+              setLoading(false);
+              return;
             }
-          }
+          } catch (_) {}
+
+          // Nếu vault cũng chưa có, giữ nguyên giao diện rỗng hoặc hạt giống sạch (không ghi đè vào Firestore)
           if (defaultSeeds && defaultSeeds.length > 0) {
             const cleanSeeds = defaultSeeds.map(c => ({
               ...c,
@@ -384,6 +370,8 @@ export function usePortfolioData(
         order: 0,
       });
     }
+
+    recordAutoBackup("add_album");
   };
 
   const updateAlbumMeta = async (
@@ -403,6 +391,8 @@ export function usePortfolioData(
       }
       transaction.update(albumRef, updates);
     });
+
+    recordAutoBackup("update_album_meta");
   };
 
   const addPhotos = async (

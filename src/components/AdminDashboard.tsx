@@ -21,6 +21,7 @@ import {
   BarChart3,
   Settings,
   Plus,
+  Lock,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { doc, setDoc, collection, getDocs } from "firebase/firestore";
@@ -1262,6 +1263,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                   <span className="text-xs font-semibold text-rose-400 bg-rose-500/15 px-3 py-1.5 rounded-xl border border-rose-500/30 shrink-0">
                     {isCleaningUp ? "Đang xóa..." : "Dọn dẹp"}
+                  </span>
+                </button>
+
+                {/* 5. 🔒 Copy dữ liệu thật làm mặc định (Freeze to Code) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsModalOpen(false);
+                    window.dispatchEvent(new CustomEvent("triggerFreezeToCode"));
+                  }}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all text-left cursor-pointer group active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0 group-hover:scale-105 transition-transform">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white group-hover:text-emerald-200">
+                        🔒 Copy dữ liệu thật làm mặc định (Freeze to Code)
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-0.5">
+                        Tạo code TS đóng băng toàn bộ Album, Ảnh và Intro để dán vào contentData.ts
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-400 bg-emerald-500/15 px-3 py-1.5 rounded-xl border border-emerald-500/30 shrink-0">
+                    Sao chép ngay
                   </span>
                 </button>
               </div>

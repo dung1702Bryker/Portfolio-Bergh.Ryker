@@ -41,6 +41,7 @@ import { AdminNotificationCenterModal } from "./components/AdminNotificationCent
 import { PhotoProgressLookupModal } from "./components/PhotoProgressLookupModal";
 import { BookingConfirmationPage } from "./components/BookingConfirmationPage";
 import Lenis from "lenis";
+import { recordAutoBackup, getSystemBackupVault } from "./services/backupService";
 
 // Slide Layout Components
 import { HeroLayout } from "./components/HeroLayout";
@@ -513,33 +514,51 @@ export default function App() {
  };
  });
 
-      if (modified && auth.currentUser && !isFirestoreQuotaExceeded()) {
-        try {
-          await setDoc(docRef, { slides: data });
-        } catch (err) {
-          console.warn("Could not auto-write sanitized slides to database", err);
-        }
-      }
+       // Anti-Data-Loss: Kiểm tra nếu ảnh Founder (S7) bị trống bất thường thì đối chiếu khôi phục từ systemBackupVault
+       const s7Slide = data.find((s: any) => s.id === "S7");
+       const isS7Empty = !s7Slide || !s7Slide.images || s7Slide.images.length === 0 || !s7Slide.images[0]?.src;
+       if (isS7Empty) {
+         try {
+           const vault = await getSystemBackupVault();
+           if (vault && vault.founderS7 && vault.founderS7.images && vault.founderS7.images.length > 0) {
+             const s7Idx = data.findIndex((s: any) => s.id === "S7");
+             if (s7Idx !== -1) {
+               data[s7Idx] = vault.founderS7;
+             } else {
+               data.push(vault.founderS7);
+             }
+           }
+         } catch (_) {}
+       }
+
+       // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG GHI ĐÈ VÀO FIRESTORE KHI KHỞI CHẠY
+       // Lưu ngầm snapshot vào Vault để bảo vệ dữ liệu kép
+       recordAutoBackup("slides_snapshot_read", { slides: data });
 
  setSlides(sortSlides(data));
  }
  } else {
- // Fallback or migration
+ // Document không tồn tại trong Firestore: Đối chiếu và khôi phục từ systemBackupVault trước tiên
  let initialData = contentData.slides;
  try {
- const saved = await localforage.getItem<string>(
+   const vault = await getSystemBackupVault();
+   if (vault && vault.slides && Array.isArray(vault.slides) && vault.slides.length > 0) {
+     initialData = vault.slides;
+   } else {
+     const saved = await localforage.getItem<string>(
 "bergh_ryker_slides_v5",
- );
- if (saved) {
- const parsed = JSON.parse(saved);
- if (Array.isArray(parsed) && parsed.length > 0) {
- initialData = parsed;
- if (!initialData.find((s: any) => s.id ==="S1")) {
- const newS1 = contentData.slides.find((s) => s.id ==="S1");
- if (newS1) initialData.unshift(newS1);
- }
- }
- }
+     );
+     if (saved) {
+       const parsed = JSON.parse(saved);
+       if (Array.isArray(parsed) && parsed.length > 0) {
+         initialData = parsed;
+         if (!initialData.find((s: any) => s.id ==="S1")) {
+           const newS1 = contentData.slides.find((s) => s.id ==="S1");
+           if (newS1) initialData.unshift(newS1);
+         }
+       }
+     }
+   }
  } catch (e) {
  console.error(e);
  }
@@ -840,6 +859,7 @@ export default function App() {
  await setDoc(doc(db,"appStore","slidesConfig"), {
  slides: updatedSlides,
  });
+ recordAutoBackup("update_founder_s7", { slides: updatedSlides });
  } else {
  console.warn(
  `Payload too large for Firestore (${payloadSize} bytes). Allowed up to ~1MB. Only saved locally.`,
@@ -1135,6 +1155,7 @@ export default function App() {
  await setDoc(doc(db,"appStore","slidesConfig"), {
  slides: sortedSlides,
  });
+ recordAutoBackup("update_slide_config", { slides: sortedSlides });
  } else {
  console.warn(
  `Payload too large for Firestore (${payloadSize} bytes). Allowed up to ~1MB. Only saved locally.`,
@@ -1220,6 +1241,18 @@ export default function App() {
               aria-label="Cài đặt Intro"
             >
               <Sparkles className="w-4 h-4 text-[#B5945B] shrink-0" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("triggerFreezeToCode"));
+              }}
+              className="p-2 rounded-full text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/15 transition-all flex items-center justify-center cursor-pointer select-none"
+              title="🔒 Copy dữ liệu thật làm mặc định (Freeze to Code)"
+              aria-label="Sao chép dữ liệu thật làm mặc định"
+            >
+              <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
             </button>
           </div>
 

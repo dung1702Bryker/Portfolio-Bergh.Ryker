@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   X,
   Sparkles,
@@ -45,6 +45,17 @@ export const AdminIntroEditorModal: React.FC<AdminIntroEditorModalProps> = ({
   const [activeTab, setActiveTab] = useState<"cards" | "logo" | "settings">("cards");
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDraft({
+        ...DEFAULT_INTRO_CONFIG,
+        ...config,
+        cards: config.cards && config.cards.length > 0 ? [...config.cards] : [...DEFAULT_INTRO_CONFIG.cards],
+      });
+    }
+  }, [isOpen, config]);
 
   if (!isOpen) return null;
 
@@ -132,8 +143,6 @@ export const AdminIntroEditorModal: React.FC<AdminIntroEditorModalProps> = ({
       showToast("Đã đặt lại về mẫu mặc định", "info");
     }
   };
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExportJSON = () => {
     try {

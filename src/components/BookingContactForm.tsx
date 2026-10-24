@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   Calendar,
   Users,
@@ -30,6 +31,7 @@ import {
   QrCode,
   Mail,
   ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SlideData, Booking } from "../types";
@@ -127,8 +129,8 @@ const getActivePrice = (size: number, isFull: boolean) => {
   if (size === 1) return isFull ? 1500000 : 900000;
   if (size === 2) return isFull ? 800000 : 700000;
   if (size === 3) return isFull ? 700000 : 600000;
-  if (size <= 5) return isFull ? 600000 : 500000;
-  return isFull ? 600000 : 500000;
+  if (size === 4) return isFull ? 600000 : 500000;
+  return isFull ? 600000 : 500000; // 5 người
 };
 
 const formatDateDMY = (dateStr?: string) => {
@@ -2129,42 +2131,42 @@ Mã Booking: ${booking.id}`;
       <div
         className={`grid grid-cols-1 ${isAdminMode ? "lg:grid-cols-12 gap-8 max-w-7xl" : "max-w-3xl"} mx-auto w-full`}
       >
-        {/* Interactive Scheduling Form Panel */}
+        {/* Interactive Scheduling Form Panel - Apple Store Configurator & Dark Luxury Liquid Glass */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className={`${isAdminMode ? "lg:col-span-7" : "col-span-1"} liquid-glass p-4 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl relative z-10 w-full`}
+          className={`${isAdminMode ? "lg:col-span-7" : "col-span-1"} bg-[#0b0b0e]/80 backdrop-blur-2xl border border-white/12 rounded-[32px] shadow-[0_24px_80px_rgba(0,0,0,0.65)] p-5 sm:p-8 md:p-10 relative z-10 w-full`}
         >
-          {/* Studio Reservation Header - Clean Apple-style title, centered on mobile */}
-          <div className="mb-6 border-b border-white/10 pb-5 text-center sm:text-left flex flex-col items-center sm:items-start">
-            <span className="text-xs sm:text-sm uppercase tracking-wider text-[#E5C17C] font-bold flex items-center gap-1.5 mb-1">
+          {/* Studio Reservation Header */}
+          <div className="mb-7 border-b border-white/10 pb-6 text-center sm:text-left flex flex-col items-center sm:items-start">
+            <span className="inline-flex items-center gap-1.5 bg-[#B5945B]/10 border border-[#B5945B]/30 text-[#E5C17C] px-3.5 py-1 rounded-full text-[11px] font-bold tracking-widest uppercase mb-2 shadow-sm">
               ✦ BERGH RYKER STUDIO ✦
             </span>
             <h2 className="font-extrabold text-2xl sm:text-3xl md:text-4xl text-white tracking-tight">
               Đặt Lịch Chụp Ảnh
             </h2>
-            <p className="text-xs sm:text-base text-zinc-200 mt-1.5 leading-relaxed">
+            <p className="text-xs sm:text-sm text-zinc-400 mt-2 leading-relaxed">
               3 bước đơn giản · Xác nhận lịch hẹn tức thì qua Zalo trong 15 phút
             </p>
           </div>
 
           {/* Simple, Professional, High-End Booking Form */}
-          <form onSubmit={handleSubmit} className="space-y-6 font-sans w-full">
+          <form onSubmit={handleSubmit} noValidate className="space-y-7 font-sans w-full">
             {/* BƯỚC 1: GÓI CONCEPT & QUY MÔ */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-full bg-[#B5945B]/20 text-[#B5945B] font-extrabold text-sm flex items-center justify-center border border-[#B5945B]/40">
+                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#E5C17C] to-[#B5945B] text-zinc-950 font-extrabold text-xs flex items-center justify-center shadow-md shadow-[#B5945B]/20 shrink-0">
                   1
                 </span>
                 <label className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
-                  Chọn gói chụp của bạn <span className="text-[#B5945B]">*</span>
+                  Chọn gói chụp của bạn <span className="text-[#E5C17C]">*</span>
                 </label>
               </div>
 
-              {/* 4 Concept Options - Apple Liquid Glass Style */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+              {/* 4 Concept Options - Apple Store Configurator Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {[
                   { id: "THPT", title: "Kỷ Yếu Học Sinh", desc: "Cấp 2, Cấp 3, Lớp 9 - 12" },
                   { id: "University", title: "Cử Nhân / Tốt Nghiệp", desc: "Đại học, Cao đẳng" },
@@ -2177,19 +2179,25 @@ Mã Booking: ${booking.id}`;
                       key={item.id}
                       type="button"
                       onClick={() => setConceptType(item.id as any)}
-                      className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl text-left cursor-pointer transition-all duration-300 select-none active:scale-[0.98] flex flex-col justify-between min-h-[76px] sm:min-h-[88px] ${
+                      className={`p-3.5 sm:p-4 rounded-2xl text-left cursor-pointer transition-all duration-300 select-none active:scale-[0.98] flex flex-col justify-between min-h-[92px] sm:min-h-[102px] relative overflow-hidden group ${
                         isSelected
-                          ? "liquid-glass-btn border-[#B5945B]/80 text-white ring-1 ring-[#B5945B]/60"
-                          : "liquid-glass-card border-white/10 text-zinc-200 hover:text-white"
+                          ? "bg-gradient-to-b from-[#B5945B]/25 to-[#B5945B]/10 border-2 border-[#E5C17C] shadow-[0_0_25px_rgba(181,148,91,0.2)] text-white"
+                          : "bg-zinc-900/70 hover:bg-zinc-800/80 border border-white/10 text-zinc-300"
                       }`}
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <span className={`text-xs sm:text-base font-bold ${isSelected ? "text-[#B5945B]" : "text-white"}`}>
+                      <div className="flex items-start justify-between gap-1 w-full">
+                        <span className={`text-xs sm:text-sm font-bold leading-snug ${isSelected ? "text-[#F5D799]" : "text-white group-hover:text-zinc-100"}`}>
                           {item.title}
                         </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#B5945B] shrink-0" />}
+                        {isSelected ? (
+                          <div className="w-5 h-5 rounded-full bg-[#E5C17C] text-zinc-950 flex items-center justify-center shrink-0 shadow-sm ml-1">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded-full border border-white/20 shrink-0 ml-1 mt-0.5 group-hover:border-white/40" />
+                        )}
                       </div>
-                      <span className="text-[11px] sm:text-sm text-zinc-300 mt-1 line-clamp-1">
+                      <span className={`text-[11px] sm:text-xs mt-2 leading-relaxed ${isSelected ? "text-zinc-200" : "text-zinc-400"}`}>
                         {item.desc}
                       </span>
                     </button>
@@ -2206,44 +2214,44 @@ Mã Booking: ${booking.id}`;
                     value={customRequest}
                     onChange={(e) => setCustomRequest(e.target.value)}
                     required
-                    className="w-full liquid-glass-input rounded-2xl px-4 py-3.5 text-sm sm:text-base placeholder:text-zinc-400 focus:outline-none"
+                    className="w-full h-12 sm:h-13 bg-zinc-950/75 border border-white/15 text-white placeholder:text-zinc-500 rounded-2xl px-4 text-sm sm:text-base focus:border-[#E5C17C] focus:bg-zinc-950 focus:ring-2 focus:ring-[#B5945B]/20 focus:outline-none transition-all"
                   />
                 </div>
               )}
 
               {/* Số lượng người chụp & Buổi chụp & Tạm tính (Dành cho Kỷ Yếu & Cử Nhân) */}
               {conceptType !== "Event" && (
-                <div className="pt-2 space-y-3.5">
-                  {/* Mục 1: Số lượng người chụp */}
-                  <div className="space-y-1.5">
+                <div className="pt-2 space-y-4">
+                  {/* Mục 1: Số lượng người chụp - Track Segmented Control Chuẩn Hóa 1 - 5 người */}
+                  <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs sm:text-sm text-zinc-200 font-medium">
+                      <span className="text-xs sm:text-sm text-zinc-300 font-medium">
                         Số lượng người chụp:
                       </span>
-                      <span className="text-xs sm:text-sm font-bold text-[#B5945B]">
-                        {classSize > 5 ? `${classSize} người (Nhóm đông)` : `${classSize} người`}
+                      <span className="text-xs sm:text-sm font-bold text-[#E5C17C] bg-[#B5945B]/15 px-2.5 py-0.5 rounded-full border border-[#B5945B]/30">
+                        {classSize} người
                       </span>
                     </div>
 
-                    {/* 5 Nút chọn trực quan - Liquid Glass Pills */}
-                    <div className="grid grid-cols-5 gap-1 sm:gap-2">
+                    {/* 5 Nút chọn trực quan: 1 người, 2 người, 3 người, 4 người, 5 người */}
+                    <div className="grid grid-cols-5 gap-1.5 bg-zinc-950/80 p-1.5 rounded-2xl border border-white/10 shadow-inner">
                       {[
                         { num: 1, label: "1 người", short: "1 bạn" },
                         { num: 2, label: "2 người", short: "2 bạn" },
                         { num: 3, label: "3 người", short: "3 bạn" },
-                        { num: 4, label: "4 - 5 người", short: "4-5 bạn" },
-                        { num: 6, label: "Lớp đông (>5)", short: ">5 bạn" },
+                        { num: 4, label: "4 người", short: "4 bạn" },
+                        { num: 5, label: "5 người", short: "5 bạn" },
                       ].map((item) => {
-                        const isSelected = item.num === 6 ? classSize > 5 : classSize === item.num;
+                        const isSelected = classSize === item.num;
                         return (
                           <button
                             key={item.num}
                             type="button"
                             onClick={() => setClassSize(item.num)}
-                            className={`py-2 sm:py-3 px-0.5 sm:px-1 rounded-xl text-center cursor-pointer transition-all duration-200 text-[11px] sm:text-sm font-semibold select-none active:scale-95 whitespace-nowrap overflow-hidden text-ellipsis ${
+                            className={`py-2.5 sm:py-3 px-1 rounded-xl text-center cursor-pointer transition-all duration-200 text-xs sm:text-sm font-bold select-none active:scale-95 whitespace-nowrap overflow-hidden text-ellipsis ${
                               isSelected
-                                ? "liquid-glass-gold-btn font-extrabold"
-                                : "liquid-glass-card border-white/10 text-zinc-200 hover:text-white"
+                                ? "bg-gradient-to-r from-[#E5C17C] to-[#B5945B] text-zinc-950 font-extrabold shadow-md shadow-[#B5945B]/25"
+                                : "bg-transparent text-zinc-300 hover:text-white hover:bg-white/5"
                             }`}
                           >
                             <span className="hidden sm:inline">{item.label}</span>
@@ -2252,49 +2260,20 @@ Mã Booking: ${booking.id}`;
                         );
                       })}
                     </div>
-
-                    {/* Nhập số lượng cụ thể nếu là Lớp đông */}
-                    {classSize > 5 && (
-                      <div className="flex items-center gap-3 liquid-glass-card rounded-2xl p-3.5 mt-2">
-                        <span className="text-xs sm:text-sm text-zinc-200">
-                          Số lượng bạn trong lớp:
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setClassSize((prev) => Math.max(6, prev - 1))}
-                            className="w-8 h-8 rounded-lg liquid-glass-btn text-white font-bold flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
-                          >
-                            -
-                          </button>
-                          <span className="text-sm font-bold text-[#B5945B] min-w-[32px] text-center">
-                            {classSize}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setClassSize((prev) => prev + 1)}
-                            className="w-8 h-8 rounded-lg liquid-glass-btn text-white font-bold flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
-                          >
-                            +
-                          </button>
-                          <span className="text-xs sm:text-sm text-zinc-300">bạn</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Mục 2: Chọn buổi chụp trong ngày (Nằm ngay dưới Số lượng người chụp) */}
+                  {/* Mục 2: Chọn buổi chụp trong ngày */}
                   {(conceptType === "THPT" || conceptType === "University" || conceptType === "Custom") && (
-                    <div className="space-y-1.5 pt-1">
+                    <div className="space-y-2 pt-1">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs sm:text-sm text-zinc-200 font-medium">
-                          Chọn buổi chụp trong ngày:
+                        <span className="text-xs sm:text-sm text-zinc-300 font-medium">
+                          Chọn ca chụp trong ngày:
                         </span>
-                        <span className="text-xs sm:text-sm font-bold text-[#B5945B]">
+                        <span className="text-xs sm:text-sm font-bold text-[#E5C17C] bg-[#B5945B]/15 px-2.5 py-0.5 rounded-full border border-[#B5945B]/30">
                           {estimateShift === "full" ? "Gói Cả ngày" : "Gói Nửa ngày"}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         {[
                           {
                             label: "Ca Sáng",
@@ -2323,20 +2302,24 @@ Mã Booking: ${booking.id}`;
                               onClick={() => handleThptShiftChange(s.val)}
                               className={`p-3.5 rounded-2xl text-left cursor-pointer transition-all duration-300 select-none active:scale-95 flex flex-col justify-between ${
                                 isSelected
-                                  ? "liquid-glass-btn border-[#B5945B] font-semibold ring-1 ring-[#B5945B]/60"
-                                  : "liquid-glass-card border-white/10 text-zinc-200 hover:text-white"
+                                  ? "bg-gradient-to-b from-[#B5945B]/25 to-[#B5945B]/10 border-2 border-[#E5C17C] text-white shadow-[0_0_20px_rgba(181,148,91,0.2)]"
+                                  : "bg-zinc-900/70 hover:bg-zinc-800/80 border border-white/10 text-zinc-300 hover:text-white"
                               }`}
                             >
                               <div className="flex items-center justify-between">
-                                <span className={`text-sm sm:text-base font-bold ${isSelected ? "text-[#B5945B]" : "text-white"}`}>
+                                <span className={`text-sm sm:text-base font-bold ${isSelected ? "text-[#F5D799]" : "text-white"}`}>
                                   {s.label}
                                 </span>
-                                {isSelected && <Check className="w-4 h-4 text-[#B5945B] stroke-[2.5]" />}
+                                {isSelected && (
+                                  <div className="w-4 h-4 rounded-full bg-[#E5C17C] text-zinc-950 flex items-center justify-center shrink-0">
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  </div>
+                                )}
                               </div>
-                              <span className={`text-xs sm:text-sm mt-0.5 font-mono ${isSelected ? "text-[#f0d5a3]" : "text-[#B5945B]"}`}>
+                              <span className={`text-xs sm:text-sm mt-1 font-mono font-semibold ${isSelected ? "text-[#E5C17C]" : "text-zinc-400"}`}>
                                 {s.time}
                               </span>
-                              <span className={`text-xs sm:text-sm mt-1 line-clamp-1 ${isSelected ? "text-zinc-100" : "text-zinc-300"}`}>
+                              <span className={`text-xs mt-1 leading-snug ${isSelected ? "text-zinc-200" : "text-zinc-400"}`}>
                                 {s.desc}
                               </span>
                             </button>
@@ -2346,15 +2329,15 @@ Mã Booking: ${booking.id}`;
 
                       {/* Khung giờ nhận bằng cụ thể (Dành riêng khi chọn Cử Nhân) */}
                       {conceptType === "University" && (
-                        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 liquid-glass-card p-3.5 rounded-2xl">
-                          <span className="text-xs sm:text-sm text-zinc-200">
+                        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-900/80 border border-white/10 p-3.5 rounded-2xl">
+                          <span className="text-xs sm:text-sm text-zinc-300">
                             Khung giờ bạn nhận bằng tại hội trường (nếu biết trước):
                           </span>
                           <div className="relative">
                             <select
                               value={gradTime}
                               onChange={(e) => setGradTime(e.target.value)}
-                              className="liquid-glass-input rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none appearance-none cursor-pointer pr-8"
+                              className="bg-zinc-950 border border-white/15 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none appearance-none cursor-pointer pr-8 focus:border-[#E5C17C]"
                             >
                               {TWENTY_FOUR_HOUR_SLOTS.map((t, i) => (
                                 <option key={i} value={t} className="bg-zinc-900 text-white">
@@ -2369,18 +2352,18 @@ Mã Booking: ${booking.id}`;
                     </div>
                   )}
 
-                  {/* Mục 3: Tạm tính chi phí - Apple Liquid Glass frosted highlight */}
+                  {/* Mục 3: Tạm tính chi phí dự kiến - Nền tối viền vàng tinh tế */}
                   {(conceptType === "THPT" || conceptType === "University" || conceptType === "Custom") && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 liquid-glass border border-[#B5945B]/40 rounded-2xl p-4 sm:p-5 mt-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/90 border border-[#B5945B]/35 rounded-2xl p-4 sm:p-5 shadow-lg shadow-black/40 mt-3">
                       <div>
-                        <span className="text-zinc-300 text-xs sm:text-sm block mb-1 font-medium">
+                        <span className="text-zinc-400 text-xs sm:text-sm block mb-1 font-medium">
                           Tạm tính chi phí dự kiến:
                         </span>
                         <div className="flex items-baseline flex-wrap gap-2">
-                          <strong className="text-[#B5945B] text-xl sm:text-2xl font-bold font-mono tracking-tight">
+                          <strong className="text-2xl sm:text-3xl font-extrabold text-[#E5C17C] font-mono tracking-tight">
                             {(classSize * getActivePrice(classSize, estimateShift === "full")).toLocaleString("vi-VN")}đ
                           </strong>
-                          <span className="text-zinc-200 text-xs sm:text-sm">
+                          <span className="text-zinc-300 text-xs sm:text-sm">
                             ({(getActivePrice(classSize, estimateShift === "full") / 1000).toLocaleString("vi-VN")}k / bạn · Nhóm {classSize} người · {estimateShift === "full" ? "Cả ngày" : "Nửa ngày"})
                           </span>
                         </div>
@@ -2388,9 +2371,9 @@ Mã Booking: ${booking.id}`;
                       <button
                         type="button"
                         onClick={() => setShowFullPriceModal(true)}
-                        className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm text-[#B5945B] hover:text-white font-bold py-2.5 px-4 rounded-xl liquid-glass-btn border-[#B5945B]/40 hover:border-[#B5945B] transition-all cursor-pointer shrink-0 whitespace-nowrap self-start sm:self-auto active:scale-95"
+                        className="inline-flex items-center justify-center gap-1.5 text-xs sm:text-sm text-[#E5C17C] hover:text-white font-bold py-2 px-4 rounded-full bg-[#B5945B]/15 hover:bg-[#B5945B]/25 border border-[#B5945B]/40 transition-all cursor-pointer shrink-0 whitespace-nowrap self-start sm:self-auto active:scale-95 shadow-sm"
                       >
-                        <Coins className="w-3.5 h-3.5 text-[#B5945B]" />
+                        <Coins className="w-3.5 h-3.5 text-[#E5C17C]" />
                         <span>Xem chi tiết bảng giá ↗</span>
                       </button>
                     </div>
@@ -2400,13 +2383,13 @@ Mã Booking: ${booking.id}`;
             </div>
 
             {/* BƯỚC 2: CHỌN NGÀY CHỤP */}
-            <div className="space-y-3 pt-4 border-t border-white/10">
+            <div className="space-y-4 pt-5 border-t border-white/10">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-full bg-[#B5945B]/20 text-[#B5945B] font-extrabold text-sm flex items-center justify-center border border-[#B5945B]/40">
+                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#E5C17C] to-[#B5945B] text-zinc-950 font-extrabold text-xs flex items-center justify-center shadow-md shadow-[#B5945B]/20 shrink-0">
                   2
                 </span>
                 <label className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
-                  Chọn ngày chụp trên lịch <span className="text-[#B5945B]">*</span>
+                  Chọn ngày chụp trên lịch <span className="text-[#E5C17C]">*</span>
                 </label>
               </div>
 
@@ -2414,24 +2397,26 @@ Mã Booking: ${booking.id}`;
                 <button
                   type="button"
                   onClick={() => setIsEventModalOpen(true)}
-                  className="w-full flex items-center justify-between bg-zinc-900/80 hover:bg-zinc-800 border border-white/15 focus:border-[#B5945B] rounded-xl px-4 py-3.5 text-left cursor-pointer transition-all"
+                  className="w-full flex items-center justify-between bg-zinc-900/80 hover:bg-zinc-800 border border-white/15 focus:border-[#E5C17C] rounded-2xl p-4 sm:p-5 text-left cursor-pointer transition-all"
                 >
                   <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-[#B5945B]" />
+                    <div className="w-9 h-9 rounded-xl bg-[#B5945B]/15 text-[#E5C17C] flex items-center justify-center shrink-0 border border-[#B5945B]/30">
+                      <Calendar className="w-4 h-4" />
+                    </div>
                     <div>
-                      <span className="text-xs sm:text-sm text-zinc-300 block font-medium">Lịch sự kiện dự kiến:</span>
-                      <span className="text-sm sm:text-base font-semibold text-white">
+                      <span className="text-xs text-zinc-400 block font-medium">Lịch sự kiện dự kiến:</span>
+                      <span className="text-sm sm:text-base font-bold text-white">
                         {date ? `${date.split("-").reverse().join("/")} (Từ ${eventStartTime} đến ${eventEndTime})` : "Chạm để chọn ngày & giờ sự kiện"}
                       </span>
                     </div>
                   </div>
-                  <span className="text-xs sm:text-sm font-bold text-[#B5945B] bg-[#B5945B]/10 px-3.5 py-1.5 rounded-lg border border-[#B5945B]/30">
+                  <span className="text-xs sm:text-sm font-bold text-[#E5C17C] bg-[#B5945B]/15 px-3.5 py-1.5 rounded-xl border border-[#B5945B]/30">
                     {date ? "Đổi lịch" : "Chọn lịch →"}
                   </span>
                 </button>
               ) : (
                 <div>
-                  {/* Nút bấm chọn ngày tinh gọn, đẳng cấp, không bị tràn viền trên máy tính & điện thoại */}
+                  {/* Interactive Date Picker Card - Dark Luxury Liquid Glass */}
                   <button
                     type="button"
                     onClick={() => setIsCalendarOpen(true)}
@@ -2440,17 +2425,17 @@ Mã Booking: ${booking.id}`;
                       setIsCalendarOpen(true);
                     }}
                     style={{ touchAction: "manipulation" }}
-                    className={`w-full rounded-2xl p-3.5 sm:p-4 text-left cursor-pointer transition-all duration-300 border select-none ${
+                    className={`w-full rounded-2xl p-4 sm:p-5 text-left cursor-pointer transition-all duration-300 border select-none ${
                       date
-                        ? "liquid-glass-btn border-[#B5945B]/80 text-white ring-1 ring-[#B5945B]/40 shadow-lg shadow-amber-500/10"
-                        : "liquid-glass-card border-white/10 text-zinc-200 hover:border-[#B5945B]/50 hover:text-white"
+                        ? "bg-zinc-900/80 border-[#E5C17C] ring-1 ring-[#E5C17C]/40 shadow-[0_0_25px_rgba(181,148,91,0.2)]"
+                        : "bg-zinc-900/80 hover:bg-zinc-800/80 border border-white/15 hover:border-[#E5C17C]/60"
                     }`}
                   >
                     {/* Hàng trên: Nhãn & Badge số lịch trống trong tháng */}
-                    <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-white/[0.08]">
+                    <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-white/[0.08]">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-[#B5945B]/15 text-[#B5945B] flex items-center justify-center shrink-0 border border-[#B5945B]/30">
-                          <Calendar className="w-3.5 h-3.5" />
+                        <div className="w-7 h-7 rounded-lg bg-[#B5945B]/15 text-[#E5C17C] flex items-center justify-center shrink-0 border border-[#B5945B]/30">
+                          <Calendar className="w-4 h-4" />
                         </div>
                         <span className="text-xs sm:text-sm text-zinc-300 font-bold uppercase tracking-wider">
                           Ngày chụp dự kiến
@@ -2458,7 +2443,7 @@ Mã Booking: ${booking.id}`;
                       </div>
 
                       {/* Badge tình trạng lịch tháng */}
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 text-[11px] font-bold shrink-0 shadow-sm">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 text-[11px] font-bold shrink-0 shadow-sm">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                         <span>
                           {monthAvailabilitySummary.available > 0
@@ -2469,15 +2454,25 @@ Mã Booking: ${booking.id}`;
                     </div>
 
                     {/* Hàng dưới: Ngày đã chọn hoặc Gợi ý chọn ngày + Nút bấm hành động */}
-                    <div className="flex items-center justify-between gap-3 pt-2.5">
+                    <div className="flex items-center justify-between gap-3 pt-3">
                       <div className="min-w-0 flex-1">
                         {date ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-base sm:text-lg font-extrabold text-white tracking-wide">
-                              {date.split("-").reverse().join("/")}
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="text-base sm:text-xl font-extrabold text-[#F5D799] tracking-wide">
+                              {(() => {
+                                try {
+                                  const parts = date.split("-");
+                                  if (parts.length === 3) {
+                                    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                                    const dayNames = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+                                    return `${dayNames[d.getDay()]}, ${parts[2]}/${parts[1]}/${parts[0]}`;
+                                  }
+                                } catch (e) {}
+                                return date.split("-").reverse().join("/");
+                              })()}
                             </span>
-                            <span className="text-[11px] font-semibold text-[#B5945B] bg-[#B5945B]/15 px-2 py-0.5 rounded-md border border-[#B5945B]/30">
-                              Đã chọn ngày
+                            <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                              ✓ Đã chọn ngày
                             </span>
                           </div>
                         ) : (
@@ -2488,9 +2483,15 @@ Mã Booking: ${booking.id}`;
                       </div>
 
                       <div className="shrink-0">
-                        <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-[#B5945B] bg-[#B5945B]/10 hover:bg-[#B5945B]/20 border border-[#B5945B]/35 px-3 py-1.5 rounded-xl transition-all">
-                          {date ? "Đổi ngày ↻" : "Mở lịch →"}
-                        </span>
+                        {date ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-white/15 px-3 py-1.5 rounded-xl transition-all">
+                            Đổi ngày ↻
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 bg-[#B5945B]/20 border border-[#B5945B]/50 text-[#E5C17C] font-bold px-4 py-2 rounded-xl text-xs sm:text-sm hover:bg-[#B5945B]/30 transition-all shadow-sm">
+                            Mở lịch ➔
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -2499,81 +2500,84 @@ Mã Booking: ${booking.id}`;
             </div>
 
             {/* BƯỚC 3: THÔNG TIN LIÊN HỆ */}
-            <div className="space-y-4 pt-4 border-t border-white/10">
+            <div className="space-y-4 pt-5 border-t border-white/10">
               <div className="flex items-center gap-2.5">
-                <span className="w-7 h-7 rounded-full bg-[#B5945B]/20 text-[#B5945B] font-extrabold text-sm flex items-center justify-center border border-[#B5945B]/40">
+                <span className="w-7 h-7 rounded-full bg-gradient-to-br from-[#E5C17C] to-[#B5945B] text-zinc-950 font-extrabold text-xs flex items-center justify-center shadow-md shadow-[#B5945B]/20 shrink-0">
                   3
                 </span>
                 <label className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
-                  Thông tin người đặt <span className="text-[#B5945B]">*</span>
+                  Thông tin người đặt <span className="text-[#E5C17C]">*</span>
                 </label>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* 1. Họ tên */}
                 <div>
-                  <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
-                    <User className="w-4 h-4 text-[#E5C17C] shrink-0" />
-                    <span>Họ tên bạn / Tên Lớp & Trường <span className="text-[#B5945B]">*</span></span>
+                  <label className="text-xs sm:text-sm text-zinc-200 font-semibold mb-2 block">
+                    Họ tên bạn / Tên Lớp & Trường <span className="text-[#E5C17C]">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       placeholder="Ví dụ: Nguyễn Linh Chi - Lớp 12A1"
                       value={schoolName}
-                      onChange={(e) => setSchoolName(e.target.value)}
+                      onChange={(e) => {
+                        setSchoolName(e.target.value);
+                        if (errorMsg) setErrorMsg("");
+                      }}
                       required
-                      className="w-full liquid-glass-input rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base text-white placeholder:text-zinc-400 focus:outline-none transition-all"
+                      className="w-full h-12 sm:h-13 bg-zinc-950/75 border border-white/15 text-white placeholder:text-zinc-500 rounded-2xl pl-11 pr-4 text-sm sm:text-base focus:border-[#E5C17C] focus:bg-zinc-950 focus:ring-2 focus:ring-[#B5945B]/20 focus:outline-none transition-all"
                     />
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B5945B]" />
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#E5C17C] pointer-events-none" />
                   </div>
                 </div>
 
                 {/* 2. Số điện thoại / Zalo */}
                 <div>
-                  <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-[#E5C17C] shrink-0" />
-                    <span>Số điện thoại / Zalo <span className="text-[#B5945B]">*</span></span>
+                  <label className="text-xs sm:text-sm text-zinc-200 font-semibold mb-2 block">
+                    Số điện thoại / Zalo <span className="text-[#E5C17C]">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type="tel"
                       placeholder="Số điện thoại nhận ảnh và tư vấn Zalo"
                       value={contactHandle}
-                      onChange={(e) => setContactHandle(e.target.value)}
+                      onChange={(e) => {
+                        setContactHandle(e.target.value);
+                        if (errorMsg) setErrorMsg("");
+                      }}
                       required
-                      className="w-full liquid-glass-input rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base text-white placeholder:text-zinc-400 focus:outline-none transition-all"
+                      className="w-full h-12 sm:h-13 bg-zinc-950/75 border border-white/15 text-white placeholder:text-zinc-500 rounded-2xl pl-11 pr-4 text-sm sm:text-base focus:border-[#E5C17C] focus:bg-zinc-950 focus:ring-2 focus:ring-[#B5945B]/20 focus:outline-none transition-all"
                     />
-                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B5945B]" />
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#E5C17C] pointer-events-none" />
                   </div>
                 </div>
 
-                {/* 3. Địa chỉ / Điểm hẹn */}
+                {/* 3. Địa chỉ / Điểm hẹn (Clean, no extra chips) */}
                 <div className="sm:col-span-2">
-                  <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#E5C17C] shrink-0" />
-                    <span>Địa chỉ / Điểm hẹn chụp dự kiến <span className="text-[#B5945B]">*</span></span>
+                  <label className="text-xs sm:text-sm text-zinc-200 font-semibold mb-2 block">
+                    Địa chỉ / Điểm hẹn chụp dự kiến <span className="text-[#E5C17C]">*</span>
                   </label>
                   <div className="relative">
                     <input
                       type="text"
                       placeholder="Ví dụ: Tại Studio Bergh Ryker, hoặc Sân trường Chu Văn An..."
                       value={address}
-                      onChange={(e) => setAddress(e.target.value)}
+                      onChange={(e) => {
+                        setAddress(e.target.value);
+                        if (errorMsg) setErrorMsg("");
+                      }}
                       required
-                      className="w-full liquid-glass-input rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base text-white placeholder:text-zinc-400 focus:outline-none transition-all"
+                      className="w-full h-12 sm:h-13 bg-zinc-950/75 border border-white/15 text-white placeholder:text-zinc-500 rounded-2xl pl-11 pr-4 text-sm sm:text-base focus:border-[#E5C17C] focus:bg-zinc-950 focus:ring-2 focus:ring-[#B5945B]/20 focus:outline-none transition-all"
                     />
-                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B5945B]" />
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#E5C17C] pointer-events-none" />
                   </div>
                 </div>
 
-
-
-                {/* 6. Ghi chú thêm (Tùy chọn) */}
+                {/* 4. Ghi chú thêm (Tùy chọn) */}
                 <div className="sm:col-span-2">
-                  <label className="text-xs sm:text-sm text-zinc-100 font-semibold mb-2 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#E5C17C] shrink-0" />
-                    <span>Ghi chú thêm (Tùy chọn)</span>
+                  <label className="text-xs sm:text-sm text-zinc-200 font-semibold mb-2 block">
+                    Ghi chú thêm (Tùy chọn)
                   </label>
                   <div className="relative">
                     <input
@@ -2581,20 +2585,32 @@ Mã Booking: ${booking.id}`;
                       placeholder="Thuê vest, trang phục, đạo cụ (nếu có)..."
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      className="w-full liquid-glass-input rounded-2xl pl-11 pr-4 py-3.5 text-sm sm:text-base text-white placeholder:text-zinc-400 focus:outline-none transition-all"
+                      className="w-full h-12 sm:h-13 bg-zinc-950/75 border border-white/15 text-white placeholder:text-zinc-500 rounded-2xl pl-11 pr-4 text-sm sm:text-base focus:border-[#E5C17C] focus:bg-zinc-950 focus:ring-2 focus:ring-[#B5945B]/20 focus:outline-none transition-all"
                     />
-                    <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B5945B]" />
+                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#E5C17C] pointer-events-none" />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* NÚT ĐẶT LỊCH CHUYÊN NGHIỆP - Apple Liquid Glass Gold CTA */}
+            {/* Inline validation error notice if required fields are missing */}
+            {errorMsg && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-red-950/50 border border-red-500/50 text-red-200 px-4 py-3 rounded-2xl flex items-center gap-2.5 text-xs sm:text-sm shadow-lg"
+              >
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span className="font-medium">{errorMsg}</span>
+              </motion.div>
+            )}
+
+            {/* NÚT ĐẶT LỊCH CHUYÊN NGHIỆP - Apple Luxury Gold CTA */}
             <div className="pt-4 border-t border-white/10 space-y-3">
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-4 liquid-glass-gold-btn active:scale-[0.99] font-extrabold text-sm sm:text-base tracking-wider rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-2 uppercase disabled:opacity-50 disabled:cursor-not-allowed border border-[#B5945B]/60"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#F3E5AB] to-[#B5945B] text-zinc-950 font-extrabold text-sm sm:text-base uppercase tracking-wider shadow-[0_12px_35px_rgba(181,148,91,0.35)] hover:brightness-110 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed select-none"
               >
                 <Send className="w-4 h-4 stroke-[2.5]" />
                 <span>{isSubmitting ? "Đang gửi đơn..." : "XÁC NHẬN ĐẶT LỊCH NGAY"}</span>
@@ -2603,11 +2619,11 @@ Mã Booking: ${booking.id}`;
               {/* Cam kết uy tín */}
               <div className="flex flex-wrap items-center justify-around gap-2 text-[11px] sm:text-xs text-zinc-400 pt-1">
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#B5945B]" />
+                  <ShieldCheck className="w-4 h-4 text-[#E5C17C]" />
                   <span>Xác nhận qua Zalo trong 15p</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#B5945B]" />
+                  <Clock className="w-4 h-4 text-[#E5C17C]" />
                   <span>Hỗ trợ dời ngày miễn phí</span>
                 </span>
               </div>
@@ -2979,163 +2995,421 @@ Mã Booking: ${booking.id}`;
           </div>
         </div>
       )}
-      {/* Full Price Table Modal */}
-      {showFullPriceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md animate-fade-in-quick">
-          <div className="w-full max-w-2xl bg-zinc-950 border border-[#B5945B]/30 rounded-2xl shadow-2xl relative text-left overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-900/60">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-[#B5945B]/15 text-[#B5945B]">
-                  <Coins className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[11px] text-[#B5945B] uppercase font-bold tracking-widest block">
-                    ✦ BERGH RYKER STUDIO
-                  </span>
-                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                    Bảng Giá Dịch Vụ Niêm Yết
-                  </h3>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowFullPriceModal(false)}
-                className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-sm text-zinc-300 font-sans">
-              {/* 1. Gói Kỷ Yếu Học Sinh */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                  <h4 className="font-bold text-white text-sm sm:text-base flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#B5945B]" />
-                    1. Gói Kỷ Yếu Học Sinh (Cấp 2 - Cấp 3 / Lớp 9 - 12)
-                  </h4>
-                  <span className="text-[11px] text-[#B5945B] font-semibold bg-[#B5945B]/10 px-2 py-0.5 rounded">
-                    Phổ biến nhất
-                  </span>
-                </div>
-                <div className="bg-zinc-900/80 rounded-xl p-3 border border-white/5 space-y-2">
-                  <div className="grid grid-cols-12 text-xs font-semibold text-zinc-400 pb-1.5 border-b border-white/5">
-                    <span className="col-span-5">Quy mô</span>
-                    <span className="col-span-3 text-center">Nửa ngày</span>
-                    <span className="col-span-4 text-right">Cả ngày</span>
+      {/* Full Price Table Modal - Gen Z Modern Card Layout */}
+      {showFullPriceModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl animate-fade-in-quick">
+            <div className="w-full max-w-2xl bg-zinc-950/95 border border-white/15 rounded-[28px] sm:rounded-[36px] shadow-[0_25px_80px_rgba(0,0,0,0.9)] relative text-left overflow-hidden flex flex-col max-h-[92vh] backdrop-blur-2xl">
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-zinc-900/60 backdrop-blur-xl shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-[#DFB779]/25 to-[#B5945B]/10 border border-[#B5945B]/35 flex items-center justify-center text-[#E5C17C] shadow-inner shrink-0">
+                    <Coins className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
                   </div>
-                  {[
-                    { size: "1 người (Cá nhân)", half: "900.000đ", full: "1.500.000đ", num: 1 },
-                    { size: "2 người (Đôi bạn)", half: "700.000đ / bạn", full: "800.000đ / bạn", num: 2 },
-                    { size: "3 người (Nhóm 3 bạn)", half: "600.000đ / bạn", full: "700.000đ / bạn", num: 3 },
-                    { size: "4 - 5 người", half: "500.000đ / bạn", full: "600.000đ / bạn", num: 4 },
-                    { size: "Tập thể (>5 bạn)", half: "500.000đ / bạn", full: "600.000đ / bạn", num: 10 },
-                  ].map((item, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        setClassSize(item.num);
-                        setShowFullPriceModal(false);
-                      }}
-                      className="grid grid-cols-12 text-xs py-1.5 px-2 rounded-lg hover:bg-zinc-800/80 cursor-pointer transition-colors"
-                    >
-                      <span className="col-span-5 text-white font-medium flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#B5945B]" />
-                        <span>{item.size}</span>
-                      </span>
-                      <span className="col-span-3 text-center text-[#B5945B] font-mono font-medium">{item.half}</span>
-                      <span className="col-span-4 text-right text-emerald-400 font-mono font-medium">{item.full}</span>
+                  <div>
+                    <span className="text-[10px] sm:text-[11px] text-[#E5C17C] uppercase font-bold tracking-[0.2em] block">
+                      ✦ BERGH.RYKER STUDIO
+                    </span>
+                    <h3 className="text-base sm:text-xl font-bold text-white tracking-tight">
+                      Bảng Giá Dịch Vụ Niêm Yết
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFullPriceModal(false)}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 text-zinc-400 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                  aria-label="Đóng bảng giá"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body - Modern Bento Card Layout */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-sm text-zinc-300 font-sans scrollbar-none">
+                {/* 1. Gói Kỷ Yếu Học Sinh */}
+                <div
+                  style={{ background: "rgba(255, 255, 255, 0.04)" }}
+                  className="border border-white/10 hover:border-[#DFB779]/30 rounded-3xl p-4 sm:p-6 transition-all duration-300 shadow-xl space-y-4"
+                >
+                  {/* Header Card 1 */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-3 h-3 rounded-full bg-[#DFB779] shadow-[0_0_10px_#DFB779] shrink-0" />
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#DFB779] flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5" /> Gói Được Đặt Nhiều Nhất
+                        </div>
+                        <h4 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5">
+                          1. Gói Kỷ Yếu Học Sinh <span className="text-zinc-400 text-xs sm:text-sm font-normal">(Cấp 2 – Cấp 3 / Lớp 9 – 12)</span>
+                        </h4>
+                      </div>
                     </div>
-                  ))}
+                    <span className="px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-[#DFB779]/15 text-[#DFB779] border border-[#DFB779]/30">
+                      Phổ biến nhất
+                    </span>
+                  </div>
+
+                  {/* Desktop Column Labels */}
+                  <div className="hidden sm:flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-3">
+                    <span>Quy mô nhóm</span>
+                    <div className="flex items-center gap-8 text-right">
+                      <span className="w-32 text-center text-[#DFB779]">Nửa ngày (Buổi)</span>
+                      <span className="w-32 text-center text-emerald-400">Cả ngày (Full)</span>
+                    </div>
+                  </div>
+
+                  {/* Scale List Cards - Each item as independent card row */}
+                  <div className="space-y-2">
+                    {[
+                      {
+                        size: "1 người",
+                        role: "Cá nhân",
+                        desc: "Ảnh profile cá nhân, kỷ niệm thanh xuân",
+                        half: "900.000đ",
+                        halfSub: "",
+                        full: "1.500.000đ",
+                        fullSub: "",
+                        num: 1,
+                        badge: null,
+                        isPopular: false,
+                      },
+                      {
+                        size: "2 người",
+                        role: "Đôi bạn thân",
+                        desc: "Bạn thân cạ cứng, couple chụp đôi",
+                        half: "700.000đ",
+                        halfSub: "/ bạn",
+                        full: "800.000đ",
+                        fullSub: "/ bạn",
+                        num: 2,
+                        badge: null,
+                        isPopular: false,
+                      },
+                      {
+                        size: "3 người",
+                        role: "Nhóm 3 bạn",
+                        desc: "Bộ ba thân thiết, hội cạ cứng",
+                        half: "600.000đ",
+                        halfSub: "/ bạn",
+                        full: "700.000đ",
+                        fullSub: "/ bạn",
+                        num: 3,
+                        badge: null,
+                        isPopular: false,
+                      },
+                      {
+                        size: "4 người",
+                        role: "Nhóm 4 bạn",
+                        desc: "Nhóm bạn thân gắn bó, kỷ niệm học trò",
+                        half: "500.000đ",
+                        halfSub: "/ bạn",
+                        full: "600.000đ",
+                        fullSub: "/ bạn",
+                        num: 4,
+                        badge: null,
+                        isPopular: false,
+                      },
+                      {
+                        size: "5 người",
+                        role: "Nhóm 5 bạn",
+                        desc: "Hội bạn thân cạ cứng cùng tiến",
+                        half: "500.000đ",
+                        halfSub: "/ bạn",
+                        full: "600.000đ",
+                        fullSub: "/ bạn",
+                        num: 5,
+                        badge: "🔥 Lựa chọn phổ biến",
+                        isPopular: true,
+                      },
+                    ].map((item, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setClassSize(item.num);
+                          setConceptType("THPT");
+                          setShowFullPriceModal(false);
+                          const el = document.getElementById("booking-contact-section");
+                          if (el) el.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        className={`p-3.5 sm:p-4 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 active:scale-[0.99] group ${
+                          item.isPopular
+                            ? "bg-gradient-to-r from-amber-500/15 via-white/[0.04] to-emerald-500/10 border-[#DFB779]/45 hover:border-[#DFB779] shadow-md hover:shadow-[#DFB779]/20"
+                            : "bg-white/[0.03] hover:bg-white/[0.08] border-white/5 hover:border-white/20"
+                        }`}
+                      >
+                        {/* Left: Info */}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="w-2 h-2 rounded-full bg-[#DFB779]/70 group-hover:bg-[#DFB779] shrink-0" />
+                            <span className="text-sm sm:text-base font-bold text-white group-hover:text-[#DFB779] transition-colors">
+                              {item.size}
+                            </span>
+                            <span className="text-xs text-zinc-400 font-medium">({item.role})</span>
+                            {item.badge && (
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] sm:text-xs text-zinc-400 mt-1 pl-4">{item.desc}</span>
+                        </div>
+
+                        {/* Right: Pricing numbers */}
+                        <div className="flex items-center justify-between sm:justify-end gap-5 sm:gap-8 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/5">
+                          {/* Half day */}
+                          <div className="text-left sm:text-right sm:w-32">
+                            <span className="sm:hidden text-[10px] text-zinc-400 block uppercase font-medium">Nửa ngày</span>
+                            <span className="text-sm sm:text-base font-black text-[#DFB779] tracking-tight">
+                              {item.half}
+                            </span>
+                            {item.halfSub && <span className="text-[10px] text-zinc-400 ml-1">{item.halfSub}</span>}
+                          </div>
+
+                          {/* Full day */}
+                          <div className="text-right sm:w-32">
+                            <span className="sm:hidden text-[10px] text-zinc-400 block uppercase font-medium">Cả ngày</span>
+                            <span className="text-sm sm:text-base font-black text-emerald-400 tracking-tight">
+                              {item.full}
+                            </span>
+                            {item.fullSub && <span className="text-[10px] text-zinc-400 ml-1">{item.fullSub}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] sm:text-xs text-zinc-400 leading-relaxed flex items-center justify-between pt-1">
+                    <span>* Bấm vào dòng bất kỳ để tự động chọn quy mô vào form đặt lịch.</span>
+                    <span className="text-[#DFB779] font-semibold hidden sm:inline">Chạm để chọn ↗</span>
+                  </p>
                 </div>
-                <p className="text-[11px] text-zinc-400 leading-relaxed flex items-center justify-between">
-                  <span>* Bấm vào dòng bất kỳ để tự động chọn quy mô nhóm.</span>
-                  <span className="text-[#B5945B]">Chạm để chọn ↗</span>
-                </p>
+
+                {/* 2. Gói Tốt Nghiệp / Cử Nhân */}
+                <div
+                  style={{ background: "rgba(255, 255, 255, 0.04)" }}
+                  className="border border-white/10 hover:border-purple-500/30 rounded-3xl p-4 sm:p-6 transition-all duration-300 shadow-xl space-y-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-3 h-3 rounded-full bg-purple-400 shadow-[0_0_10px_#a855f7] shrink-0" />
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                          🎓 Mùa Trao Bằng Cử Nhân
+                        </div>
+                        <h4 className="text-base sm:text-lg font-bold text-white tracking-tight mt-0.5">
+                          2. Gói Tốt Nghiệp / Cử Nhân <span className="text-zinc-400 text-xs sm:text-sm font-normal">(Đại Học, Cao Đẳng)</span>
+                        </h4>
+                      </div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                      Lễ trao bằng
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div
+                      onClick={() => {
+                        setClassSize(2);
+                        setConceptType("University");
+                        setShowFullPriceModal(false);
+                        const el = document.getElementById("booking-contact-section");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 hover:border-purple-500/35 transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                    >
+                      <div>
+                        <div className="text-sm sm:text-base font-bold text-white group-hover:text-purple-300 transition-colors">
+                          Nhóm từ 1 – 2 bạn tốt nghiệp:
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">Chụp cùng người thân, bạn bè tại khuôn viên trường</p>
+                      </div>
+                      <div className="mt-3.5 pt-2.5 border-t border-white/5 flex items-baseline justify-between">
+                        <span className="text-xs text-zinc-400">Giá trọn gói:</span>
+                        <span className="text-base sm:text-lg font-black text-[#DFB779]">
+                          700k – 900k <span className="text-xs text-zinc-400 font-normal">/ bạn</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setClassSize(4);
+                        setConceptType("University");
+                        setShowFullPriceModal(false);
+                        const el = document.getElementById("booking-contact-section");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 hover:border-purple-500/35 transition-all cursor-pointer flex flex-col justify-between group active:scale-[0.99]"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-sm sm:text-base font-bold text-white group-hover:text-purple-300 transition-colors">
+                            Nhóm từ 3 – 5 bạn:
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                            Tiết kiệm hơn
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 mt-1">Hội bạn cùng khoa, nhóm đồ án tốt nghiệp</p>
+                      </div>
+                      <div className="mt-3.5 pt-2.5 border-t border-white/5 flex items-baseline justify-between">
+                        <span className="text-xs text-zinc-400">Ưu đãi nhóm:</span>
+                        <span className="text-base sm:text-lg font-black text-emerald-400">
+                          500k – 600k <span className="text-xs text-zinc-400 font-normal">/ bạn</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center gap-3 text-xs sm:text-sm text-purple-200">
+                    <Clock className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span><strong>Thời gian chụp linh hoạt:</strong> Khung 2 tiếng – 4 tiếng bám sát theo lịch nhận bằng thực tế của trường.</span>
+                  </div>
+                </div>
+
+                {/* 3 & 4. Gói Cá Nhân & Sự Kiện (Grid 2 Cột Bento Cards) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Card 3: Cá nhân / Nghệ thuật */}
+                  <div
+                    style={{ background: "rgba(255, 255, 255, 0.04)" }}
+                    onClick={() => {
+                      setClassSize(1);
+                      setConceptType("Custom");
+                      setShowFullPriceModal(false);
+                      const el = document.getElementById("booking-contact-section");
+                      if (el) el.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="hover:bg-white/[0.08] border border-white/10 hover:border-[#DFB779]/40 rounded-3xl p-4 sm:p-5 transition-all duration-300 shadow-xl flex flex-col justify-between cursor-pointer group active:scale-[0.99]"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#DFB779]">
+                          3. CÁ NHÂN / NGHỆ THUẬT
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#DFB779]/15 text-[#DFB779] border border-[#DFB779]/30">
+                          Profile & Lookbook
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+                        Chân dung nghệ thuật, Profile, Street style, Lookbook, Sinh nhật cá nhân.
+                      </p>
+                      <div className="mt-3.5 mb-1">
+                        <span className="text-[11px] text-zinc-400 block">Chi phí từ:</span>
+                        <span className="text-base sm:text-xl font-black text-white group-hover:text-[#DFB779] transition-colors">
+                          900.000đ <span className="text-xs font-normal text-zinc-400">/ concept</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3.5 pt-2.5 border-t border-white/5 text-[11px] text-zinc-400 flex items-center justify-between">
+                      <span>Trả 100% file gốc + 15 ảnh photoshop</span>
+                      <span className="text-[#DFB779] font-bold">Chọn gói ↗</span>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Sự kiện / Tiệc Prom */}
+                  <div
+                    style={{ background: "rgba(255, 255, 255, 0.04)" }}
+                    onClick={() => {
+                      setClassSize(10);
+                      setConceptType("Event");
+                      setShowFullPriceModal(false);
+                      const el = document.getElementById("booking-contact-section");
+                      if (el) el.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="hover:bg-white/[0.08] border border-white/10 hover:border-amber-500/40 rounded-3xl p-4 sm:p-5 transition-all duration-300 shadow-xl flex flex-col justify-between cursor-pointer group active:scale-[0.99]"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-400">
+                          4. SỰ KIỆN / TIỆC PROM
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                          Gala & Prom Night
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+                        Tiệc gala, Prom night, Sinh nhật tập thể, Hội nghị & Dạ hội cuối khóa.
+                      </p>
+                      <div className="mt-3.5 mb-1">
+                        <span className="text-[11px] text-zinc-400 block">Hình thức tính phí:</span>
+                        <span className="text-base sm:text-xl font-black text-white group-hover:text-amber-300 transition-colors">
+                          Báo giá theo giờ sự kiện
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3.5 pt-2.5 border-t border-white/5 text-[11px] text-zinc-400 flex items-center justify-between">
+                      <span>Cinema gear + Đèn flash công suất lớn</span>
+                      <span className="text-amber-400 font-bold">Chọn gói ↗</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Cam kết chất lượng dịch vụ */}
+                <div className="bg-gradient-to-br from-[#DFB779]/15 via-white/[0.03] to-transparent border border-[#DFB779]/30 rounded-3xl p-4 sm:p-5 shadow-xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#DFB779]" />
+                    <span className="font-bold text-[#DFB779] text-xs sm:text-sm uppercase tracking-wider">
+                      Cam kết chất lượng dịch vụ độc quyền
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-zinc-300">
+                    <div className="flex items-start gap-2.5 bg-white/[0.02] p-2.5 rounded-2xl border border-white/5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-white block">100% File gốc chất lượng cao</strong>
+                        <span className="text-[11px] text-zinc-400">Bàn giao ngay qua Google Drive tốc độ cao trong 24h.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5 bg-white/[0.02] p-2.5 rounded-2xl border border-white/5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-white block">Tạo dáng tận tình từng bạn</strong>
+                        <span className="text-[11px] text-zinc-400">Nhiếp ảnh gia hướng dẫn chi tiết cử chỉ, góc mặt tự nhiên.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5 bg-white/[0.02] p-2.5 rounded-2xl border border-white/5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-white block">Đổi ngày miễn phí linh hoạt</strong>
+                        <span className="text-[11px] text-zinc-400">Báo trước 48h được hỗ trợ đổi ngày chụp hoàn toàn miễn phí.</span>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5 bg-white/[0.02] p-2.5 rounded-2xl border border-white/5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-white block">Bảo hành thời tiết 100%</strong>
+                        <span className="text-[11px] text-zinc-400">Hoàn cọc 100% nếu có mưa bão hoặc sự cố bất khả kháng.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 2. Gói Cử Nhân / Tốt Nghiệp */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                  <h4 className="font-bold text-white text-sm sm:text-base flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#B5945B]" />
-                    2. Gói Tốt Nghiệp / Cử Nhân (Đại Học, Cao Đẳng)
-                  </h4>
-                  <span className="text-[11px] text-zinc-400 font-medium">Lễ trao bằng</span>
+              {/* Modal Footer - Pill CTA Button */}
+              <div className="p-4 sm:p-5 border-t border-white/10 bg-zinc-950/95 flex flex-col sm:flex-row items-center justify-between gap-3.5 backdrop-blur-2xl shrink-0">
+                <div className="flex items-center gap-2.5 text-xs sm:text-sm text-zinc-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <span>Cọc <strong>30%</strong> giữ chỗ ngày chụp • Hỗ trợ chia tiền lẻ từng bạn</span>
                 </div>
-                <div className="bg-zinc-900/80 rounded-xl p-3 border border-white/5 space-y-1.5 text-xs">
-                  <div className="flex justify-between py-1 border-b border-white/5">
-                    <span>Nhóm từ 1 - 2 bạn tốt nghiệp:</span>
-                    <span className="text-[#B5945B] font-bold font-mono">700k - 900k / bạn</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-white/5">
-                    <span>Nhóm từ 3 - 5 bạn trở lên:</span>
-                    <span className="text-[#B5945B] font-bold font-mono">500k - 600k / bạn</span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span>Thời gian chụp linh hoạt:</span>
-                    <span className="text-zinc-300">Khung 2 tiếng - 4 tiếng theo giờ nhận bằng</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Gói Cá Nhân / Nghệ Thuật & Sự Kiện */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="bg-zinc-900/80 rounded-xl p-3.5 border border-white/5 space-y-1">
-                  <h5 className="font-bold text-white text-xs uppercase text-[#B5945B]">
-                    3. Cá Nhân / Nghệ Thuật
-                  </h5>
-                  <p className="text-xs text-zinc-300">Chân dung, Profile, Street style, Lookbook</p>
-                  <p className="text-xs font-mono font-bold text-white pt-1">Từ 900.000đ / concept</p>
-                  <p className="text-[11px] text-zinc-400">Trả toàn bộ file gốc + 15 file photoshop kỹ càng.</p>
-                </div>
-
-                <div className="bg-zinc-900/80 rounded-xl p-3.5 border border-white/5 space-y-1">
-                  <h5 className="font-bold text-white text-xs uppercase text-[#B5945B]">
-                    4. Sự Kiện / Tiệc Prom
-                  </h5>
-                  <p className="text-xs text-zinc-300">Tiệc gala, Prom night, Sinh nhật, Hội nghị</p>
-                  <p className="text-xs font-mono font-bold text-white pt-1">Báo giá theo giờ sự kiện</p>
-                  <p className="text-[11px] text-zinc-400">Máy ảnh cinema cao cấp + Đèn flash công suất lớn.</p>
-                </div>
-              </div>
-
-              {/* 4. Quyền lợi cam kết */}
-              <div className="bg-[#B5945B]/10 border border-[#B5945B]/20 rounded-xl p-3.5 space-y-1.5 text-xs">
-                <span className="font-bold text-[#B5945B] block uppercase tracking-wide">
-                  ✦ Cam kết chất lượng dịch vụ
-                </span>
-                <ul className="space-y-1 text-zinc-300 text-[11px]">
-                  <li>✓ <strong>100% File gốc:</strong> Bàn giao toàn bộ ngay sau buổi chụp qua Google Drive tốc độ cao.</li>
-                  <li>✓ <strong>Tạo dáng chuyên nghiệp:</strong> Nhiếp ảnh gia hướng dẫn chi tiết từng cử chỉ, biểu cảm.</li>
-                  <li>✓ <strong>Đổi ngày miễn phí:</strong> Báo trước 48h được hỗ trợ đổi sang ngày khác không mất phí.</li>
-                  <li>✓ <strong>Bảo hành thời tiết:</strong> Hoàn cọc 100% nếu có mưa bão hoặc yếu tố khách quan không thể chụp.</li>
-                </ul>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFullPriceModal(false);
+                    const el = document.getElementById("booking-contact-section");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="w-full sm:w-auto px-8 sm:px-10 py-3.5 sm:py-4 bg-gradient-to-r from-[#F5D78E] via-[#D4AF37] to-[#A0781D] hover:brightness-110 active:scale-95 text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider rounded-full transition-all shadow-[0_8px_30px_rgba(212,175,55,0.45)] hover:shadow-[0_12px_40px_rgba(212,175,55,0.7)] cursor-pointer flex items-center justify-center gap-2.5 shrink-0"
+                >
+                  <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-950" />
+                  <span>ĐẶT LỊCH NGAY</span>
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-950" />
+                </button>
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-white/10 bg-zinc-900/80 flex items-center justify-between gap-3">
-              <span className="text-xs text-zinc-400">
-                Cọc 30% giữ chỗ ngày chụp
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowFullPriceModal(false);
-                  const el = document.getElementById("booking-contact-section");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="px-5 py-2.5 bg-[#B5945B] hover:bg-[#c9a76d] text-black font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
-              >
-                Đặt Lịch Ngay
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ToastContainer for booking alerts */}
       <ToastContainer toasts={toasts} />

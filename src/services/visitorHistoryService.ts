@@ -23,88 +23,29 @@ import { stripIspFromName } from "./geoService";
 import { getDetailedDeviceLabel } from "./deviceFingerprintService";
 
 /**
- * Sanitize and correct any previous faulty Intel macOS or ambiguous iPhone / iPad labels
+ * Detect social in-app browsers (Zalo, Facebook, Instagram)
+ * Returns label or null for regular browsers.
  */
-export function sanitizeDeviceLabel(rawDevice = "", screenResolution = ""): string {
+export function getSocialSourceLabel(browser = "", userAgent = ""): string | null {
+  const norm = `${browser} ${userAgent}`.toLowerCase();
+  if (norm.includes("zalo")) return "Mở từ Zalo";
+  if (norm.includes("facebook") || norm.includes("fbav") || norm.includes("fban")) return "Mở từ Facebook";
+  if (norm.includes("instagram")) return "Mở từ Instagram";
+  return null;
+}
+
+/**
+ * Clean device classification (Zero false screen-size guessing)
+ */
+export function sanitizeDeviceLabel(rawDevice = "", _screenResolution = ""): string {
   if (!rawDevice) return "Thiết bị di động";
   const trimmed = rawDevice.trim();
-
-  let scrW = 0;
-  let scrH = 0;
-  if (screenResolution && screenResolution.includes("x")) {
-    const parts = screenResolution.split("x").map(Number);
-    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-      scrW = Math.min(parts[0], parts[1]);
-      scrH = Math.max(parts[0], parts[1]);
-    }
-  }
-
-  // 1. CRITICAL: If a mobile phone was mistakenly tagged as Apple iPad or iPadOS
-  if (trimmed.includes("iPad") || trimmed.includes("iPadOS")) {
-    // If screen dimensions indicate a phone (< 700px width)
-    if (scrW > 0 && scrW < 700) {
-      if ((scrW === 440 && scrH === 956) || (scrW >= 438 && scrW <= 442 && scrH >= 950 && scrH <= 960)) return "iPhone 16 Pro Max";
-      if ((scrW === 402 && scrH === 874) || (scrW >= 400 && scrW <= 405 && scrH >= 870 && scrH <= 878)) return "iPhone 16 Pro";
-      if ((scrW === 430 && scrH === 932) || (scrW >= 428 && scrW <= 433 && scrH >= 930 && scrH <= 936)) return "iPhone 15 Pro Max";
-      if ((scrW === 393 && scrH === 852) || (scrW >= 390 && scrW <= 395 && scrH >= 850 && scrH <= 856)) return "iPhone 15 Pro";
-      if ((scrW === 428 && scrH === 926) || (scrW >= 426 && scrW <= 430 && scrH >= 922 && scrH <= 928)) return "iPhone 14 Plus / 13 Pro Max";
-      if ((scrW === 390 && scrH === 844) || (scrW >= 388 && scrW <= 392 && scrH >= 840 && scrH <= 848)) return "iPhone 14 / 13 / 12";
-      if ((scrW === 375 && scrH === 812) || (scrW >= 373 && scrW <= 378 && scrH >= 808 && scrH <= 816)) return "iPhone 13 mini / 12 mini / 11 Pro";
-      if (scrW === 414 && scrH === 896) return "iPhone 11 Pro Max / XR";
-      if (scrW === 414 && scrH === 736) return "iPhone 8 Plus / 7 Plus";
-      if (scrW === 375 && scrH === 667) return "iPhone SE / 8";
-      if (scrW === 320 && scrH === 568) return "iPhone SE 1st gen";
-      if (scrW >= 420) return "iPhone Pro Max";
-      if (scrW >= 390) return "iPhone Pro";
-      return "Apple iPhone";
-    }
-    // If on client side we can check current window if screenResolution wasn't stored
-    if (typeof window !== "undefined") {
-      const curW = Math.min(window.screen?.width || window.innerWidth, window.screen?.height || window.innerHeight);
-      if (curW < 700) {
-        return getDetailedDeviceLabel();
-      }
-    }
-  }
-
-  // 2. If a mobile device was mistakenly tagged with a MacBook desktop label due to Safari Desktop mode
-  if (trimmed.includes("MacBook") || trimmed === "Macintosh" || trimmed === "Mac OS X") {
-    if (scrW > 0 && scrW < 700) {
-      if ((scrW === 440 && scrH === 956) || (scrW >= 438 && scrW <= 442 && scrH >= 950 && scrH <= 960)) return "iPhone 16 Pro Max";
-      if ((scrW === 402 && scrH === 874) || (scrW >= 400 && scrW <= 405 && scrH >= 870 && scrH <= 878)) return "iPhone 16 Pro";
-      if ((scrW === 430 && scrH === 932) || (scrW >= 428 && scrW <= 433 && scrH >= 930 && scrH <= 936)) return "iPhone 15 Pro Max";
-      if ((scrW === 393 && scrH === 852) || (scrW >= 390 && scrW <= 395 && scrH >= 850 && scrH <= 856)) return "iPhone 15 Pro";
-      if ((scrW === 428 && scrH === 926) || (scrW >= 426 && scrW <= 430 && scrH >= 922 && scrH <= 928)) return "iPhone 14 Plus / 13 Pro Max";
-      if ((scrW === 390 && scrH === 844) || (scrW >= 388 && scrW <= 392 && scrH >= 840 && scrH <= 848)) return "iPhone 14 / 13 / 12";
-      if ((scrW === 375 && scrH === 812) || (scrW >= 373 && scrW <= 378 && scrH >= 808 && scrH <= 816)) return "iPhone 13 mini / 12 mini / 11 Pro";
-      if (scrW === 414 && scrH === 896) return "iPhone 11 Pro Max / XR";
-      if (scrW === 375 && scrH === 667) return "iPhone SE / 8";
-      return "Apple iPhone";
-    }
-  }
-
-  // Preserve distinct iPhone models and prioritize iPhone 15 Pro Max over iPhone 16 Plus
-  if (trimmed.includes("15 Pro Max") || trimmed.includes("15prm") || trimmed.includes("iPhone 15 Pro Max")) {
-    return "iPhone 15 Pro Max";
-  }
-  if (trimmed.includes("iPhone 16 Plus / 15 Pro Max") || trimmed.includes("16 Plus / 15 Pro Max")) {
-    return "iPhone 15 Pro Max";
-  }
-  if (trimmed.includes("iPhone 16 Plus") && (scrW === 430 || scrW === 0)) {
-    return "iPhone 15 Pro Max";
-  }
-  if (trimmed.includes("iPhone 16 Pro Max")) return "iPhone 16 Pro Max";
-  if (trimmed.includes("iPhone 16 Pro")) return "iPhone 16 Pro";
-  if (trimmed.includes("iPhone 16 Plus")) return "iPhone 16 Plus";
-  if (trimmed.includes("iPhone 16")) return "iPhone 16";
-  if (trimmed.includes("iPhone 15 Pro")) return "iPhone 15 Pro";
-
-  // If label is generic Mac without detail
-  if (trimmed === "Macintosh" || trimmed === "Mac OS X" || trimmed === "Mac") {
-    return "Mac (Apple Silicon)";
-  }
-
-  return trimmed;
+  if (trimmed.includes("iPhone")) return "Điện thoại";
+  if (trimmed.includes("iPad")) return "Máy tính bảng";
+  if (trimmed.includes("Mac") || trimmed.includes("Macintosh")) return "Máy tính";
+  if (trimmed.includes("Windows") || trimmed.includes("PC")) return "Máy tính";
+  if (trimmed.includes("Android")) return "Điện thoại Android";
+  return "Thiết bị di động";
 }
 
 export interface VisitorHistoryItem {
@@ -122,6 +63,16 @@ export interface VisitorHistoryItem {
   ip?: string;
   rawIp?: string;
   location?: string;
+  fullLocation?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  fullAddress?: string;
+  accuracyMeters?: number;
+  locationSource?: "GPS" | "IP" | "MANUAL";
+  isp?: string;
+  latitude?: number;
+  longitude?: number;
   city?: string;
   region?: string;
   firstSeenAt: string;
@@ -213,6 +164,15 @@ export async function logVisitorHistory(visitor: {
   saveData?: boolean;
   screenResolution?: string;
   location?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  fullAddress?: string;
+  accuracyMeters?: number;
+  locationSource?: "GPS" | "IP" | "MANUAL";
+  isp?: string;
+  latitude?: number;
+  longitude?: number;
   ip?: string;
   rawIp?: string;
   page: string;
@@ -237,6 +197,15 @@ export async function logVisitorHistory(visitor: {
     saveData,
     screenResolution,
     location,
+    ward,
+    district,
+    province,
+    fullAddress,
+    accuracyMeters,
+    locationSource,
+    isp,
+    latitude,
+    longitude,
     ip,
     rawIp,
     page,
@@ -250,7 +219,7 @@ export async function logVisitorHistory(visitor: {
   if (!effectiveId) return;
 
   const nowIso = new Date().toISOString();
-  const cleanLoc = stripIspFromName(location || "Việt Nam");
+  const cleanLoc = stripIspFromName(location || "Chưa rõ vị trí (Ẩn IP)");
 
   // 1. Update local cache immediately
   try {
@@ -289,7 +258,16 @@ export async function logVisitorHistory(visitor: {
         rtt: rtt !== undefined ? rtt : existing.rtt,
         saveData: saveData !== undefined ? saveData : existing.saveData,
         screenResolution: screenResolution || existing.screenResolution,
-        location: cleanLoc !== "Việt Nam" ? cleanLoc : existing.location || "Việt Nam",
+        location: cleanLoc !== "Chưa rõ vị trí (Ẩn IP)" && cleanLoc !== "Việt Nam" ? cleanLoc : (existing.location || cleanLoc),
+        ward: ward || existing.ward,
+        district: district || existing.district,
+        province: province || existing.province,
+        fullAddress: fullAddress || existing.fullAddress,
+        accuracyMeters: accuracyMeters !== undefined ? accuracyMeters : existing.accuracyMeters,
+        locationSource: locationSource || existing.locationSource,
+        isp: isp || existing.isp,
+        latitude: latitude !== undefined ? latitude : existing.latitude,
+        longitude: longitude !== undefined ? longitude : existing.longitude,
         ip: ip || existing.ip,
         rawIp: rawIp || existing.rawIp,
         lastPage: page || existing.lastPage,
@@ -322,6 +300,15 @@ export async function logVisitorHistory(visitor: {
         saveData,
         screenResolution: screenResolution || "",
         location: cleanLoc,
+        ward,
+        district,
+        province,
+        fullAddress,
+        accuracyMeters,
+        locationSource: locationSource || (latitude ? "GPS" : "IP"),
+        isp,
+        latitude,
+        longitude,
         ip,
         rawIp,
         firstSeenAt: initialFirstSeen || nowIso,
@@ -366,28 +353,13 @@ export async function logVisitorHistory(visitor: {
       pageViews: increment(1),
     };
 
-    if (browserVersion) {
-      updatePayload.browserVersion = browserVersion;
-    }
-    if (connectionType) {
-      updatePayload.connectionType = connectionType;
-    }
-    if (effectiveType) {
-      updatePayload.effectiveType = effectiveType;
-    }
-    if (downlink !== undefined) {
-      updatePayload.downlink = downlink;
-    }
-    if (rtt !== undefined) {
-      updatePayload.rtt = rtt;
-    }
-    if (saveData !== undefined) {
-      updatePayload.saveData = saveData;
-    }
-
-    if (screenResolution) {
-      updatePayload.screenResolution = screenResolution;
-    }
+    if (browserVersion) updatePayload.browserVersion = browserVersion;
+    if (connectionType) updatePayload.connectionType = connectionType;
+    if (effectiveType) updatePayload.effectiveType = effectiveType;
+    if (downlink !== undefined) updatePayload.downlink = downlink;
+    if (rtt !== undefined) updatePayload.rtt = rtt;
+    if (saveData !== undefined) updatePayload.saveData = saveData;
+    if (screenResolution) updatePayload.screenResolution = screenResolution;
 
     if (!existing || !existing.firstSeenAt) {
       updatePayload.firstSeenAt = initialFirstSeen || nowIso;
@@ -397,13 +369,18 @@ export async function logVisitorHistory(visitor: {
     if (cleanLoc && cleanLoc !== "Việt Nam") {
       updatePayload.location = cleanLoc;
     }
+    if (ward) updatePayload.ward = ward;
+    if (district) updatePayload.district = district;
+    if (province) updatePayload.province = province;
+    if (fullAddress) updatePayload.fullAddress = fullAddress;
+    if (accuracyMeters !== undefined) updatePayload.accuracyMeters = accuracyMeters;
+    if (locationSource) updatePayload.locationSource = locationSource;
+    if (isp) updatePayload.isp = isp;
+    if (latitude !== undefined) updatePayload.latitude = latitude;
+    if (longitude !== undefined) updatePayload.longitude = longitude;
 
-    if (ip) {
-      updatePayload.ip = ip;
-    }
-    if (rawIp) {
-      updatePayload.rawIp = rawIp;
-    }
+    if (ip) updatePayload.ip = ip;
+    if (rawIp) updatePayload.rawIp = rawIp;
 
     await setDoc(docRef, cleanFirestoreData(updatePayload), { merge: true });
   } catch (error: any) {
@@ -424,7 +401,18 @@ export async function logVisitorHistory(visitor: {
  */
 export async function updateVisitorHistoryLocation(
   visitorId: string,
-  newLocation: string
+  newLocation: string,
+  extraDetails?: {
+    ward?: string;
+    district?: string;
+    province?: string;
+    fullAddress?: string;
+    accuracyMeters?: number;
+    locationSource?: "GPS" | "IP" | "MANUAL";
+    isp?: string;
+    latitude?: number;
+    longitude?: number;
+  }
 ): Promise<void> {
   const cleanLoc = stripIspFromName(newLocation);
   if (!visitorId || !cleanLoc) return;
@@ -433,7 +421,14 @@ export async function updateVisitorHistoryLocation(
   try {
     const cached = getCachedVisitorHistory();
     const updated = cached.map((item) =>
-      item.visitorId === visitorId ? { ...item, location: cleanLoc } : item
+      item.visitorId === visitorId || item.id === visitorId
+        ? {
+            ...item,
+            location: cleanLoc,
+            ...(extraDetails || {}),
+            locationSource: extraDetails?.locationSource || "MANUAL",
+          }
+        : item
     );
     setCachedVisitorHistory(updated);
   } catch (_) {}
@@ -441,7 +436,12 @@ export async function updateVisitorHistoryLocation(
   // 2. Update Firestore
   try {
     const docRef = doc(db, "visitor_history", visitorId);
-    await setDoc(docRef, { location: cleanLoc }, { merge: true });
+    const payload: any = {
+      location: cleanLoc,
+      locationSource: extraDetails?.locationSource || "MANUAL",
+      ...(extraDetails || {}),
+    };
+    await setDoc(docRef, cleanFirestoreData(payload), { merge: true });
     const activeRef = doc(db, "active_visitors", visitorId);
     await setDoc(activeRef, { location: cleanLoc }, { merge: true }).catch(() => {});
   } catch (_) {}
@@ -488,7 +488,16 @@ export function subscribeToVisitorHistory(
             screenResolution: data.screenResolution || "",
             ip: data.ip || (data.rawIp ? data.rawIp : undefined),
             rawIp: data.rawIp,
-            location: stripIspFromName(data.location || "Việt Nam"),
+            location: stripIspFromName(data.location || "Chưa rõ vị trí (Ẩn IP)"),
+            ward: data.ward,
+            district: data.district,
+            province: data.province,
+            fullAddress: data.fullAddress,
+            accuracyMeters: data.accuracyMeters,
+            locationSource: data.locationSource || (data.latitude && data.accuracyMeters ? "GPS" : "IP"),
+            isp: data.isp,
+            latitude: data.latitude,
+            longitude: data.longitude,
             city: data.city,
             region: data.region,
             firstSeenAt: data.firstSeenAt || data.lastSeenAt || new Date().toISOString(),
@@ -516,7 +525,14 @@ export function subscribeToVisitorHistory(
               isReturning: Boolean(existing.isReturning || it.isReturning || Math.max(existing.visitCount || 1, it.visitCount || 1) > 1),
               pageViews: (existing.pageViews || 1) + (it.pageViews || 1),
               visitedPages: mergedPages,
-              location: (it.location && it.location !== "Việt Nam") ? it.location : existing.location,
+              location: (it.location && it.location !== "Việt Nam" && it.location !== "Chưa rõ vị trí (Ẩn IP)") ? it.location : existing.location,
+              ward: it.ward || existing.ward,
+              district: it.district || existing.district,
+              province: it.province || existing.province,
+              fullAddress: it.fullAddress || existing.fullAddress,
+              accuracyMeters: it.accuracyMeters || existing.accuracyMeters,
+              locationSource: it.locationSource || existing.locationSource,
+              isp: it.isp || existing.isp,
             });
           } else {
             deduplicatedMap.set(key, it);

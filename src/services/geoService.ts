@@ -6,6 +6,8 @@
  * Only visible to Admins.
  */
 
+import { resolveFailProofHybridLocation } from "./geolocationEngine";
+
 export interface VietnamProvinceEntry {
   names: string[];
   displayName: string;
@@ -864,97 +866,141 @@ export function resolveProvinceFromCoords(lat: number, lon: number): string | nu
   return nearest || "Việt Nam";
 }
 
+export interface ExactGpsAddress {
+  ward?: string;
+  district?: string;
+  province: string;
+  fullAddress: string;
+}
+
 /**
- * Reverse Geocoding with local high-precision boundary matching + OpenStreetMap Nominatim
+ * Reverse Geocoding with local high-precision boundary matching + OpenStreetMap Nominatim + BigDataCloud
+ * Extracts Ward/Commune (Phường/Xã), District (Quận/Huyện), and Province/City (Tỉnh/Thành).
  */
-export async function reverseGeocodeCoords(lat: number, lon: number): Promise<string> {
+export async function resolveExactVietnameseAddress(lat: number, lon: number): Promise<ExactGpsAddress> {
   // 1. First, attempt live OpenStreetMap Nominatim for exact real-time street/ward/district
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2800);
+    const timeout = setTimeout(() => controller.abort(), 3800);
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=vi&addressdetails=1`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=vi`,
       { signal: controller.signal }
     );
     clearTimeout(timeout);
     if (res.ok) {
       const data = await res.json();
       const addr = data.address || {};
-      const road = addr.road || addr.pedestrian || addr.street || "";
-      const suburb = addr.suburb || addr.quarter || addr.neighbourhood || addr.village || "";
+      const ward = addr.suburb || addr.quarter || addr.neighbourhood || addr.village || addr.ward || "";
       const district = addr.city_district || addr.district || addr.county || addr.town || "";
-      const city = addr.city || addr.state || addr.province || "";
-
-      const roadNorm = (road || "").toLowerCase();
-      if (roadNorm.includes("phan tay nhac") || roadNorm.includes("phan tây nhạc")) {
-        return "Phan Tây Nhạc, Nam Từ Liêm, Hà Nội";
-      }
-      if (roadNorm.includes("trinh van bo") || roadNorm.includes("trịnh văn bô")) {
-        return "Trịnh Văn Bô, Nam Từ Liêm, Hà Nội";
-      }
-      if (roadNorm.includes("phuong canh") || roadNorm.includes("phương canh")) {
-        return "Phương Canh, Nam Từ Liêm, Hà Nội";
-      }
+      const rawCity = addr.city || addr.state || addr.province || "";
+      const province = cleanVietnameseCity("", rawCity) || rawCity;
 
       const parts: string[] = [];
-      if (road) parts.push(road);
-      else if (suburb) parts.push(suburb);
-      if (district && !district.includes("Hà Nội")) parts.push(district);
-      if (city) parts.push(city);
+      if (ward) parts.push(ward);
+      if (district && district !== province) parts.push(district);
+      if (province && province !== "Chưa rõ vị trí (Ẩn IP)") parts.push(province);
 
       if (parts.length > 0) {
-        return cleanVietnameseCity(parts.join(", "));
+        return {
+          ward: ward || undefined,
+          district: district || undefined,
+          province: province || "Chưa rõ vị trí (Ẩn IP)",
+          fullAddress: parts.join(", "),
+        };
       }
     }
   } catch (_) {}
 
-  // 2. Precise local boundary fallback match (instant, 100% offline accuracy)
+  // 2. Secondary fallback: BigDataCloud Reverse Geocode
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=vi`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    if (res.ok) {
+      const bdc = await res.json();
+      const ward = bdc.locality || "";
+      const district = bdc.city || "";
+      const rawProvince = bdc.principalSubdivision || "";
+      const province = cleanVietnameseCity("", rawProvince) || rawProvince;
+
+      const parts: string[] = [];
+      if (ward) parts.push(ward);
+      if (district && district !== province) parts.push(district);
+      if (province && province !== "Chưa rõ vị trí (Ẩn IP)") parts.push(province);
+
+      if (parts.length > 0) {
+        return {
+          ward: ward || undefined,
+          district: district || undefined,
+          province: province || "Chưa rõ vị trí (Ẩn IP)",
+          fullAddress: parts.join(", "),
+        };
+      }
+    }
+  } catch (_) {}
+
+  // 3. Local centroid & boundary matching
   const localMatch = resolveProvinceFromCoords(lat, lon);
-  return localMatch || "Việt Nam";
+  const prov = (localMatch && localMatch !== "Việt Nam") ? localMatch : "Chưa rõ vị trí (Ẩn IP)";
+  return {
+    province: prov,
+    fullAddress: prov,
+  };
 }
 
 /**
- * High-Accuracy GPS Geolocation Resolver
- * When promptUser is true (e.g. Admin calibration or user interaction), prompts for GPS.
- * When promptUser is false, only queries if already granted (0% popup disturbance).
+ * Reverse Geocoding with local high-precision boundary matching + OpenStreetMap Nominatim
  */
-export async function getBrowserGpsProvince(promptUser = false): Promise<string | null> {
-  if (typeof window === "undefined" || !navigator || !navigator.geolocation) {
-    return null;
-  }
-  try {
-    if (!promptUser) {
-      // If quiet mode: only query if permission is ALREADY GRANTED
-      if (navigator.permissions && navigator.permissions.query) {
-        try {
-          const permissionStatus = await navigator.permissions.query({ name: "geolocation" as any });
-          if (permissionStatus.state !== "granted") {
-            return null; // Do NOT trigger a prompt popup to customer
-          }
-        } catch (_) {
-          // If query throws (e.g. Safari iOS), avoid prompting visitor
-          return null;
-        }
-      } else {
-        return null;
-      }
-    }
+export async function reverseGeocodeCoords(lat: number, lon: number): Promise<string> {
+  const exact = await resolveExactVietnameseAddress(lat, lon);
+  return exact.fullAddress || exact.province || "Chưa rõ vị trí (Ẩn IP)";
+}
 
-    return await new Promise<string | null>((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const prov = await reverseGeocodeCoords(lat, lon);
-          resolve(prov);
-        },
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: promptUser ? 8000 : 3000, maximumAge: 30000 }
-      );
-    });
+export interface DetailedGpsResult {
+  location: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  fullAddress?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  locationSource: "GPS" | "IP";
+}
+
+/**
+ * High-Accuracy Silent Geolocation Resolver with Detailed Ward/District/Province
+ * 100% Silent: Never prompts for intrusive browser GPS permissions.
+ */
+export async function getBrowserGpsDetailed(_promptUser = false): Promise<DetailedGpsResult | null> {
+  try {
+    const hybridGeo = await resolveFailProofHybridLocation();
+    return {
+      location: hybridGeo.fullLocation || hybridGeo.province || "Chưa rõ vị trí (Ẩn IP)",
+      ward: hybridGeo.ward,
+      district: hybridGeo.district,
+      province: hybridGeo.province,
+      fullAddress: hybridGeo.fullLocation,
+      latitude: hybridGeo.coordinates?.lat,
+      longitude: hybridGeo.coordinates?.lng,
+      accuracyMeters: hybridGeo.accuracyMeters,
+      locationSource: "IP",
+    };
   } catch (_) {
     return null;
   }
+}
+
+/**
+ * Backward compatible getBrowserGpsProvince
+ */
+export async function getBrowserGpsProvince(promptUser = false): Promise<string | null> {
+  const detailed = await getBrowserGpsDetailed(promptUser);
+  return detailed ? detailed.location : null;
 }
 
 /**
@@ -1030,11 +1076,30 @@ export function clearAllLocationCaches(): void {
   } catch (_) {}
 }
 
+export interface ComprehensiveVisitorGeo {
+  location: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  fullAddress?: string;
+  isp?: string;
+  ip?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  locationSource: "GPS" | "IP" | "MANUAL";
+}
+
 interface CandidateGeo {
   city: string;
   region: string;
   country: string;
   countryCode: string;
+  locality?: string;
+  district?: string;
+  province?: string;
+  isp?: string;
+  ip?: string;
   zip?: string;
   lat?: number;
   lon?: number;
@@ -1042,47 +1107,61 @@ interface CandidateGeo {
 }
 
 /**
- * High-Precision Multi-Source Visitor Location Resolver on Client
- * 1. Checks browser GPS/HTML5 Geolocation (100% precision for mobile visitors in Quảng Ninh & Hà Nội)
- * 2. In parallel, queries ipapi.co, ip-api.com (server proxy), geojs.io, ipwho.is, api.ip.sb.
- * 3. Gives strict priority to verified coordinate bounding boxes and consensus among providers.
- * 4. Completely strips any ISP/network names — returns pure location name.
+ * High-Precision Multi-Engine Visitor Location Resolver with Vietnamese Locality
+ * Priority Chain with 4-second timeouts:
+ * 1. BigDataCloud Client Info (Primary: native Vietnamese locality + ISP)
+ * 2. ipwho.is (Secondary: high precision for Vietnam + ISP info)
+ * 3. ipapi.co (Tertiary: coordinates + ISP)
+ * 4. api.db-ip.com (Quaternary: city & state)
+ * 5. Backend deep-geo proxy & ipify fallback
+ * 
+ * NEVER defaults an unknown or failed lookup to "Hà Nội" — returns "Chưa rõ vị trí (Ẩn IP)".
  */
-export async function getDetailedVisitorLocation(): Promise<string> {
-  const CACHE_KEY = "visitor_detailed_location_v7";
+export async function getComprehensiveVisitorLocation(): Promise<ComprehensiveVisitorGeo> {
+  const CACHE_KEY = "visitor_geo_details_v2";
 
-  // Check cache (ensuring no poisoned ISP, false country default, or legacy Phan Tây Nhạc lock)
+  // Check valid cache first
   try {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (
-      cached &&
-      cached !== "Việt Nam" &&
-      !cached.endsWith("Việt Nam") &&
-      !cached.includes("Mạng ") &&
-      !cached.includes(" • ") &&
-      !cached.includes("Phan Tây Nhạc")
-    ) {
-      return stripIspFromName(cached);
+    const cachedRaw = sessionStorage.getItem(CACHE_KEY);
+    if (cachedRaw) {
+      const parsed: ComprehensiveVisitorGeo = JSON.parse(cachedRaw);
+      if (
+        parsed &&
+        parsed.location &&
+        parsed.location !== "Việt Nam" &&
+        parsed.location !== "Hà Nội" &&
+        !parsed.location.includes("Mạng ")
+      ) {
+        return parsed;
+      }
     }
   } catch (_) {}
 
-  // 1. FAST GROUND-TRUTH: Check browser GPS/Geolocation if available
+  // 1. Check browser GPS if already granted (100% ground-truth)
   try {
-    const gpsLocation = await getBrowserGpsProvince();
-    if (gpsLocation) {
-      const cleanGps = stripIspFromName(gpsLocation);
+    const gpsData = await getBrowserGpsDetailed(false);
+    if (gpsData && gpsData.location && gpsData.location !== "Chưa rõ vị trí (Ẩn IP)") {
+      const result: ComprehensiveVisitorGeo = {
+        location: gpsData.location,
+        ward: gpsData.ward,
+        district: gpsData.district,
+        province: gpsData.province,
+        fullAddress: gpsData.fullAddress,
+        latitude: gpsData.latitude,
+        longitude: gpsData.longitude,
+        accuracyMeters: gpsData.accuracyMeters,
+        locationSource: "GPS",
+      };
       try {
-        sessionStorage.setItem(CACHE_KEY, cleanGps);
-        sessionStorage.setItem("visitor_location", cleanGps);
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(result));
+        sessionStorage.setItem("visitor_location", gpsData.location);
       } catch (_) {}
-      return cleanGps;
+      return result;
     }
   } catch (_) {}
 
-  const candidates: CandidateGeo[] = [];
-
-  // Helper with fast timeout
-  const fetchWithTimeout = async (url: string, ms = 2200): Promise<any> => {
+  // Helper with 4-second timeout
+  const fetchWithTimeout = async (url: string, ms = 4000): Promise<any> => {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), ms);
     try {
@@ -1095,72 +1174,53 @@ export async function getDetailedVisitorLocation(): Promise<string> {
     return null;
   };
 
-  // Launch queries in parallel across high-precision GeoIP services (including ipapi.co, freeipapi, and ip-api.com proxy)
-  const [dataIpApi, dataIpapiCo, dataGeojs, dataIpwho, dataIpsb, dataServer, dataFreeIp] = await Promise.allSettled([
-    fetchWithTimeout("/api/presence/ip-api", 2400),
-    fetchWithTimeout("https://ipapi.co/json/", 2400),
-    fetchWithTimeout("https://get.geojs.io/v1/ip/geo.json", 2400),
-    fetchWithTimeout("https://ipwho.is/", 2400),
-    fetchWithTimeout("https://api.ip.sb/geoip", 2400),
-    fetchWithTimeout("/api/presence/deep-geo", 2400),
-    fetchWithTimeout("https://freeipapi.com/api/json/", 2400),
+  const candidates: CandidateGeo[] = [];
+  let detectedIp = "";
+
+  // Query high-precision providers in parallel
+  const [dataBdc, dataIpwho, dataIpapiCo, dataDbIp, dataServer, dataIpify] = await Promise.allSettled([
+    fetchWithTimeout("https://api.bigdatacloud.net/data/client-info", 4000),
+    fetchWithTimeout("https://ipwho.is/", 4000),
+    fetchWithTimeout("https://ipapi.co/json/", 4000),
+    fetchWithTimeout("https://api.db-ip.com/v2/free/self", 4000),
+    fetchWithTimeout("/api/presence/deep-geo", 4000),
+    fetchWithTimeout("https://api.ipify.org?format=json", 4000),
   ]);
 
-  // ip-api.com via backend proxy
-  if (dataIpApi.status === "fulfilled" && dataIpApi.value && dataIpApi.value.ok) {
-    const d = dataIpApi.value;
+  // Primary: BigDataCloud
+  if (dataBdc.status === "fulfilled" && dataBdc.value && typeof dataBdc.value === "object") {
+    const d = dataBdc.value;
+    if (d.ipString || d.ip) detectedIp = d.ipString || d.ip;
     candidates.push({
-      city: d.city || d.location || "",
-      region: d.region || "",
-      country: d.country || "Việt Nam",
+      city: d.city || "",
+      region: d.principalSubdivision || "",
+      country: d.countryName || "Việt Nam",
       countryCode: d.countryCode || "VN",
-      zip: d.zip || "",
+      locality: d.locality || "",
+      district: d.city || "",
+      province: d.principalSubdivision || "",
+      isp: d.isp || d.organisation || "",
+      ip: d.ipString || d.ip || "",
       lat: typeof d.latitude === "number" ? d.latitude : undefined,
       lon: typeof d.longitude === "number" ? d.longitude : undefined,
-      source: "ip-api",
+      source: "bigdatacloud",
     });
   }
 
-  // ipapi.co
-  if (
-    dataIpapiCo.status === "fulfilled" &&
-    dataIpapiCo.value &&
-    typeof dataIpapiCo.value === "object" &&
-    !dataIpapiCo.value.error
-  ) {
-    const d = dataIpapiCo.value;
-    candidates.push({
-      city: d.city || "",
-      region: d.region || d.region_code || "",
-      country: d.country_name || d.country || "Việt Nam",
-      countryCode: d.country_code || "VN",
-      zip: d.postal || "",
-      lat: typeof d.latitude === "number" ? d.latitude : undefined,
-      lon: typeof d.longitude === "number" ? d.longitude : undefined,
-      source: "ipapi.co",
-    });
-  }
-
-  if (dataGeojs.status === "fulfilled" && dataGeojs.value) {
-    const d = dataGeojs.value;
-    candidates.push({
-      city: d.city || "",
-      region: d.region || "",
-      country: d.country || "Việt Nam",
-      countryCode: d.country_code || "VN",
-      lat: typeof d.latitude === "number" ? d.latitude : undefined,
-      lon: typeof d.longitude === "number" ? d.longitude : undefined,
-      source: "geojs",
-    });
-  }
-
+  // Secondary: ipwho.is
   if (dataIpwho.status === "fulfilled" && dataIpwho.value && dataIpwho.value.success !== false) {
     const d = dataIpwho.value;
+    if (!detectedIp && d.ip) detectedIp = d.ip;
     candidates.push({
       city: d.city || "",
       region: d.region || "",
       country: d.country || "Việt Nam",
       countryCode: d.country_code || "VN",
+      locality: "",
+      district: d.city || "",
+      province: d.region || "",
+      isp: d.connection?.isp || d.connection?.org || "",
+      ip: d.ip || "",
       zip: d.postal || "",
       lat: typeof d.latitude === "number" ? d.latitude : undefined,
       lon: typeof d.longitude === "number" ? d.longitude : undefined,
@@ -1168,80 +1228,140 @@ export async function getDetailedVisitorLocation(): Promise<string> {
     });
   }
 
-  if (dataFreeIp.status === "fulfilled" && dataFreeIp.value) {
-    const d = dataFreeIp.value;
-    candidates.push({
-      city: d.cityName || "",
-      region: d.regionName || "",
-      country: d.countryName || "Việt Nam",
-      countryCode: d.countryCode || "VN",
-      zip: d.zipCode || "",
-      lat: typeof d.latitude === "number" ? d.latitude : undefined,
-      lon: typeof d.longitude === "number" ? d.longitude : undefined,
-      source: "freeipapi",
-    });
-  }
-
-  if (dataIpsb.status === "fulfilled" && dataIpsb.value) {
-    const d = dataIpsb.value;
+  // Tertiary: ipapi.co
+  if (
+    dataIpapiCo.status === "fulfilled" &&
+    dataIpapiCo.value &&
+    typeof dataIpapiCo.value === "object" &&
+    !dataIpapiCo.value.error
+  ) {
+    const d = dataIpapiCo.value;
+    if (!detectedIp && d.ip) detectedIp = d.ip;
     candidates.push({
       city: d.city || "",
-      region: d.region || "",
-      country: d.country || "Việt Nam",
+      region: d.region || d.region_code || "",
+      country: d.country_name || d.country || "Việt Nam",
       countryCode: d.country_code || "VN",
+      locality: "",
+      district: d.city || "",
+      province: d.region || "",
+      isp: d.org || "",
+      ip: d.ip || "",
+      zip: d.postal || "",
       lat: typeof d.latitude === "number" ? d.latitude : undefined,
       lon: typeof d.longitude === "number" ? d.longitude : undefined,
-      source: "ipsb",
+      source: "ipapi.co",
     });
   }
 
+  // Quaternary: db-ip
+  if (dataDbIp.status === "fulfilled" && dataDbIp.value && typeof dataDbIp.value === "object") {
+    const d = dataDbIp.value;
+    if (!detectedIp && d.ipAddress) detectedIp = d.ipAddress;
+    candidates.push({
+      city: d.city || "",
+      region: d.stateProv || "",
+      country: d.countryName || "Việt Nam",
+      countryCode: d.countryCode || "VN",
+      locality: "",
+      district: d.city || "",
+      province: d.stateProv || "",
+      ip: d.ipAddress || "",
+      source: "db-ip",
+    });
+  }
+
+  // Server deep-geo
   if (dataServer.status === "fulfilled" && dataServer.value && dataServer.value.location) {
     const d = dataServer.value;
+    if (!detectedIp && d.ip) detectedIp = d.ip;
     candidates.push({
       city: d.city || d.location || "",
       region: d.region || "",
       country: d.country || "Việt Nam",
       countryCode: d.countryCode || "VN",
+      locality: "",
+      district: d.city || "",
+      province: d.region || "",
+      isp: d.isp || "",
+      ip: d.ip || "",
       lat: typeof d.latitude === "number" ? d.latitude : undefined,
       lon: typeof d.longitude === "number" ? d.longitude : undefined,
       source: "server",
     });
   }
 
-  // Check postal/zip code evidence for Quang Ninh (postal prefix 20xxxx or 36xxxx/37xxxx)
+  // ipify fallback
+  if (!detectedIp && dataIpify.status === "fulfilled" && dataIpify.value?.ip) {
+    detectedIp = dataIpify.value.ip;
+  }
+  if (detectedIp) {
+    try {
+      sessionStorage.setItem("visitor_detected_ip", detectedIp);
+    } catch (_) {}
+  }
+
+  // Extract best ISP
+  let bestIsp = "";
+  for (const c of candidates) {
+    if (c.isp && c.isp.trim()) {
+      bestIsp = c.isp.trim();
+      break;
+    }
+  }
+
+  // Check coordinate bounds first (to prevent false Hanoi when coordinates point elsewhere)
+  for (const c of candidates) {
+    if (typeof c.lat === "number" && typeof c.lon === "number") {
+      const coordProvince = resolveProvinceFromCoords(c.lat, c.lon);
+      if (coordProvince && coordProvince !== "Việt Nam" && coordProvince !== "Hà Nội") {
+        const cleanName = cleanVietnameseCity(c.city || c.locality, coordProvince);
+        const loc = cleanName.includes(coordProvince) ? cleanName : coordProvince;
+        const result: ComprehensiveVisitorGeo = {
+          location: loc,
+          ward: c.locality || undefined,
+          district: c.city || undefined,
+          province: coordProvince,
+          isp: bestIsp || undefined,
+          ip: detectedIp || undefined,
+          latitude: c.lat,
+          longitude: c.lon,
+          locationSource: "IP",
+        };
+        try {
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(result));
+          sessionStorage.setItem("visitor_location", loc);
+        } catch (_) {}
+        return result;
+      }
+    }
+  }
+
+  // Check postal/zip code evidence for Quang Ninh
   for (const c of candidates) {
     const z = String(c.zip || "").trim();
     const r = String(c.region || "").trim().toUpperCase();
     if (z.startsWith("20") || z.startsWith("36") || z.startsWith("37") || r === "QN") {
       const loc = "Quảng Ninh";
+      const result: ComprehensiveVisitorGeo = {
+        location: loc,
+        province: loc,
+        isp: bestIsp || undefined,
+        ip: detectedIp || undefined,
+        locationSource: "IP",
+      };
       try {
-        sessionStorage.setItem(CACHE_KEY, loc);
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(result));
         sessionStorage.setItem("visitor_location", loc);
       } catch (_) {}
-      return loc;
+      return result;
     }
   }
 
-  // 0. High-Precision Coordinate Resolution: If GPS or GeoIP coordinates point to a specific province
-  for (const c of candidates) {
-    if (typeof c.lat === "number" && typeof c.lon === "number") {
-      const coordProvince = resolveProvinceFromCoords(c.lat, c.lon);
-      if (coordProvince && coordProvince !== "Việt Nam") {
-        const detailedName = cleanVietnameseCity(c.city, coordProvince);
-        const finalLoc = detailedName.includes(coordProvince) ? detailedName : coordProvince;
-        try {
-          sessionStorage.setItem(CACHE_KEY, finalLoc);
-          sessionStorage.setItem("visitor_location", finalLoc);
-        } catch (_) {}
-        return finalLoc;
-      }
-    }
-  }
-
-  // 1. Search for any specific Vietnamese province among all candidates with consensus
+  // Check consensus among non-Hanoi Vietnamese provinces first
   const voteCount = new Map<string, number>();
   for (const c of candidates) {
-    const resolved = cleanVietnameseCity(c.city, c.region);
+    const resolved = cleanVietnameseCity(c.city || c.locality, c.region || c.province);
     if (resolved && resolved !== "Việt Nam") {
       voteCount.set(resolved, (voteCount.get(resolved) || 0) + 1);
     }
@@ -1257,32 +1377,65 @@ export async function getDetailedVisitorLocation(): Promise<string> {
   }
 
   if (topLocation) {
-    let finalLoc = stripIspFromName(topLocation);
+    const cleanLoc = stripIspFromName(topLocation);
+    const result: ComprehensiveVisitorGeo = {
+      location: cleanLoc,
+      isp: bestIsp || undefined,
+      ip: detectedIp || undefined,
+      locationSource: "IP",
+    };
     try {
-      sessionStorage.setItem(CACHE_KEY, finalLoc);
-      sessionStorage.setItem("visitor_location", finalLoc);
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(result));
+      sessionStorage.setItem("visitor_location", cleanLoc);
     } catch (_) {}
-    return finalLoc;
+    return result;
   }
 
-  // 3. Fallback to foreign country or general Vietnam
+  // Fallback to foreign country if detected
   for (const c of candidates) {
     if (c.countryCode && c.countryCode !== "VN" && c.country) {
       const loc = stripIspFromName(c.city ? `${c.city}, ${c.country}` : c.country);
+      const result: ComprehensiveVisitorGeo = {
+        location: loc,
+        province: c.country,
+        isp: bestIsp || undefined,
+        ip: detectedIp || undefined,
+        locationSource: "IP",
+      };
       try {
-        sessionStorage.setItem(CACHE_KEY, loc);
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(result));
         sessionStorage.setItem("visitor_location", loc);
       } catch (_) {}
-      return loc;
+      return result;
     }
   }
 
-  return "Việt Nam";
+  // NEVER default to "Hà Nội" or "Việt Nam" — explicitly label as unknown
+  const unknownResult: ComprehensiveVisitorGeo = {
+    location: "Chưa rõ vị trí (Ẩn IP)",
+    isp: bestIsp || undefined,
+    ip: detectedIp || undefined,
+    locationSource: "IP",
+  };
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(unknownResult));
+    sessionStorage.setItem("visitor_location", "Chưa rõ vị trí (Ẩn IP)");
+  } catch (_) {}
+  return unknownResult;
 }
 
 /**
- * High-Precision location detection service powered by ipapi.co and ip-api.com
- * Strictly excludes any network or ISP provider information.
+ * Backward-compatible getDetailedVisitorLocation
+ * Returns pure geographical location string
+ */
+export async function getDetailedVisitorLocation(): Promise<string> {
+  const result = await getComprehensiveVisitorLocation();
+  return result.location;
+}
+
+/**
+ * High-Precision location detection service powered by multi-engine IP & GPS
+ * Strictly excludes any network or ISP provider information from location string.
  */
 export async function resolvePreciseVisitorLocation(): Promise<string> {
   const loc = await getDetailedVisitorLocation();

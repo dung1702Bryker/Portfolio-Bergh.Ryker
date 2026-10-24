@@ -10,11 +10,14 @@ import {
   stripIspFromName,
   purgeStaleLocationCache,
   clearAllLocationCaches,
+  getBrowserGpsDetailed,
   getBrowserGpsProvince,
+  getComprehensiveVisitorLocation,
 } from "../services/geoService";
 import { logVisitorArrival, purgeLegacyGeoCache } from "../services/ipGeoService";
 import { getPersistentDeviceInfo } from "../services/deviceFingerprintService";
 import { sanitizeDeviceLabel } from "../services/visitorHistoryService";
+import { resolveFailProofHybridLocation } from "../services/geolocationEngine";
 
 const LivePresenceContext = createContext<LivePresenceContextValue | null>(null);
 
@@ -27,9 +30,9 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       purgeStaleLocationCache();
       const cached = sessionStorage.getItem("visitor_location");
-      return cached ? stripIspFromName(cached) : "Việt Nam";
+      return cached ? stripIspFromName(cached) : "Chưa rõ vị trí (Ẩn IP)";
     } catch (_) {
-      return "Việt Nam";
+      return "Chưa rõ vị trí (Ẩn IP)";
     }
   });
 
@@ -62,7 +65,8 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .map((v) => ({
           ...v,
           device: sanitizeDeviceLabel(v.device || "Thiết bị di động", v.screenResolution),
-          location: v.location ? stripIspFromName(v.location) : "Việt Nam",
+          location: v.location ? stripIspFromName(v.location) : "Chưa rõ vị trí (Ẩn IP)",
+          fullLocation: v.fullLocation || v.location,
         }));
       setActiveVisitors(sanitizedVisitors);
     });
@@ -75,9 +79,9 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   /**
    * Dynamic Real-Time Location Detection Service:
-   * Uses backend /api/visitor/log to resolve true client IP and accurate province
+   * Uses backend /api/visitor/log and multi-engine client GeoIP to resolve true client IP and accurate province
    * (TP. Hồ Chí Minh, Đà Nẵng, Cần Thơ, Hải Phòng, Quảng Ninh, Hà Nội...)
-   * Automatically adapts to real device position without locking to any street
+   * NEVER falls back to false "Hà Nội"
    */
   const detectLocation = useCallback(async (): Promise<string> => {
     try {
@@ -111,9 +115,15 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
       let savedCalibrated: string | null = null;
       try {
         const candidate = sessionStorage.getItem("visitor_calibrated_location");
-        if (candidate && !candidate.includes("Phan Tây Nhạc") && candidate !== "Việt Nam") {
+        if (candidate && !candidate.includes("Phan Tây Nhạc") && candidate !== "Việt Nam" && candidate !== "Chưa rõ vị trí (Ẩn IP)") {
           savedCalibrated = candidate;
         }
+      } catch (_) {}
+
+      // Multi-engine client lookup first to get rich administrative details
+      let clientGeo: any = null;
+      try {
+        clientGeo = await getComprehensiveVisitorLocation();
       } catch (_) {}
 
       const visitorId = currentVisitorId || sessionStorage.getItem("live_visitor_session_id") || "guest";
@@ -123,10 +133,19 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         detail: "Xem Portfolio",
         role: isAdmin ? "admin" : "visitor",
         isAdminDevice: Boolean(isAdmin),
-        clientLocation: savedCalibrated || undefined,
+        clientLocation: savedCalibrated || clientGeo?.location || undefined,
+        ward: clientGeo?.ward,
+        district: clientGeo?.district,
+        province: clientGeo?.province,
+        fullAddress: clientGeo?.fullAddress,
+        accuracyMeters: clientGeo?.accuracyMeters,
+        locationSource: clientGeo?.locationSource,
+        isp: clientGeo?.isp,
+        latitude: clientGeo?.latitude,
+        longitude: clientGeo?.longitude,
       });
 
-      if (geoResult.ok && geoResult.location && geoResult.location !== "Việt Nam") {
+      if (geoResult.ok && geoResult.location && geoResult.location !== "Việt Nam" && geoResult.location !== "Chưa rõ vị trí (Ẩn IP)") {
         const cleanLoc = stripIspFromName(geoResult.location);
         setVisitorLocation(cleanLoc);
         try {
@@ -143,7 +162,7 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const resolvedLoc = await resolvePreciseVisitorLocation();
       const cleanLoc = stripIspFromName(resolvedLoc);
 
-      if (cleanLoc && cleanLoc !== "Việt Nam") {
+      if (cleanLoc && cleanLoc !== "Việt Nam" && cleanLoc !== "Chưa rõ vị trí (Ẩn IP)") {
         setVisitorLocation(cleanLoc);
         try {
           sessionStorage.setItem("visitor_location", cleanLoc);
@@ -154,34 +173,34 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return cleanLoc;
       }
     } catch (_) {}
-    return "Việt Nam";
+    return "Chưa rõ vị trí (Ẩn IP)";
   }, [currentVisitorId, isAdmin]);
 
   // Run precise location detection on mount and attempt silent GPS calibration if granted
   useEffect(() => {
     let isMounted = true;
     detectLocation().then((loc) => {
-      if (isMounted && loc && loc !== "Việt Nam") {
+      if (isMounted && loc && loc !== "Việt Nam" && loc !== "Chưa rõ vị trí (Ẩn IP)") {
         setVisitorLocation(loc);
       }
     });
 
-    // Check GPS if permission is already granted on device to get live real-time position
-    if (typeof window !== "undefined" && navigator?.geolocation) {
-      getBrowserGpsProvince(false).then((gpsLoc) => {
-        if (isMounted && gpsLoc && gpsLoc !== "Việt Nam") {
-          const cleanGps = stripIspFromName(gpsLoc);
-          setVisitorLocation(cleanGps);
-          try {
-            sessionStorage.setItem("visitor_location", cleanGps);
-            sessionStorage.setItem("visitor_calibrated_location", cleanGps);
-          } catch (_) {}
-          if (updatePhysicalLocationRef.current) {
-            updatePhysicalLocationRef.current(cleanGps);
+    // Auto-upgrade session if visitor_location holds a bare single-part location (e.g., "Hà Nội" with no comma)
+    try {
+      const cachedLoc = sessionStorage.getItem("visitor_location");
+      const isSinglePart = !cachedLoc || !cachedLoc.includes(",") || cachedLoc === "Hà Nội" || cachedLoc === "Hanoi" || cachedLoc === "Việt Nam";
+      if (isSinglePart) {
+        const vId = currentVisitorId || sessionStorage.getItem("live_visitor_session_id") || "guest";
+        resolveFailProofHybridLocation(vId).then((res) => {
+          if (isMounted && res.fullLocation && res.fullLocation !== "Chưa rõ vị trí (Ẩn IP)") {
+            setVisitorLocation(res.fullLocation);
+            if (updatePhysicalLocationRef.current) {
+              updatePhysicalLocationRef.current(res.fullLocation);
+            }
           }
-        }
-      });
-    }
+        }).catch(() => {});
+      }
+    } catch (_) {}
 
     return () => {
       isMounted = false;
@@ -190,9 +209,9 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const calibrateGpsLocation = useCallback(async (promptUser = true): Promise<string> => {
     try {
-      const gpsLoc = await getBrowserGpsProvince(promptUser);
-      if (gpsLoc && gpsLoc !== "Việt Nam") {
-        const targetGps = stripIspFromName(gpsLoc);
+      const gpsData = await getBrowserGpsDetailed(promptUser);
+      if (gpsData && gpsData.location && gpsData.location !== "Chưa rõ vị trí (Ẩn IP)") {
+        const targetGps = stripIspFromName(gpsData.location);
         setVisitorLocation(targetGps);
         try {
           sessionStorage.setItem("visitor_location", targetGps);
@@ -211,6 +230,12 @@ export const LivePresenceProvider: React.FC<{ children: React.ReactNode }> = ({ 
               deviceId: devInfo?.deviceId,
               newLocation: targetGps,
               device: devInfo?.deviceLabel,
+              ward: gpsData.ward,
+              district: gpsData.district,
+              province: gpsData.province,
+              fullAddress: gpsData.fullAddress,
+              accuracyMeters: gpsData.accuracyMeters,
+              locationSource: "GPS",
             }),
           });
         } catch (_) {}

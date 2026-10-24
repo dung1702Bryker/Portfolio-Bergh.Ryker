@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db, cleanFirestoreData } from "../firebase";
 import { IntroConfig, DEFAULT_INTRO_CONFIG } from "../types/introConfig";
+import { recordAutoBackup, getSystemBackupVault } from "../services/backupService";
 
 const LOCAL_STORAGE_KEY = "bergh_ryker_intro_config";
 
@@ -28,7 +29,7 @@ export function useIntroConfig() {
   useEffect(() => {
     const unsub = onSnapshot(
       doc(db, "configs", "introConfig"),
-      (docSnap) => {
+      async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as Partial<IntroConfig>;
           const merged: IntroConfig = {
@@ -39,6 +40,19 @@ export function useIntroConfig() {
           setConfig(merged);
           try {
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+          } catch (_) {}
+        } else {
+          // Document không tồn tại trong configs: Thử kiểm tra systemBackupVault
+          try {
+            const vault = await getSystemBackupVault();
+            if (vault && vault.introConfig && vault.introConfig.cards) {
+              const merged: IntroConfig = {
+                ...DEFAULT_INTRO_CONFIG,
+                ...vault.introConfig,
+                cards: Array.isArray(vault.introConfig.cards) && vault.introConfig.cards.length > 0 ? vault.introConfig.cards : DEFAULT_INTRO_CONFIG.cards,
+              };
+              setConfig(merged);
+            }
           } catch (_) {}
         }
         setLoading(false);
@@ -56,10 +70,13 @@ export function useIntroConfig() {
     try {
       const clean = cleanFirestoreData(newConfig);
       await setDoc(doc(db, "configs", "introConfig"), clean, { merge: true });
+      await setDoc(doc(db, "appStore", "introConfig"), clean, { merge: true });
       setConfig(newConfig);
       try {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newConfig));
       } catch (_) {}
+      // Sao lưu kép tức thì vào Vault
+      recordAutoBackup("update_intro_config", { introConfig: newConfig });
       return true;
     } catch (err) {
       console.error("Failed to save introConfig:", err);

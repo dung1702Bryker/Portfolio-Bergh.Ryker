@@ -15,8 +15,18 @@ export interface ActiveVisitor {
   avatarColor?: string;
   isAdminDevice?: boolean;
   location?: string;
+  fullLocation?: string;
   city?: string;
   region?: string;
+  ward?: string;
+  district?: string;
+  province?: string;
+  fullAddress?: string;
+  accuracyMeters?: number;
+  locationSource?: "GPS" | "IP" | "MANUAL";
+  isp?: string;
+  latitude?: number;
+  longitude?: number;
   ip?: string;
   rawIp?: string;
   // Returning visitor metrics

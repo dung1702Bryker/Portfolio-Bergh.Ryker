@@ -809,12 +809,13 @@ async function startServer() {
 
     if (cityRaw && cityRaw !== "Vietnam" && cityRaw !== "Viet Nam") return cityRaw;
     if (regionRaw && regionRaw !== "Vietnam" && regionRaw !== "Viet Nam") return regionRaw;
-    return "Việt Nam";
+    return "Chưa rõ vị trí (Ẩn IP)";
   }
 
   function stripIspServer(loc = ""): string {
-    if (!loc) return "Việt Nam";
-    return loc.split(" • ")[0].replace(/•.*$/, "").trim() || "Việt Nam";
+    if (!loc || loc === "Việt Nam") return "Chưa rõ vị trí (Ẩn IP)";
+    const cleaned = loc.split(" • ")[0].replace(/•.*$/, "").trim();
+    return cleaned && cleaned !== "Việt Nam" ? cleaned : "Chưa rõ vị trí (Ẩn IP)";
   }
 
   // In-memory Geo Cache with 1-hour TTL
@@ -827,6 +828,7 @@ async function startServer() {
       region: string;
       country: string;
       location: string;
+      isp: string;
       latitude: number | null;
       longitude: number | null;
       source: string;
@@ -857,15 +859,16 @@ async function startServer() {
         city: "",
         region: "",
         country: "Việt Nam",
-        location: "Việt Nam",
+        location: "Chưa rõ vị trí (Ẩn IP)",
+        isp: "Localhost",
         latitude: null,
         longitude: null,
         source: "local-dev",
       };
     }
 
-    // Helper with abort signal timeout
-    const fetchWithTimeout = async (url: string, ms = 2500): Promise<any> => {
+    // Helper with abort signal timeout (4000ms)
+    const fetchWithTimeout = async (url: string, ms = 4000): Promise<any> => {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), ms);
       try {
@@ -881,30 +884,33 @@ async function startServer() {
     let rawCity = "";
     let rawRegion = "";
     let rawCountry = "Việt Nam";
+    let rawIsp = "";
     let lat: number | null = null;
     let lon: number | null = null;
     let providerSource = "ipwho.is";
 
     try {
-      // Primary: ipwho.is (native HTTPS, high precision for Vietnam, provides lat/lon & region)
-      const dataWhois = await fetchWithTimeout(`https://ipwho.is/${ip}`, 2500);
+      // Primary: ipwho.is (native HTTPS, high precision for Vietnam, provides lat/lon, region & ISP)
+      const dataWhois = await fetchWithTimeout(`https://ipwho.is/${ip}`, 4000);
       if (dataWhois && dataWhois.success !== false) {
         rawCity = dataWhois.city || "";
         rawRegion = dataWhois.region || "";
         rawCountry = dataWhois.country || "Việt Nam";
+        rawIsp = dataWhois.connection?.isp || dataWhois.connection?.org || "";
         lat = typeof dataWhois.latitude === "number" ? dataWhois.latitude : null;
         lon = typeof dataWhois.longitude === "number" ? dataWhois.longitude : null;
         providerSource = "ipwho.is";
       } else {
         // Fallback: ip-api.com
         const dataIpApi = await fetchWithTimeout(
-          `http://ip-api.com/json/${ip}?fields=status,country,region,regionName,city,lat,lon`,
-          2500
+          `http://ip-api.com/json/${ip}?fields=status,country,region,regionName,city,lat,lon,isp,org`,
+          4000
         );
         if (dataIpApi && dataIpApi.status === "success") {
           rawCity = dataIpApi.city || "";
           rawRegion = dataIpApi.regionName || dataIpApi.region || "";
           rawCountry = dataIpApi.country || "Việt Nam";
+          rawIsp = dataIpApi.isp || dataIpApi.org || "";
           lat = typeof dataIpApi.lat === "number" ? dataIpApi.lat : null;
           lon = typeof dataIpApi.lon === "number" ? dataIpApi.lon : null;
           providerSource = "ip-api.com";
@@ -918,13 +924,14 @@ async function startServer() {
     const finalLocation = stripIspServer(province);
 
     const resultData = {
-      ok: Boolean(finalLocation && finalLocation !== "Việt Nam"),
+      ok: Boolean(finalLocation && finalLocation !== "Chưa rõ vị trí (Ẩn IP)"),
       ip,
       maskedIp: masked,
       city: rawCity,
       region: rawRegion,
       country: rawCountry,
       location: finalLocation,
+      isp: rawIsp,
       latitude: lat,
       longitude: lon,
       source: providerSource,
@@ -944,16 +951,52 @@ async function startServer() {
   }
 
   // --- OFFICIAL BACKEND ENDPOINT: POST /api/visitor/log ---
-  // Resolves true public client IP, performs GeoIP, writes to Firestore collections
+  // Resolves true public client IP, respects client GPS/locality, stores in Firestore
   app.post("/api/visitor/log", async (req, res) => {
     try {
       const publicIp = extractPublicClientIp(req) || "127.0.0.1";
-      const { visitorId, sessionId, page, detail, device, browser, role, isAdminDevice } = req.body || {};
+      const {
+        visitorId,
+        sessionId,
+        page,
+        detail,
+        device,
+        browser,
+        role,
+        isAdminDevice,
+        clientLocation,
+        ward,
+        district,
+        province,
+        fullAddress,
+        accuracyMeters,
+        locationSource,
+        isp: clientIsp,
+        latitude: clientLat,
+        longitude: clientLon,
+      } = req.body || {};
 
       const geo = await resolveGeoFromIp(publicIp);
       const maskedIp = maskIp(publicIp);
       const nowIso = new Date().toISOString();
       const effectiveVisitorId = visitorId || sessionId || `vis_${Date.now()}`;
+      const effectiveIsp = clientIsp || geo.isp || "";
+      const effectiveSource = locationSource || (clientLat && accuracyMeters ? "GPS" : "IP");
+
+      // Give strict priority to verified clientLocation (especially if from GPS or client BigDataCloud)
+      let finalLocation = geo.location;
+      if (
+        clientLocation &&
+        clientLocation !== "Việt Nam" &&
+        clientLocation !== "Chưa rõ vị trí (Ẩn IP)"
+      ) {
+        finalLocation = stripIspServer(clientLocation);
+      } else if (!finalLocation || finalLocation === "Việt Nam") {
+        finalLocation = "Chưa rõ vị trí (Ẩn IP)";
+      }
+
+      const effectiveLat = typeof clientLat === "number" ? clientLat : geo.latitude;
+      const effectiveLon = typeof clientLon === "number" ? clientLon : geo.longitude;
 
       // 1. Write to Firestore 'visitor_logs' collection
       if (db) {
@@ -966,12 +1009,19 @@ async function startServer() {
             sessionId: sessionId || effectiveVisitorId,
             ip: maskedIp,
             rawIp: publicIp,
-            city: geo.city || "",
-            region: geo.region || "",
+            city: geo.city || district || "",
+            region: geo.region || province || "",
             country: geo.country || "Việt Nam",
-            location: geo.location || "Việt Nam",
-            latitude: geo.latitude,
-            longitude: geo.longitude,
+            location: finalLocation,
+            ward: ward || null,
+            district: district || null,
+            province: province || null,
+            fullAddress: fullAddress || null,
+            accuracyMeters: typeof accuracyMeters === "number" ? accuracyMeters : null,
+            locationSource: effectiveSource,
+            isp: effectiveIsp || null,
+            latitude: effectiveLat,
+            longitude: effectiveLon,
             page: page || "Trang chủ",
             detail: detail || "Xem Portfolio",
             device: device || "Thiết bị di động",
@@ -998,12 +1048,19 @@ async function startServer() {
               isAdminDevice: Boolean(isAdminDevice),
               device: device || "Thiết bị di động",
               browser: browser || "Trình duyệt",
-              location: geo.location,
-              city: geo.city,
-              region: geo.region,
-              country: geo.country,
-              latitude: geo.latitude,
-              longitude: geo.longitude,
+              location: finalLocation,
+              ward: ward || null,
+              district: district || null,
+              province: province || null,
+              fullAddress: fullAddress || null,
+              accuracyMeters: typeof accuracyMeters === "number" ? accuracyMeters : null,
+              locationSource: effectiveSource,
+              isp: effectiveIsp || null,
+              city: geo.city || district || null,
+              region: geo.region || province || null,
+              country: geo.country || "Việt Nam",
+              latitude: effectiveLat,
+              longitude: effectiveLon,
               lastPage: page || "Trang chủ",
               lastSeenAt: nowIso,
             },
@@ -1014,25 +1071,147 @@ async function startServer() {
         }
       }
 
-      console.log(`[VisitorLog] Resolved IP ${maskedIp} -> Location: "${geo.location}" (City: "${geo.city}", Region: "${geo.region}", Lat: ${geo.latitude}, Lon: ${geo.longitude})`);
+      console.log(`[VisitorLog] Resolved IP ${maskedIp} -> Location: "${finalLocation}" (Source: ${effectiveSource}, ISP: "${effectiveIsp}")`);
 
       return res.json({
         ok: true,
         ip: maskedIp,
-        city: geo.city,
-        region: geo.region,
+        city: geo.city || district,
+        region: geo.region || province,
         country: geo.country,
-        location: geo.location,
-        latitude: geo.latitude,
-        longitude: geo.longitude,
+        location: finalLocation,
+        ward: ward || null,
+        district: district || null,
+        province: province || null,
+        fullAddress: fullAddress || null,
+        accuracyMeters: typeof accuracyMeters === "number" ? accuracyMeters : null,
+        locationSource: effectiveSource,
+        isp: effectiveIsp || null,
+        latitude: effectiveLat,
+        longitude: effectiveLon,
         source: geo.source,
       });
     } catch (err: any) {
       console.error("[api/visitor/log] Unexpected error:", err.message);
       return res.json({
         ok: false,
-        location: "Việt Nam",
+        location: "Chưa rõ vị trí (Ẩn IP)",
       });
+    }
+  });
+
+  // --- MASS IP RE-SCAN & NORMALIZATION UTILITY ENDPOINT ---
+  app.post("/api/presence/refresh-all-ips", async (req, res) => {
+    try {
+      if (!db) {
+        return res.json({ ok: false, message: "Database not connected" });
+      }
+
+      console.log("[refresh-all-ips] Admin requested mass IP scan and location normalization...");
+      const histSnap = await getDocs(query(collection(db, "visitor_history"), limit(120)));
+      let updatedCount = 0;
+
+      for (const d of histSnap.docs) {
+        const item = d.data();
+        const targetIp = item.rawIp || item.ip;
+        const currentLoc = (item.location || "").trim();
+
+        const isSuspiciousHanoiOrVietnam =
+          currentLoc === "Hà Nội" ||
+          currentLoc === "Hanoi" ||
+          currentLoc === "Việt Nam" ||
+          !currentLoc;
+
+        if (targetIp && !isPrivateIp(targetIp)) {
+          const freshGeo = await resolveGeoFromIp(targetIp);
+          const freshLoc = freshGeo.location;
+
+          if (freshLoc && freshLoc !== "Chưa rõ vị trí (Ẩn IP)" && freshLoc !== "Việt Nam") {
+            const updates: any = {};
+            if (isSuspiciousHanoiOrVietnam || freshLoc !== currentLoc) {
+              updates.location = freshLoc;
+            }
+            if (freshGeo.isp && !item.isp) {
+              updates.isp = freshGeo.isp;
+            }
+            if (freshGeo.city && !item.city) {
+              updates.city = freshGeo.city;
+            }
+            if (freshGeo.region && !item.region) {
+              updates.region = freshGeo.region;
+            }
+            if (!item.locationSource) {
+              updates.locationSource = "IP";
+            }
+
+            if (Object.keys(updates).length > 0) {
+              await setDoc(doc(db, "visitor_history", d.id), updates, { merge: true });
+              updatedCount++;
+            }
+          } else if (isSuspiciousHanoiOrVietnam) {
+            await setDoc(
+              doc(db, "visitor_history", d.id),
+              { location: "Chưa rõ vị trí (Ẩn IP)", locationSource: "IP" },
+              { merge: true }
+            );
+            updatedCount++;
+          }
+        } else if (isSuspiciousHanoiOrVietnam) {
+          await setDoc(
+            doc(db, "visitor_history", d.id),
+            { location: "Chưa rõ vị trí (Ẩn IP)" },
+            { merge: true }
+          );
+          updatedCount++;
+        }
+      }
+
+      console.log(`[refresh-all-ips] Successfully re-normalized ${updatedCount} visitor records!`);
+      return res.json({ ok: true, updatedCount });
+    } catch (err: any) {
+      console.error("[refresh-all-ips] Error:", err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Location reset for current device
+  app.post("/api/presence/reset-location", async (req, res) => {
+    try {
+      const { visitorId, deviceId, clientIp } = req.body || {};
+      const publicIp = clientIp || extractPublicClientIp(req) || "127.0.0.1";
+      const geo = await resolveGeoFromIp(publicIp);
+
+      const effectiveId = deviceId || visitorId;
+      if (effectiveId && db) {
+        await setDoc(
+          doc(db, "visitor_history", effectiveId),
+          { location: geo.location, isp: geo.isp, locationSource: "IP" },
+          { merge: true }
+        );
+      }
+
+      return res.json({ ok: true, location: geo.location, ip: geo.maskedIp });
+    } catch (err: any) {
+      return res.json({ ok: false, location: "Chưa rõ vị trí (Ẩn IP)" });
+    }
+  });
+
+  // Manual location calibration
+  app.post("/api/presence/calibrate-vip", async (req, res) => {
+    try {
+      const { visitorId, deviceId, newLocation } = req.body || {};
+      const effectiveId = deviceId || visitorId;
+      if (effectiveId && newLocation && db) {
+        const clean = stripIspServer(newLocation);
+        await setDoc(
+          doc(db, "visitor_history", effectiveId),
+          { location: clean, locationSource: "MANUAL" },
+          { merge: true }
+        );
+      }
+      return res.json({ ok: true });
+    } catch (_) {
+      return res.json({ ok: true });
     }
   });
 
@@ -1041,7 +1220,7 @@ async function startServer() {
     try {
       const ip = extractPublicClientIp(req);
       if (!ip) {
-        return res.json({ ok: false, location: "Việt Nam" });
+        return res.json({ ok: false, location: "Chưa rõ vị trí (Ẩn IP)" });
       }
       const geo = await resolveGeoFromIp(ip);
       return res.json({
@@ -1050,12 +1229,13 @@ async function startServer() {
         city: geo.city,
         region: geo.region,
         country: geo.country,
+        isp: geo.isp,
         latitude: geo.latitude,
         longitude: geo.longitude,
         ip: geo.maskedIp,
       });
     } catch (_) {
-      return res.json({ ok: false, location: "Việt Nam" });
+      return res.json({ ok: false, location: "Chưa rõ vị trí (Ẩn IP)" });
     }
   });
 
@@ -1064,7 +1244,7 @@ async function startServer() {
     try {
       const ip = extractPublicClientIp(req);
       if (!ip) {
-        return res.json({ ok: false, location: "Việt Nam" });
+        return res.json({ ok: false, location: "Chưa rõ vị trí (Ẩn IP)" });
       }
       const geo = await resolveGeoFromIp(ip);
       return res.json({
@@ -1073,11 +1253,12 @@ async function startServer() {
         city: geo.city,
         region: geo.region,
         country: geo.country,
+        isp: geo.isp,
         latitude: geo.latitude,
         longitude: geo.longitude,
       });
     } catch (_) {
-      return res.json({ ok: false, location: "Việt Nam" });
+      return res.json({ ok: false, location: "Chưa rõ vị trí (Ẩn IP)" });
     }
   });
 

@@ -88,7 +88,7 @@ service cloud.firestore {
 
     match /appStore/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAdmin() || docId == 'systemBackupVault';
     }
 
     match /configs/{docId} {

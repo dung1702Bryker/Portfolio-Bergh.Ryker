@@ -129,7 +129,9 @@
     <link rel="dns-prefetch" href="https://res.cloudinary.com">
     <link rel="preconnect" href="https://images.weserv.nl">
     <link rel="dns-prefetch" href="https://images.weserv.nl">
-    <link rel="preconnect" href="https://firebasestorage.googleapis.com">
+    <!-- ⚡ HIGH-PRIORITY HERO BANNER PRELOAD (Instant FCP before CSS/JS parsing) -->
+    <link rel="preload" as="image" href="/images/bg-video-poster.webp" fetchpriority="high" type="image/webp" />
+    <link rel="preload" as="image" href="/images/bg-video-poster-mobile.webp" media="(max-width: 768px)" fetchpriority="high" type="image/webp" />
     <title>BERGH RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện</title>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
