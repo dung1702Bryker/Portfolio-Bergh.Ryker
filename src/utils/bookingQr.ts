@@ -8,7 +8,7 @@ import { safeLocalStorage } from "./safeStorage";
  * KHÔNG qua proxy nội bộ AI Studio (*.scf.usercontent.goog hay ais-dev-*) để không bị màn hình Cookie check / Google Login chặn.
  */
 export const OFFICIAL_PUBLIC_DOMAIN =
-  "https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app";
+  "https://striped-equinox-3r5vm.web.app";
 
 /**
  * Lấy tên miền tùy chỉnh do Admin lưu (nếu có)

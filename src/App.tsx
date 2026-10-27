@@ -313,6 +313,20 @@ export default function App() {
     return () => window.removeEventListener("popstate", checkBookingFromUrl);
   }, []);
 
+  // Lắng nghe sự kiện quay về bảng điều khiển proofing từ trang chi tiết album
+  useEffect(() => {
+    const handleOpenDashboard = () => {
+      setIsIntroComplete(true);
+      setProofingSlug(null);
+      try {
+        safeSessionStorage.setItem("bergh_intro_completed", "true");
+        safeSessionStorage.setItem("bergh_admin_view", "proofing_dashboard");
+      } catch (_) {}
+    };
+    window.addEventListener("bergh:open-proofing-dashboard", handleOpenDashboard);
+    return () => window.removeEventListener("bergh:open-proofing-dashboard", handleOpenDashboard);
+  }, []);
+
   // Hỗ trợ mở trực tiếp Album Chọn Ảnh & Lọc File /albums/:slug, /proofing/:slug hoặc ?proofing=
   const [proofingSlug, setProofingSlug] = useState<string | null>(() => {
     try {

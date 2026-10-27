@@ -26,6 +26,7 @@ import {
 import {
   doc,
   getDoc,
+  updateDoc,
   onSnapshot,
   collection,
   query,
@@ -35,6 +36,7 @@ import {
 import { db } from "../firebase";
 import { Booking, PhotoEditingStatus } from "../types";
 import { decodeBookingIdentifier } from "../utils/bookingQr";
+import { safeLocalStorage } from "../utils/safeStorage";
 
 interface PhotoProgressLookupModalProps {
   isOpen: boolean;
@@ -47,43 +49,49 @@ const STEPS: {
   status: PhotoEditingStatus;
   label: string;
   shortLabel: string;
+  progress: number;
   icon: React.ComponentType<{ className?: string }>;
   description: string;
 }[] = [
   {
     status: "pending",
-    label: "1. Đã duyệt & Chờ chụp",
-    shortLabel: "Chờ chụp",
+    label: "1. Mới tạo",
+    shortLabel: "1. Mới tạo",
+    progress: 10,
     icon: Calendar,
-    description: "Đơn đặt lịch đã được xác nhận, ekip sẵn sàng cho ngày bấm máy.",
+    description: "Đơn đặt lịch mới tạo, đã nạp ảnh Drive.",
   },
   {
     status: "shooting_done",
-    label: "2. Chụp xong & Chọn ảnh",
-    shortLabel: "Chọn ảnh",
+    label: "2. Chờ khách chọn",
+    shortLabel: "2. Chờ chọn",
+    progress: 30,
     icon: Camera,
-    description: "Buổi chụp đã hoàn tất xuất sắc, đang lọc và tuyển chọn file gốc.",
+    description: "Buổi chụp hoàn tất, đang gửi link cho khách chọn ảnh.",
   },
   {
     status: "editing",
-    label: "3. Hậu kỳ & Retouch",
-    shortLabel: "Chỉnh sửa",
+    label: "3. Đã chốt",
+    shortLabel: "3. Đã chốt",
+    progress: 55,
     icon: Palette,
-    description: "Đang blend màu nghệ thuật, chỉnh sửa da, ánh sáng và chi tiết.",
+    description: "Khách đã gửi danh sách chọn & khóa album, tiến hành lọc file.",
   },
   {
     status: "reviewing",
-    label: "4. Kiểm duyệt chất lượng",
-    shortLabel: "Kiểm duyệt",
+    label: "4. Hậu kỳ",
+    shortLabel: "4. Hậu kỳ",
+    progress: 80,
     icon: FileCheck,
-    description: "Đội ngũ chuyên môn đang rà soát chất lượng ảnh trước khi xuất file.",
+    description: "Đang blend màu nghệ thuật, retouch da và ánh sáng.",
   },
   {
     status: "completed",
-    label: "5. Hoàn thành & Bàn giao",
-    shortLabel: "Bàn giao",
+    label: "5. Bàn giao",
+    shortLabel: "5. Bàn giao",
+    progress: 100,
     icon: CheckCircle2,
-    description: "Toàn bộ file ảnh đã sẵn sàng, bạn có thể tải về chất lượng cao nhất.",
+    description: "Hoàn tất bàn giao toàn bộ file ảnh chất lượng cao.",
   },
 ];
 
@@ -112,6 +120,76 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
   const [localBookings, setLocalBookings] = useState<string[]>([]);
   const [proofingAlbumSlug, setProofingAlbumSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [isAdminUser] = useState(() => {
+    try {
+      return (
+        safeLocalStorage.getItem("admin_device_verified") === "true" ||
+        sessionStorage.getItem("admin_logged_in") === "true"
+      );
+    } catch (_) {
+      return false;
+    }
+  });
+
+  const handleAdminStepClick = async (stepNum: number) => {
+    if (!isAdminUser || !booking?.id) return;
+    let newStatus: PhotoEditingStatus = "pending";
+    let newProgress = 10;
+    let targetStage = "new";
+    let lockState = false;
+
+    if (stepNum === 1) {
+      newStatus = "pending";
+      newProgress = 10;
+      targetStage = "new";
+      lockState = false;
+    } else if (stepNum === 2) {
+      newStatus = "shooting_done";
+      newProgress = 30;
+      targetStage = "new";
+      lockState = false;
+    } else if (stepNum === 3) {
+      newStatus = "editing";
+      newProgress = 55;
+      targetStage = "client_submitted";
+      lockState = true;
+    } else if (stepNum === 4) {
+      newStatus = "reviewing";
+      newProgress = 80;
+      targetStage = "raw_filtered";
+      lockState = true;
+    } else if (stepNum === 5) {
+      newStatus = "completed";
+      newProgress = 100;
+      targetStage = "delivered";
+      lockState = true;
+    }
+
+    try {
+      await updateDoc(doc(db, "bookings", booking.id), {
+        editingStatus: newStatus,
+        editingProgress: newProgress,
+      });
+
+      setBooking((prev) => (prev ? { ...prev, editingStatus: newStatus, editingProgress: newProgress } : null));
+
+      const bCode = booking.bookingCode || booking.id;
+      if (bCode) {
+        const q = query(collection(db, "proofing_albums"), where("bookingCode", "==", bCode));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const albumDocRef = doc(db, "proofing_albums", snap.docs[0].id);
+          await updateDoc(albumDocRef, {
+            pipelineStage: targetStage,
+            isLocked: lockState,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Admin step click error in lookup modal:", err);
+    }
+  };
 
   // Đồng bộ danh sách đơn đặt lịch từ localStorage trên thiết bị
   const syncLocalBookings = useCallback(() => {
@@ -797,8 +875,16 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                     const StepIcon = step.icon;
                     const isDone = currentStepIdx > idx;
                     const isCurrent = currentStepIdx === idx;
+                    const stepNum = idx + 1;
                     return (
-                      <div key={step.status} className="flex flex-col items-center text-center">
+                      <div
+                        key={step.status}
+                        onClick={() => isAdminUser && handleAdminStepClick(stepNum)}
+                        className={`flex flex-col items-center text-center p-1 rounded-xl transition-all ${
+                          isAdminUser ? "cursor-pointer hover:bg-white/5" : "cursor-default"
+                        }`}
+                        title={isAdminUser ? `Bấm để chuyển tiến độ sang Bước ${stepNum}` : undefined}
+                      >
                         <div
                           className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mb-1 text-xs transition-all ${
                             isDone
@@ -825,6 +911,11 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                     );
                   })}
                 </div>
+                {isAdminUser && (
+                  <div className="mt-2 text-[10px] text-zinc-400 text-center italic">
+                    💡 Quyền Admin: Click vào các icon bước tiến độ ở trên để cập nhật nhanh 2 chiều.
+                  </div>
+                )}
               </div>
 
               {/* Delivery Download Section */}

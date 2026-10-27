@@ -3,6 +3,7 @@ import {
   addDoc, 
   updateDoc, 
   doc, 
+  getDoc,
   onSnapshot, 
   query, 
   where, 
@@ -274,7 +275,31 @@ export const submitClientProofingSelection = async (
     updatedAt: now,
   });
 
-  await updateDoc(doc(db, COLLECTION_NAME, albumId), updatePayload);
+  const albumRef = doc(db, COLLECTION_NAME, albumId);
+  await updateDoc(albumRef, updatePayload);
+
+  // Sync corresponding booking to Step 3 (Khách đã chốt - 55%)
+  try {
+    const albumSnap = await getDoc(albumRef);
+    if (albumSnap.exists()) {
+      const albumData = albumSnap.data();
+      const bCode = albumData.bookingCode;
+      if (bCode) {
+        const q = query(collection(db, "bookings"), where("bookingCode", "==", bCode));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const bookingDocRef = doc(db, "bookings", snap.docs[0].id);
+          await updateDoc(bookingDocRef, {
+            editingStatus: "editing",
+            editingProgress: 55,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Could not sync booking status on client submit:", err);
+  }
 
   // Ghi nhận thông báo cho Admin
   try {

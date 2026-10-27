@@ -65,6 +65,8 @@ import { ProofingImage, preloadLightboxImages } from "./ProofingImage";
 import { GooglePickerButton } from "./GooglePickerButton";
 import { safeLocalStorage } from "../utils/safeStorage";
 import { getPublicBookingBaseUrl, getPublicUrl, OFFICIAL_PUBLIC_DOMAIN } from "../utils/bookingQr";
+import { db } from "../firebase";
+import { collection, doc, updateDoc, query, where, getDocs, onSnapshot } from "firebase/firestore";
 
 /**
  * Cập nhật động thẻ Open Graph (OG) và Twitter Cards trong <head>
@@ -281,6 +283,58 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
   const [copiedList, setCopiedList] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Deadline Countdown Modal State
+  const [showDeadlineModal, setShowDeadlineModal] = useState<boolean>(false);
+
+  // Interactive Tour Guide State (5 steps)
+  const [tourStep, setTourStep] = useState<number | null>(null);
+
+  // 10s Grace Period Countdown State
+  const [isGraceModalOpen, setIsGraceModalOpen] = useState(false);
+  const [graceSecondsLeft, setGraceSecondsLeft] = useState(10);
+  const graceTimerRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    if (album) {
+      if (album.deadline || album.dueDate) {
+        const dismissed = sessionStorage.getItem(`bergh_deadline_dismissed_${album.id}`);
+        if (!dismissed) {
+          setShowDeadlineModal(true);
+        }
+      }
+      const seenTour = localStorage.getItem(`bergh_tour_seen_${album.id}`);
+      if (!seenTour && !isViewOnly && !isAdmin) {
+        setTourStep(1);
+      }
+    }
+  }, [album, isViewOnly, isAdmin]);
+
+  useEffect(() => {
+    if (isGraceModalOpen) {
+      setGraceSecondsLeft(10);
+      graceTimerRef.current = setInterval(() => {
+        setGraceSecondsLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(graceTimerRef.current);
+            setIsGraceModalOpen(false);
+            handleSubmitSelection();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (graceTimerRef.current) {
+        clearInterval(graceTimerRef.current);
+      }
+    }
+    return () => {
+      if (graceTimerRef.current) {
+        clearInterval(graceTimerRef.current);
+      }
+    };
+  }, [isGraceModalOpen]);
+
   // View-Only mode when opened with ?mode=view
   const [isViewOnly] = useState(() => {
     try {
@@ -346,6 +400,30 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
 
     return () => unsubscribe();
   }, [albumSlugOrId, isAdmin]);
+
+  // Real-time synchronization with bookings collection for bidirectional sync
+  useEffect(() => {
+    if (!album?.bookingCode) return;
+    const q = query(collection(db, "bookings"), where("bookingCode", "==", album.bookingCode));
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        const bData = snap.docs[0].data() as any;
+        const status = bData.editingStatus;
+        if (status) {
+          let mappedStage: PipelineStage = album.pipelineStage;
+          if (status === "pending" || status === "shooting_done") mappedStage = "new";
+          else if (status === "editing") mappedStage = "client_submitted";
+          else if (status === "reviewing") mappedStage = "raw_filtered";
+          else if (status === "completed") mappedStage = "delivered";
+
+          if (mappedStage !== album.pipelineStage) {
+            setAlbum((prev) => (prev ? { ...prev, pipelineStage: mappedStage, isLocked: status !== "pending" && status !== "shooting_done" ? true : prev.isLocked } : null));
+          }
+        }
+      }
+    });
+    return () => unsub();
+  }, [album?.bookingCode]);
 
   // Đồng bộ lại thẻ OG mỗi khi dữ liệu album cập nhật
   useEffect(() => {
@@ -990,17 +1068,34 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
     if (!isAdmin || !album) return;
     let targetStage: PipelineStage = "new";
     let lockState = album.isLocked;
-    if (stepNum === 1 || stepNum === 2) {
+    let newStatus = "pending";
+    let newProgress = 10;
+
+    if (stepNum === 1) {
       targetStage = "new";
+      newStatus = "pending";
+      newProgress = 10;
+      lockState = false;
+    } else if (stepNum === 2) {
+      targetStage = "new";
+      newStatus = "shooting_done";
+      newProgress = 30;
+      lockState = false;
     } else if (stepNum === 3) {
       targetStage = "client_submitted";
       lockState = true;
+      newStatus = "editing";
+      newProgress = 55;
     } else if (stepNum === 4) {
       targetStage = "raw_filtered";
       lockState = true;
+      newStatus = "reviewing";
+      newProgress = 80;
     } else if (stepNum === 5) {
       targetStage = "delivered";
       lockState = true;
+      newStatus = "completed";
+      newProgress = 100;
     }
 
     try {
@@ -1008,8 +1103,26 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
         pipelineStage: targetStage,
         isLocked: lockState,
       });
+
+      const bCode = album.bookingCode;
+      if (bCode) {
+        try {
+          const q = query(collection(db, "bookings"), where("bookingCode", "==", bCode));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const bookingDocRef = doc(db, "bookings", snap.docs[0].id);
+            await updateDoc(bookingDocRef, {
+              editingStatus: newStatus,
+              editingProgress: newProgress,
+            });
+          }
+        } catch (e) {
+          console.warn("Sync step to booking warning:", e);
+        }
+      }
+
       setAlbum((prev) => (prev ? { ...prev, pipelineStage: targetStage, isLocked: lockState } : null));
-      showToast(`Đã chuyển tiến độ: Bước ${stepNum} - ${workflowSteps[stepNum - 1].label}`);
+      showToast(`✅ Đã cập nhật tiến độ: Bước ${stepNum} - ${workflowSteps[stepNum - 1].label}`);
     } catch (err) {
       console.error("Update stage error:", err);
       showToast("Lỗi khi cập nhật bước tiến độ.");
@@ -1228,91 +1341,105 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
       )}
 
       {/* 1. TOP HEADER (BERGH.RYKER DARK LUXURY TOP BAR) */}
-      <header className="sticky top-0 left-0 w-full z-40 bg-[#0D0D10]/95 backdrop-blur-xl border-b border-white/[0.08] px-4 sm:px-6 py-3 shadow-lg">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          {/* Left: Brand + Liquid Glass button '← Bảng điều khiển' */}
-          <div className="flex items-center gap-3">
-            <span className="font-serif font-bold text-lg tracking-wider text-white">
-              BERGH.RYKER
-            </span>
+      <header className="sticky top-0 z-30 w-full bg-[#0D0D10]/95 backdrop-blur-xl border-b border-white/[0.08] px-3 sm:px-6 py-2.5 sm:py-3.5 shadow-lg">
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
+          
+          {/* BÊN TRÁI: NÚT QUAY LẠI */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={onNavigateHome}
-              className="px-3.5 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-zinc-200 hover:text-white rounded-full text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs"
-              title="Quay lại danh sách album"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  sessionStorage.setItem('bergh_admin_view', 'proofing_dashboard');
+                  sessionStorage.setItem('bergh_intro_completed', 'true');
+                  localStorage.setItem('bergh_intro_completed', 'true');
+                  sessionStorage.removeItem('bergh_active_proofing_album');
+
+                  const cleanUrl = new URL(window.location.href);
+                  if (cleanUrl.searchParams.has('proofing') || cleanUrl.searchParams.has('album')) {
+                    cleanUrl.searchParams.delete('proofing');
+                    cleanUrl.searchParams.delete('album');
+                    window.history.replaceState({}, '', cleanUrl.pathname + cleanUrl.search);
+                  }
+                } catch (_) {}
+
+                if (onNavigateHome) {
+                  onNavigateHome();
+                }
+                window.dispatchEvent(new CustomEvent('bergh:open-proofing-dashboard'));
+              }}
+              className="flex items-center justify-center gap-1.5 shrink-0 h-9 px-2.5 sm:px-3.5 rounded-full bg-white/[0.06] hover:bg-white/10 active:scale-95 border border-white/10 text-zinc-200 transition cursor-pointer flex-shrink-0"
+              title="Quay lại Bảng điều khiển"
             >
-              <span>← Bảng điều khiển</span>
+              <span className="text-base font-bold leading-none shrink-0">←</span>
+              <span className="hidden md:inline text-xs font-medium whitespace-nowrap shrink-0">
+                Bảng điều khiển
+              </span>
             </button>
+          </div>
+
+          {/* Ở GIỮA: LOGO THƯƠNG HIỆU */}
+          <div className="min-w-0 flex items-center justify-start gap-2 truncate">
+            <span className="font-sans font-extrabold tracking-[0.22em] text-sm sm:text-base text-zinc-100 uppercase select-none truncate">
+              BERGH<span className="text-[#B5945B]">.</span>RYKER
+            </span>
             {album.isLocked && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#E2C792] bg-[#B5945B]/15 px-2.5 py-0.5 rounded-full border border-[#B5945B]/40">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#E2C792] bg-[#B5945B]/15 px-2 py-0.5 rounded-full border border-[#B5945B]/40 shrink-0">
                 <Lock className="w-2.5 h-2.5 text-[#B5945B]" />
                 ĐÃ CHỐT
               </span>
             )}
             {isViewOnly && (
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/15 px-2.5 py-0.5 rounded-full border border-blue-500/30">
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 bg-blue-500/15 px-2 py-0.5 rounded-full border border-blue-500/30 shrink-0">
                 <Eye className="w-2.5 h-2.5 text-blue-400" />
                 Chỉ xem
               </span>
             )}
           </div>
 
-          {/* Right: ?, 🔔, VI, 🌙/☀️, User Champagne Gold badge */}
-          <div className="flex items-center gap-2 sm:gap-3 text-zinc-300 text-xs">
-            {/* Help */}
+          {/* BÊN PHẢI: CỤM TIỆN ÍCH (ACTIONS) */}
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0 flex-shrink-0">
             <button
               type="button"
               onClick={() => setIsHelpModalOpen(true)}
-              className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer text-zinc-300 hover:text-white"
+              className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer text-zinc-300 hover:text-white shrink-0 flex-shrink-0"
               title="Trợ giúp & Hướng dẫn"
             >
               <HelpCircle className="w-4 h-4" />
             </button>
 
-            {/* Notification Bell */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => showToast("Đã cập nhật dữ liệu mới nhất từ Studio!")}
-                className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer relative text-zinc-300 hover:text-white"
-                title="Thông báo"
-              >
-                <Bell className="w-4 h-4" />
-                {favoritesCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-[#B5945B] rounded-full shadow-[0_0_8px_rgba(181,148,91,0.8)]" />
-                )}
-              </button>
-            </div>
-
-            {/* Language VI */}
-            <span className="font-bold text-xs px-2.5 py-1 rounded-md bg-white/[0.06] border border-white/10 text-zinc-200">
-              VI
-            </span>
-
-            {/* Theme Indicator */}
             <button
               type="button"
-              onClick={toggleTheme}
-              className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer text-zinc-300 hover:text-white"
-              title="Chế độ Dark Luxury"
+              onClick={() => showToast("Đã cập nhật dữ liệu mới nhất từ Studio!")}
+              className="relative w-8 sm:w-9 h-8 sm:h-9 flex items-center justify-center rounded-full text-zinc-300 hover:bg-white/[0.06] transition cursor-pointer shrink-0 flex-shrink-0"
+              title="Thông báo"
             >
-              <Moon className="w-4 h-4 text-amber-400" />
+              <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              {favoritesCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#B5945B] ring-2 ring-[#0D0D10]" />
+              )}
             </button>
 
-            {/* Admin Name in Champagne Gold */}
-            <div className="flex items-center gap-1.5 pl-2 sm:pl-3 border-l border-white/10">
-              <span className="font-bold text-xs text-[#E2C792] truncate max-w-[150px] tracking-wide uppercase">
-                {isAdmin ? "BERGH.RYKER ADMIN" : (album.clientName || "KHÁCH HÀNG")}
+            <div className="px-2 py-1 rounded-md bg-white/[0.05] border border-white/10 text-[10px] sm:text-xs font-semibold text-zinc-300 shrink-0 flex-shrink-0">
+              VI
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 pl-2 border-l border-white/10 shrink-0 flex-shrink-0">
+              <span className="font-bold text-xs text-[#E2C792] truncate max-w-[100px] tracking-wide uppercase">
+                {isAdmin ? "ADMIN" : (album.clientName || "KHÁCH")}
               </span>
             </div>
           </div>
+
         </div>
       </header>
 
-      {/* 2. HERO COVER BANNER (DARK LUXURY SIGNATURE COVER) */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6 mb-6">
-        <div className="bg-[#121216] border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative min-h-[180px] max-h-[280px] flex items-center justify-center">
-          {/* Cover Photo */}
+      {/* 2. HERO COVER BANNER & CLEAN ALBUM INFO CARD */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6 mb-6 space-y-4">
+        {/* Clean Cover Image Banner (Pristine photo, zero text overlay covering faces) */}
+        <div className="bg-[#121216] border border-white/10 rounded-2xl overflow-hidden shadow-2xl relative h-[220px] sm:h-[300px] flex items-center justify-center">
           {currentCover ? (
             <img
               src={currentCover}
@@ -1324,22 +1451,36 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
               <div className="text-[11px] uppercase tracking-[0.3em] font-extrabold text-[#B5945B]">
                 Studio Signature Cover
               </div>
-              <h2 className="text-2xl sm:text-4xl font-serif font-black tracking-widest text-[#E5C17C] uppercase mt-1">
-                BERGH Ryker STUDIO
+              <h2 className="text-2xl sm:text-4xl font-sans font-black tracking-widest text-[#E5C17C] uppercase mt-1">
+                BERGH<span className="text-[#B5945B]">.</span>RYKER STUDIO
               </h2>
             </div>
           )}
 
-          {/* Gradient Overlay for Text Readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/25 pointer-events-none" />
+          {/* Pristine ambient vignette, zero text obstruction */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
 
-          {/* Album Title & Client Information on Bottom-Left */}
-          <div className="absolute bottom-4 left-4 sm:bottom-6 sm:left-6 z-10 text-white drop-shadow-md pr-4">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider bg-[#B5945B]/20 border border-[#B5945B]/40 text-[#E2C792] px-3 py-1 rounded-full backdrop-blur-md">
+          {/* Button: '📷 Thay đổi ảnh bìa' on Top-Right */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsCoverModalOpen(true)}
+              className="absolute top-4 right-4 z-20 px-3.5 py-1.5 bg-black/75 hover:bg-black/90 backdrop-blur-md text-zinc-100 border border-white/20 hover:border-[#B5945B] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95"
+            >
+              <Camera className="w-3.5 h-3.5 text-[#E2C792]" />
+              <span>Thay đổi ảnh bìa</span>
+            </button>
+          )}
+        </div>
+
+        {/* Clean Album Info Card (Separated cleanly below the photo banner) */}
+        <div className="bg-[#141418] border border-white/10 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-[#B5945B]/15 border border-[#B5945B]/30 text-[#E2C792] px-3 py-1 rounded-full">
                 BERGH.RYKER STUDIO PROOFING
               </span>
-              <span className="text-xs text-zinc-200">
+              <span className="text-xs text-zinc-300">
                 Khách hàng: <strong className="text-white font-semibold">{album.clientName}</strong>
                 {album.bookingCode ? (
                   <span className="ml-1.5 text-[#E2C792] font-mono font-bold">
@@ -1348,22 +1489,10 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
                 ) : ""}
               </span>
             </div>
-            <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white truncate">
               {album.title}
             </h1>
           </div>
-
-          {/* Button: '📷 Thay đổi ảnh bìa' on Top-Right */}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setIsCoverModalOpen(true)}
-              className="absolute top-4 right-4 z-20 px-3.5 py-1.5 bg-black/70 hover:bg-black/90 backdrop-blur-md text-zinc-100 border border-white/20 hover:border-[#B5945B] rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95"
-            >
-              <Camera className="w-3.5 h-3.5 text-[#E2C792]" />
-              <span>Thay đổi ảnh bìa</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -1382,15 +1511,19 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
                 </span>
               )}
             </div>
-            {isAdmin && (
-              <span className="text-[11px] text-zinc-300 hidden sm:inline">
-                💡 Click vào bước để cập nhật trạng thái
+            {isAdmin ? (
+              <span className="text-[11px] text-[#E2C792] hidden sm:inline">
+                💡 Click vào bước để cập nhật trạng thái đơn hàng
+              </span>
+            ) : (
+              <span className="text-[11px] text-[#E2C792] hidden sm:inline">
+                💡 Trạng thái đơn hàng được cập nhật tự động theo thời gian thực
               </span>
             )}
           </div>
 
-          {/* 5 Steps Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5">
+          {/* 5 Steps: Horizontal scroll on mobile to prevent text clipping, 5-col grid on desktop */}
+          <div className="flex overflow-x-auto no-scrollbar sm:grid sm:grid-cols-5 gap-2.5 pb-1">
             {workflowSteps.map((step, idx) => {
               const stepNum = idx + 1;
               const isCurrent = currentStep === stepNum;
@@ -1402,14 +1535,14 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
                   type="button"
                   onClick={() => isAdmin && handleStepClick(stepNum)}
                   disabled={!isAdmin}
-                  className={`relative flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left ${
-                    isAdmin ? "cursor-pointer active:scale-98" : "cursor-default"
+                  className={`relative flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left min-w-[170px] sm:min-w-0 shrink-0 sm:shrink ${
+                    isAdmin ? "cursor-pointer active:scale-[0.98]" : "cursor-default"
                   } ${
                     isCurrent
-                      ? "bg-[#B5945B] text-black font-bold shadow-[0_0_15px_rgba(181,148,91,0.3)] border-[#B5945B]"
+                      ? "bg-[#B5945B] text-black font-bold shadow-[0_0_20px_rgba(181,148,91,0.4)] border-[#B5945B]"
                       : isCompleted
                       ? "bg-[#B5945B]/15 text-[#E2C792] border-[#B5945B]/40 hover:bg-[#B5945B]/25"
-                      : "bg-white/[0.04] text-zinc-300 border-white/10 hover:border-white/20 hover:text-white"
+                      : "bg-white/[0.04] text-zinc-300 border-white/10 hover:border-[#B5945B]/60 hover:bg-[#B5945B]/[0.08] hover:text-white"
                   }`}
                 >
                   <div
@@ -1424,11 +1557,11 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
                     {isCompleted ? "✓" : stepNum}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className={`text-[11px] leading-tight font-bold truncate ${isCurrent ? "text-black" : "text-zinc-100"}`}>
+                    <div className={`text-[11px] leading-tight font-bold ${isCurrent ? "text-black" : "text-zinc-100"}`}>
                       {step.label}
                     </div>
                     <div
-                      className={`text-[9px] truncate ${
+                      className={`text-[9px] leading-snug ${
                         isCurrent ? "text-black/80 font-medium" : "text-zinc-300"
                       }`}
                     >
@@ -1439,6 +1572,12 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
               );
             })}
           </div>
+          {!isAdmin && (
+            <div className="mt-2 text-[11px] text-[#E2C792]/90 sm:hidden flex items-center gap-1.5">
+              <span>💡</span>
+              <span>Trạng thái đơn hàng được cập nhật tự động theo thời gian thực</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1918,7 +2057,7 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
           ) : (
             <button
               type="button"
-              onClick={() => setIsSubmitModalOpen(true)}
+              onClick={() => setIsGraceModalOpen(true)}
               disabled={favoritesCount === 0}
               className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#B5945B] to-[#9A7B46] hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold text-xs uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(181,148,91,0.3)] flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -3012,6 +3151,170 @@ export const ProofingGalleryView: React.FC<ProofingGalleryViewProps> = ({
                       <span>Bắt đầu quét & Lưu Firestore</span>
                     </>
                   )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 1. DEADLINE COUNTDOWN MODAL */}
+      <AnimatePresence>
+        {showDeadlineModal && album && (album.deadline || album.dueDate) && (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-[#121216] border border-[#B5945B]/40 rounded-3xl p-6 text-center shadow-2xl relative"
+            >
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-[#B5945B]/15 text-[#E2C792] border border-[#B5945B]/30 flex items-center justify-center mb-4">
+                <Clock className="w-6 h-6 animate-pulse" />
+              </div>
+              <span className="text-[10px] uppercase font-bold tracking-widest text-[#E2C792]">
+                Thông Báo Thời Hạn
+              </span>
+              <h3 className="text-xl font-bold mt-1 mb-2 text-white">⏰ Sắp hết hạn chọn ảnh</h3>
+              <p className="text-xs text-zinc-300 leading-relaxed mb-6">
+                Hạn chót chọn ảnh là <strong className="text-[#E2C792]">{album.deadline || album.dueDate}</strong>. Chọn xong nhớ bấm nút &apos;Hoàn tất&apos;.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeadlineModal(false);
+                  try {
+                    sessionStorage.setItem(`bergh_deadline_dismissed_${album.id}`, 'true');
+                  } catch (_) {}
+                }}
+                className="w-full py-3 bg-gradient-to-r from-[#B5945B] to-[#9A7B46] hover:brightness-110 text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-[0_0_20px_rgba(181,148,91,0.3)] cursor-pointer"
+              >
+                Tôi biết rồi
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. INTERACTIVE TOUR GUIDE 5 STEPS */}
+      <AnimatePresence>
+        {tourStep !== null && album && (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-[#121216] border border-[#B5945B]/40 rounded-3xl p-6 text-left shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#B5945B]" />
+                  <span className="text-xs font-bold text-[#E2C792] uppercase tracking-wider">
+                    Hướng dẫn sử dụng ({tourStep}/5)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTourStep(null);
+                    try {
+                      localStorage.setItem(`bergh_tour_seen_${album.id}`, 'true');
+                    } catch (_) {}
+                  }}
+                  className="text-xs text-zinc-400 hover:text-white cursor-pointer"
+                >
+                  Bỏ qua hướng dẫn
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-6">
+                <h4 className="text-sm font-bold text-white">
+                  {tourStep === 1 && "Bước 1/5: Xem ảnh chi tiết"}
+                  {tourStep === 2 && "Bước 2/5: Chọn ảnh yêu thích"}
+                  {tourStep === 3 && "Bước 3/5: Kiểm tra số lượng"}
+                  {tourStep === 4 && "Bước 4/5: Gửi cho photographer"}
+                  {tourStep === 5 && "Bước 5/5: Xác nhận trước khi gửi"}
+                </h4>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  {tourStep === 1 && "Xem ảnh to (Vuốt hoặc bấm phím mũi tên để xem chi tiết)."}
+                  {tourStep === 2 && "Thích ảnh nào bấm biểu tượng trái tim ♡ để chọn."}
+                  {tourStep === 3 && "Chọn xong số lượng thì bấm nút Hoàn tất ở góc trên."}
+                  {tourStep === 4 && "Gửi kết quả cho photographer để tiến hành hậu kỳ."}
+                  {tourStep === 5 && "Cân nhắc kỹ trước khi gửi, hoặc bấm xem lại."}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={tourStep === 1}
+                  onClick={() => setTourStep((prev) => (prev !== null && prev > 1 ? prev - 1 : 1))}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 disabled:opacity-30 text-xs text-zinc-300 transition cursor-pointer"
+                >
+                  Quay lại
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (tourStep < 5) {
+                      setTourStep((prev) => (prev !== null ? prev + 1 : 1));
+                    } else {
+                      setTourStep(null);
+                      try {
+                        localStorage.setItem(`bergh_tour_seen_${album.id}`, 'true');
+                      } catch (_) {}
+                    }
+                  }}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#B5945B] to-[#9A7B46] hover:brightness-110 text-black font-bold text-xs uppercase tracking-wider transition cursor-pointer shadow-md"
+                >
+                  {tourStep === 5 ? "Hoàn thành" : "Tiếp"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 3. 10-SECOND GRACE PERIOD COUNTDOWN MODAL */}
+      <AnimatePresence>
+        {isGraceModalOpen && (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-[#121216] border border-[#B5945B]/50 rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden"
+            >
+              <div
+                className="absolute top-0 left-0 h-1 bg-gradient-to-r from-[#B5945B] to-[#E2C792] transition-all duration-1000"
+                style={{ width: `${(graceSecondsLeft / 10) * 100}%` }}
+              />
+
+              <div className="w-16 h-16 mx-auto rounded-full bg-[#B5945B]/15 text-[#E2C792] border border-[#B5945B]/40 flex items-center justify-center mb-4">
+                <span className="text-2xl font-black font-mono text-[#E2C792]">
+                  {graceSecondsLeft}
+                </span>
+              </div>
+
+              <span className="text-[10px] uppercase font-bold tracking-widest text-[#E2C792]">
+                An Toàn Chốt Đơn
+              </span>
+              <h3 className="text-xl font-bold mt-1 mb-2 text-white">
+                Kết quả sẽ được gửi sau {graceSecondsLeft} giây
+              </h3>
+              <p className="text-xs text-zinc-300 leading-relaxed mb-6">
+                Bạn có thể bấm hủy bất cứ lúc nào nếu muốn kiểm tra lại danh sách ảnh đã chọn.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsGraceModalOpen(false);
+                  }}
+                  className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all border border-white/20 cursor-pointer shadow-md"
+                >
+                  Huỷ, tôi muốn chọn tiếp
                 </button>
               </div>
             </motion.div>
