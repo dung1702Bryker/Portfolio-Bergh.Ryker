@@ -5,13 +5,18 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
+  setLogLevel,
+  collection,
+  getDocs,
   doc,
-  getDocFromServer,
-  setLogLevel
+  getDocFromServer
 } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
-// Silence internal Firestore SDK debug logs to prevent console pollution
+const app = initializeApp(firebaseConfig);
+
+// Silence internal Firestore SDK debug logs
 try {
   setLogLevel("silent");
 } catch (_) {}
@@ -32,17 +37,13 @@ if (typeof console !== "undefined" && console.error) {
       fullText.includes("insufficientPermissions") ||
       fullText.includes("Insufficient Permission")
     ) {
-      // Benign internal Firestore transport stream disconnection when stream is idle
       return;
     }
     originalConsoleError.apply(console, args);
   };
 }
 
-const app = initializeApp(firebaseConfig);
-
-// CRITICAL: The app will break without this line
-// Enable offline persistent cache (IndexedDB) for instant load on 4G / offline
+// Enable offline persistent cache with automatic fallback to memory cache if storage/indexedDB is restricted on iOS
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId || "ai-studio-01acd3e7-5d2e-492d-a9cc-c46484de9c60";
 let firestoreInstance;
 try {
@@ -52,11 +53,18 @@ try {
     }),
   }, firestoreDbId);
 } catch (_err) {
-  firestoreInstance = getFirestore(app, firestoreDbId);
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache(),
+    }, firestoreDbId);
+  } catch (_) {
+    firestoreInstance = getFirestore(app, firestoreDbId);
+  }
 }
 
 export const db = firestoreInstance;
 export const auth = getAuth();
+export { collection, getDocs };
 
 /**
  * Recursively strips undefined values so Firestore setDoc/updateDoc/addDoc calls never throw:
@@ -116,6 +124,12 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("google_drive_access_token", cachedAccessToken);
+      } catch (_) {}
+    }
+
     try {
       const { setDoc } = await import('firebase/firestore');
       await setDoc(doc(db, 'configs', 'googleToken'), { accessToken: cachedAccessToken, updatedAt: Date.now() });
@@ -132,7 +146,28 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
+  if (cachedAccessToken) return cachedAccessToken;
+
+  if (typeof window !== "undefined") {
+    try {
+      const sessionToken = sessionStorage.getItem("google_drive_access_token");
+      if (sessionToken) {
+        cachedAccessToken = sessionToken;
+        return sessionToken;
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const { doc: firestoreDoc, getDoc: firestoreGetDoc } = await import("firebase/firestore");
+    const snap = await firestoreGetDoc(firestoreDoc(db, "configs", "googleToken"));
+    if (snap.exists() && snap.data()?.accessToken) {
+      cachedAccessToken = snap.data().accessToken;
+      return cachedAccessToken;
+    }
+  } catch (_) {}
+
+  return null;
 };
 
 export const logout = async () => {

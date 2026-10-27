@@ -8,6 +8,7 @@ import {
   signOut,
   signInWithEmailAndPassword,
 } from "firebase/auth";
+import { safeLocalStorage, safeSessionStorage } from "../utils/safeStorage";
 
 const ADMIN_EMAILS = ["nguyenducdung1702@gmail.com", "berghryker2@gmail.com"];
 
@@ -18,20 +19,58 @@ export const isAuthorizedAdmin = (claims: any, email?: string | null) => {
 export function isStoredAdminDevice(): boolean {
   try {
     return (
-      localStorage.getItem("admin_device_verified") === "true" ||
-      sessionStorage.getItem("admin_logged_in") === "true"
+      safeLocalStorage.getItem("admin_device_verified") === "true" ||
+      safeSessionStorage.getItem("admin_logged_in") === "true"
     );
   } catch (_) {
     return false;
   }
 }
 
-export function useAdminAuth() {
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => isStoredAdminDevice());
+// Kiểm tra xem trang có đang ở chế độ công khai cho khách hàng (chọn ảnh hoặc xem vé booking) hay không
+export function checkIsPublicCustomerRoute(): boolean {
+  try {
+    if (typeof window !== "undefined") {
+      const s = window.location.search || "";
+      const p = window.location.pathname || "";
+      const h = window.location.hash || "";
+      return (
+        s.includes("proofing=") ||
+        s.includes("proof=") ||
+        s.includes("album_proof=") ||
+        s.includes("album=") ||
+        s.includes("booking=") ||
+        s.includes("bookingCode=") ||
+        s.includes("bookingId=") ||
+        s.includes("code=") ||
+        p.startsWith("/proofing/") ||
+        p.startsWith("/albums/") ||
+        p.startsWith("/booking/") ||
+        h.includes("/proofing/") ||
+        h.includes("/albums/") ||
+        h.includes("/booking/")
+      );
+    }
+  } catch (_) {}
+  return false;
+}
+
+export function useAdminAuth(disabled?: boolean) {
+  const isBypassed = Boolean(disabled || checkIsPublicCustomerRoute());
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (isBypassed) return false;
+    return isStoredAdminDevice();
+  });
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isBypassed);
 
   useEffect(() => {
+    // KHÔNG khởi tạo Firebase Auth hoặc onAuthStateChanged trên trang công khai của khách
+    if (isBypassed) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currUser) => {
       if (currUser) {
         try {
@@ -41,15 +80,15 @@ export function useAdminAuth() {
             setIsAdmin(true);
             setUser(currUser);
             try {
-              localStorage.setItem("admin_device_verified", "true");
-              if (currUser.email) localStorage.setItem("admin_email", currUser.email);
+              safeLocalStorage.setItem("admin_device_verified", "true");
+              if (currUser.email) safeLocalStorage.setItem("admin_email", currUser.email);
             } catch (_) {}
           } else {
             setIsAdmin(false);
             setUser(null);
             try {
-              localStorage.removeItem("admin_device_verified");
-              localStorage.removeItem("admin_email");
+              safeLocalStorage.removeItem("admin_device_verified");
+              safeLocalStorage.removeItem("admin_email");
             } catch (_) {}
           }
         } catch (error: any) {
@@ -86,8 +125,8 @@ export function useAdminAuth() {
       setIsAdmin(true);
       setUser(result.user);
       try {
-        localStorage.setItem("admin_device_verified", "true");
-        if (result.user.email) localStorage.setItem("admin_email", result.user.email);
+        safeLocalStorage.setItem("admin_device_verified", "true");
+        if (result.user.email) safeLocalStorage.setItem("admin_email", result.user.email);
       } catch (_) {}
       return { success: true };
     } catch (err: any) {
@@ -117,8 +156,8 @@ export function useAdminAuth() {
     setIsAdmin(true);
     setUser(result.user);
     try {
-      localStorage.setItem("admin_device_verified", "true");
-      if (result.user.email) localStorage.setItem("admin_email", result.user.email);
+      safeLocalStorage.setItem("admin_device_verified", "true");
+      if (result.user.email) safeLocalStorage.setItem("admin_email", result.user.email);
     } catch (_) {}
   };
 
@@ -131,8 +170,8 @@ export function useAdminAuth() {
     setIsAdmin(false);
     setUser(null);
     try {
-      localStorage.removeItem("admin_device_verified");
-      localStorage.removeItem("admin_email");
+      safeLocalStorage.removeItem("admin_device_verified");
+      safeLocalStorage.removeItem("admin_email");
     } catch (_) {}
   };
 

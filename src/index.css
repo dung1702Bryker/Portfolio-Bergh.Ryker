@@ -17,6 +17,12 @@
   --shadow-dashboard: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
 
   --radius-tech: 12px;
+  --bg-surface: #121214;
+  --bg-card: #1A1A1E;
+  --border-default: 1px solid rgba(255, 255, 255, 0.08);
+  --text-primary: #FFFFFF;
+  --text-secondary: #A1A1AA;
+  --color-gold: #B5945B;
 }
 
 @layer base {

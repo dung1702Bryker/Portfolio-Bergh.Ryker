@@ -1,6 +1,14 @@
 node_modules/
+dist/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+.aistudio/
+public/assets/aistudio/
+*.mov
+*.MOV
+*.mp4
+*.MP4
+

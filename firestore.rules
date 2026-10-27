@@ -177,5 +177,10 @@ service cloud.firestore {
     match /webhook_logs/{logId} {
       allow read, write: if true;
     }
+
+    match /proofing_albums/{albumId} {
+      allow read, write: if true;
+    }
   }
 }
+

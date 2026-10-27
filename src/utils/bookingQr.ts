@@ -1,35 +1,84 @@
 import QRCode from "qrcode";
 import { Booking } from "../types";
+import { safeLocalStorage } from "./safeStorage";
 
 /**
- * Đường dẫn công khai chuẩn (Shared App URL) của dự án Bergh.Ryker.
- * URL này mở trực tiếp cho khách hàng trên điện thoại (4G, Wi-Fi, Safari, Chrome, Camera QR)
- * mà KHÔNG bị chặn bởi cookie developer hay lỗi aistudio.google.com / ais-dev-.
+ * Đường dẫn công khai chuẩn (Public Production URL) của dự án Bergh.Ryker.
+ * Mở trực tiếp trên điện thoại (4G, Wi-Fi, Safari, Zalo, Messenger, Chrome)
+ * KHÔNG qua proxy nội bộ AI Studio (*.scf.usercontent.goog hay ais-dev-*) để không bị màn hình Cookie check / Google Login chặn.
  */
 export const OFFICIAL_PUBLIC_DOMAIN =
   "https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app";
 
 /**
+ * Lấy tên miền tùy chỉnh do Admin lưu (nếu có)
+ */
+export function getCustomPublicDomain(): string | null {
+  try {
+    const val = safeLocalStorage.getItem("bergh_public_domain");
+    if (val && val.trim().startsWith("http")) {
+      let clean = val.trim().replace(/\/+$/, "");
+      // Tự động chuyển đổi nếu admin lỡ nhập ais-dev-
+      if (clean.includes("ais-dev-")) {
+        clean = clean.replace("ais-dev-", "ais-pre-");
+      }
+      // Bỏ qua các domain ví dụ mẫu chưa đăng ký DNS thực tế trên internet gây lỗi NXDOMAIN
+      if (
+        clean.includes("berghryker.vn") ||
+        clean.includes("berghryker.st") ||
+        clean.includes("example.com")
+      ) {
+        return null;
+      }
+      return clean;
+    }
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Cập nhật tên miền tùy chỉnh vào safeLocalStorage
+ */
+export function setCustomPublicDomain(domain: string): void {
+  try {
+    let clean = domain.trim().replace(/\/+$/, "");
+    if (clean) {
+      if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
+        clean = `https://${clean}`;
+      }
+      // Tự động chuyển đổi nếu admin lỡ nhập ais-dev-
+      if (clean.includes("ais-dev-")) {
+        clean = clean.replace("ais-dev-", "ais-pre-");
+      }
+      safeLocalStorage.setItem("bergh_public_domain", clean);
+    } else {
+      safeLocalStorage.removeItem("bergh_public_domain");
+    }
+  } catch (_) {}
+}
+
+/**
  * Đọc biến môi trường PUBLIC_BOOKING_BASE_URL hoặc VITE_PUBLIC_BOOKING_BASE_URL.
- * Đảm bảo chỉ dùng một PUBLIC_BASE_URL duy nhất cho toàn bộ hệ thống QR & Link.
  */
 export const PUBLIC_BOOKING_BASE_URL: string = (() => {
-  // 1. Kiểm tra Vite import.meta.env
   try {
     if (typeof import.meta !== "undefined" && (import.meta as any).env) {
       const viteEnv = (import.meta as any).env.VITE_PUBLIC_BOOKING_BASE_URL || (import.meta as any).env.PUBLIC_BOOKING_BASE_URL;
       if (viteEnv && typeof viteEnv === "string" && viteEnv.trim()) {
-        return viteEnv.trim().replace(/\/+$/, "");
+        let clean = viteEnv.trim().replace(/\/+$/, "");
+        if (clean.includes("ais-dev-")) clean = clean.replace("ais-dev-", "ais-pre-");
+        return clean;
       }
     }
   } catch (_) {}
 
-  // 2. Kiểm tra process.env (được inject qua vite define hoặc Node.js)
   try {
     if (typeof process !== "undefined" && process.env) {
       const procEnv = process.env.PUBLIC_BOOKING_BASE_URL || process.env.VITE_PUBLIC_BOOKING_BASE_URL;
       if (procEnv && typeof procEnv === "string" && procEnv.trim()) {
-        return procEnv.trim().replace(/\/+$/, "");
+        let clean = procEnv.trim().replace(/\/+$/, "");
+        if (clean.includes("ais-dev-")) clean = clean.replace("ais-dev-", "ais-pre-");
+        return clean;
       }
     }
   } catch (_) {}
@@ -39,22 +88,26 @@ export const PUBLIC_BOOKING_BASE_URL: string = (() => {
 
 /**
  * Lấy Base URL công khai chuẩn để tạo link xác nhận và mã QR cho khách.
- * - Tự động chuyển đổi ais-dev- sang ais-pre- (Shared App URL công khai).
- * - Tuyệt đối không để dính link dev IAP bảo mật gây lỗi 'Action required to load your app' trên điện thoại.
- * - Khi chạy localhost hoặc aistudio.google.com thì dùng OFFICIAL_PUBLIC_DOMAIN.
+ * - Ưu tiên 1: Tên miền tùy chỉnh Admin cài đặt trong Modal Chia Sẻ ('bergh_public_domain').
+ * - Ưu tiên 2: Tên miền trực tiếp Cloud Run (.run.app) hoặc custom domain riêng.
+ * - Tuyệt đối không dùng domain proxy nội bộ (*.scf.usercontent.goog, aistudio.google.com, hoặc ais-dev-*)
+ *   vì sẽ bị màn hình 'Cookie check' / 'Action required' chặn trên iPhone.
  */
 export function getPublicBookingBaseUrl(): string {
+  // 1. Kiểm tra domain tùy chỉnh do Admin cài đặt
+  const custom = getCustomPublicDomain();
+  if (custom) {
+    return custom;
+  }
+
+  // 2. Kiểm tra origin hiện tại
   try {
     if (typeof window !== "undefined" && window.location && window.location.origin) {
       const origin = window.location.origin.replace(/\/+$/, "");
       
-      // Nếu đang mở trên link dev (ais-dev-...), tự động trỏ sang link preview công khai (ais-pre-...)
-      if (origin.includes("ais-dev-")) {
-        return origin.replace("ais-dev-", "ais-pre-");
-      }
-
-      // Nếu đang chạy trong iframe AI Studio hoặc localhost, dùng OFFICIAL_PUBLIC_DOMAIN
+      // Tuyệt đối không dùng domain proxy nội bộ của AI Studio hoặc usercontent.goog vì có trang Cookie check!
       if (
+        origin.includes("usercontent.goog") ||
         origin.includes("aistudio.google.com") ||
         origin.includes("localhost") ||
         origin.includes("127.0.0.1") ||
@@ -63,7 +116,13 @@ export function getPublicBookingBaseUrl(): string {
         return OFFICIAL_PUBLIC_DOMAIN;
       }
 
-      // Domain thực tế (custom domain hoặc ais-pre-...)
+      // Nếu admin đang làm việc trên máy chủ dev của AI Studio (ais-dev-*.run.app),
+      // tự động chuyển sang public shared instance (ais-pre-*.run.app) để khách hàng không bị chặn Cookie check!
+      if (origin.includes("ais-dev-")) {
+        return origin.replace("ais-dev-", "ais-pre-");
+      }
+
+      // Domain trực tiếp Cloud Run (.run.app) hoặc custom domain (berghryker.vn, vercel.app, v.v.)
       if (origin.startsWith("http")) {
         return origin;
       }
@@ -72,12 +131,94 @@ export function getPublicBookingBaseUrl(): string {
 
   if (PUBLIC_BOOKING_BASE_URL) {
     const cleaned = PUBLIC_BOOKING_BASE_URL.replace(/\/+$/, "");
-    if (cleaned.includes("ais-dev-")) {
-      return cleaned.replace("ais-dev-", "ais-pre-");
+    if (
+      !cleaned.includes("usercontent.goog") &&
+      !cleaned.includes("aistudio.google.com") &&
+      !cleaned.includes("localhost")
+    ) {
+      if (cleaned.includes("ais-dev-")) {
+        return cleaned.replace("ais-dev-", "ais-pre-");
+      }
+      return cleaned;
     }
-    return cleaned;
   }
+
   return OFFICIAL_PUBLIC_DOMAIN;
+}
+
+/**
+ * Helper function ensuring all URLs, QR codes, and OG image references
+ * strictly use the production domain defined in PUBLIC_BOOKING_BASE_URL.
+ * Automatically strips and replaces any detected AI Studio proxy domains
+ * (such as *.usercontent.goog, aistudio.google.com, or ais-dev-*) before generating links.
+ *
+ * @param path Optional subpath, query string, or full URL to be sanitized
+ * @param customDomainOverride Optional custom domain override provided by user
+ * @returns Standardized public production URL (e.g. https://ais-pre-...run.app/?proofing=...)
+ */
+export function getPublicUrl(path = "", customDomainOverride?: string): string {
+  // 1. Resolve production base domain strictly from customDomainOverride, PUBLIC_BOOKING_BASE_URL or getCustomPublicDomain()
+  let prodDomain = PUBLIC_BOOKING_BASE_URL || OFFICIAL_PUBLIC_DOMAIN;
+  const custom =
+    customDomainOverride !== undefined && customDomainOverride !== null && customDomainOverride.trim() !== ""
+      ? customDomainOverride.trim()
+      : getCustomPublicDomain();
+
+  if (
+    custom &&
+    !custom.includes("usercontent.goog") &&
+    !custom.includes("aistudio.google.com") &&
+    !custom.includes("localhost")
+  ) {
+    prodDomain = custom;
+  }
+
+  // Ensure production domain is cleaned of trailing slashes and dev proxy indicators
+  prodDomain = prodDomain.trim().replace(/\/+$/, "");
+  if (prodDomain.includes("ais-dev-")) {
+    prodDomain = prodDomain.replace("ais-dev-", "ais-pre-");
+  }
+
+  if (!prodDomain.startsWith("http://") && !prodDomain.startsWith("https://")) {
+    prodDomain = `https://${prodDomain}`;
+  }
+
+  if (!path || !path.trim()) {
+    return prodDomain;
+  }
+
+  let cleanPath = path.trim();
+
+  // If path is a full URL containing usercontent.goog, aistudio, or ais-dev-, replace its origin with prodDomain
+  if (cleanPath.startsWith("http://") || cleanPath.startsWith("https://")) {
+    try {
+      const urlObj = new URL(cleanPath);
+      if (
+        urlObj.hostname.includes("usercontent.goog") ||
+        urlObj.hostname.includes("aistudio.google.com") ||
+        urlObj.hostname.includes("localhost") ||
+        urlObj.hostname.includes("127.0.0.1") ||
+        urlObj.hostname.includes("ais-dev-")
+      ) {
+        const prodObj = new URL(prodDomain);
+        urlObj.protocol = prodObj.protocol;
+        urlObj.host = prodObj.host;
+        return urlObj.toString();
+      }
+      return cleanPath;
+    } catch (_) {
+      cleanPath = cleanPath.replace(/^https?:\/\/[^/?#]+/, "");
+    }
+  }
+
+  // Format relative path or query string
+  if (cleanPath.startsWith("?")) {
+    return `${prodDomain}/${cleanPath}`;
+  }
+  if (!cleanPath.startsWith("/")) {
+    cleanPath = `/${cleanPath}`;
+  }
+  return `${prodDomain}${cleanPath}`;
 }
 
 /**
@@ -87,6 +228,8 @@ export function getPublicBookingBaseUrl(): string {
 export const UNAUTHORIZED_DOMAIN_KEYWORDS = [
   "aistudio",
   "aistudio.google.com",
+  "usercontent.goog",
+  "scf.usercontent.goog",
   "ais-dev-",
   "localhost",
   "127.0.0.1",

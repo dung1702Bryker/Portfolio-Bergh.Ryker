@@ -2267,14 +2267,182 @@ BỐI CẢNH HIỆN TẠI:
     }
   });
 
-  // Helper function to build luxury customer confirmation email HTML
+  // --- DYNAMIC OPEN GRAPH META INJECTION FOR ZALO, FACEBOOK & MESSENGER ---
+  const injectProofingOpenGraph = (html: string, album: any, fullUrl: string): string => {
+    const pageTitle = `${album.title || "Album Chọn Ảnh"} - ${album.clientName || "Khách Hàng"} | Bergh.Ryker Studio`;
+    const descriptionText = `Trang chọn ảnh & duyệt hậu kỳ chính thức của ${album.clientName || "Khách hàng"} - Bergh.Ryker Studio. Bấm để xem và chọn ảnh yêu thích!`;
+    
+    let previewImage = album.coverUrl || album.coverPhotoUrl;
+    if (!previewImage && album.coverImageFileId) {
+      previewImage = `https://drive.google.com/thumbnail?id=${album.coverImageFileId}&sz=w1200`;
+    }
+    // Fallback images from the album's first photo if coverUrl is missing
+    if (!previewImage && album.photos && album.photos.length > 0) {
+      const validPhoto =
+        album.photos.find((p: any) => {
+          const fId =
+            p.driveFileId ||
+            (p.id && !p.id.startsWith("photo_") && !p.id.startsWith("blob:") ? p.id : "");
+          return Boolean(
+            fId ||
+              (p.thumbnailUrl && p.thumbnailUrl.startsWith("http")) ||
+              (p.url && p.url.startsWith("http")) ||
+              (p.hdUrl && p.hdUrl.startsWith("http"))
+          );
+        }) || album.photos[0];
+
+      if (validPhoto) {
+        const fileId =
+          validPhoto.driveFileId ||
+          (validPhoto.id && !validPhoto.id.startsWith("photo_") && !validPhoto.id.startsWith("blob:")
+            ? validPhoto.id
+            : "");
+        if (fileId) {
+          previewImage = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`;
+        } else if (validPhoto.thumbnailUrl && validPhoto.thumbnailUrl.startsWith("http")) {
+          previewImage = validPhoto.thumbnailUrl;
+        } else if (validPhoto.url && validPhoto.url.startsWith("http")) {
+          previewImage = validPhoto.url;
+        } else if (validPhoto.hdUrl && validPhoto.hdUrl.startsWith("http")) {
+          previewImage = validPhoto.hdUrl;
+        }
+      }
+    }
+    if (!previewImage) {
+      previewImage = "https://ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app/og-image-square-white.png";
+    }
+
+    let result = html;
+    result = result.replace(/<title>.*?<\/title>/i, `<title>${pageTitle}</title>`);
+    
+    const setOrReplaceMeta = (prop: string, val: string, isName = false) => {
+      const attr = isName ? "name" : "property";
+      const regex = new RegExp(`<meta\\s+${attr}="${prop}"\\s+content="[^"]*"\\s*\\/?>`, "i");
+      if (regex.test(result)) {
+        result = result.replace(regex, `<meta ${attr}="${prop}" content="${val}" />`);
+      } else {
+        result = result.replace("</head>", `  <meta ${attr}="${prop}" content="${val}" />\n  </head>`);
+      }
+    };
+
+    setOrReplaceMeta("og:title", pageTitle);
+    setOrReplaceMeta("og:description", descriptionText);
+    setOrReplaceMeta("og:image", previewImage);
+    setOrReplaceMeta("og:image:secure_url", previewImage);
+    setOrReplaceMeta("og:url", fullUrl);
+    setOrReplaceMeta("og:type", "website");
+    setOrReplaceMeta("og:site_name", "BERGH.RYKER STUDIO");
+
+    setOrReplaceMeta("twitter:card", "summary_large_image", true);
+    setOrReplaceMeta("twitter:title", pageTitle, true);
+    setOrReplaceMeta("twitter:description", descriptionText, true);
+    setOrReplaceMeta("twitter:image", previewImage, true);
+
+    return result;
+  };
+
+  const handleProofingSocialRequest = async (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+    viteInstance?: any
+  ) => {
+    if (req.path.startsWith("/api/") || req.path.includes(".")) {
+      return next();
+    }
+
+    const proofingCode = (
+      req.query.proofing ||
+      req.query.album ||
+      req.query.proof ||
+      (req.path.startsWith("/proofing/") ? req.path.replace("/proofing/", "") : "") ||
+      (req.path.startsWith("/albums/") ? req.path.replace("/albums/", "") : "")
+    ) as string;
+
+    if (!proofingCode || typeof proofingCode !== "string" || !db) {
+      return next();
+    }
+
+    const cleanCode = proofingCode.trim();
+    if (!cleanCode) return next();
+
+    try {
+      let albumData: any = null;
+      // 1. Direct ID
+      const dRef = doc(db, "proofing_albums", cleanCode);
+      const dSnap = await getDoc(dRef);
+      if (dSnap.exists()) {
+        albumData = { id: dSnap.id, ...dSnap.data() };
+      } else {
+        // 2. Query by slug
+        const qSlug = query(collection(db, "proofing_albums"), where("slug", "==", cleanCode), limit(1));
+        const slugSnap = await getDocs(qSlug);
+        if (!slugSnap.empty) {
+          albumData = { id: slugSnap.docs[0].id, ...slugSnap.docs[0].data() };
+        } else {
+          // 3. Query by bookingCode
+          const qBCode = query(collection(db, "proofing_albums"), where("bookingCode", "==", cleanCode), limit(1));
+          const bSnap = await getDocs(qBCode);
+          if (!bSnap.empty) {
+            albumData = { id: bSnap.docs[0].id, ...bSnap.docs[0].data() };
+          }
+        }
+      }
+
+      if (albumData) {
+        const rootIndex = path.resolve(process.cwd(), "index.html");
+        const distIndex = path.resolve(process.cwd(), "dist/index.html");
+        const targetIndex =
+          process.env.NODE_ENV !== "production"
+            ? rootIndex
+            : fs.existsSync(distIndex)
+              ? distIndex
+              : rootIndex;
+
+        if (fs.existsSync(targetIndex)) {
+          let rawHtml = fs.readFileSync(targetIndex, "utf8");
+          let host =
+            (req.headers["x-forwarded-host"] as string) ||
+            req.get("host") ||
+            "ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app";
+          if (typeof host === "string") {
+            if (host.includes("ais-dev-")) {
+              host = host.replace("ais-dev-", "ais-pre-");
+            } else if (
+              host.includes("localhost") ||
+              host.includes("127.0.0.1") ||
+              host.includes("usercontent.goog") ||
+              host.includes("aistudio.google.com")
+            ) {
+              host = "ais-pre-hfmviuhpqhhx673vbwoye2-841267057913.asia-east1.run.app";
+            }
+          }
+          const albumKey = albumData.slug || albumData.id || "";
+          const fullUrl = `https://${host}/?proofing=${encodeURIComponent(albumKey)}`;
+          const finalHtml = injectProofingOpenGraph(rawHtml, albumData, fullUrl);
+
+          if (process.env.NODE_ENV !== "production" && viteInstance) {
+            const transformed = await viteInstance.transformIndexHtml(req.originalUrl, finalHtml);
+            return res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(transformed);
+          }
+          return res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(finalHtml);
+        }
+      }
+    } catch (e: any) {
+      console.warn("[OG Tag Injection] Warning:", e.message);
+    }
+    return next();
+  };
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+    app.use((req, res, next) => handleProofingSocialRequest(req, res, next, vite));
     app.use(vite.middlewares);
   } else {
+    app.use((req, res, next) => handleProofingSocialRequest(req, res, next));
     const distPath = path.resolve(process.cwd(), "dist");
     const indexPath = path.resolve(distPath, "index.html");
     const rootIndexPath = path.resolve(process.cwd(), "index.html");

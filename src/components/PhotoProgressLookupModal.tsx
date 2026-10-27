@@ -110,6 +110,7 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedTicket, setCopiedTicket] = useState(false);
   const [localBookings, setLocalBookings] = useState<string[]>([]);
+  const [proofingAlbumSlug, setProofingAlbumSlug] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Đồng bộ danh sách đơn đặt lịch từ localStorage trên thiết bị
@@ -399,6 +400,46 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
     });
     return () => unsub();
   }, [booking?.id, isOpen]);
+
+  // Kiểm tra xem đơn booking này đã có Album Chọn Ảnh (Proofing) hay chưa
+  useEffect(() => {
+    if (!booking) {
+      setProofingAlbumSlug(null);
+      return;
+    }
+    const bCode = booking.bookingCode || booking.id;
+    let isCancelled = false;
+
+    const checkProofingAlbum = async () => {
+      try {
+        const q1 = query(collection(db, "proofing_albums"), where("bookingCode", "==", bCode));
+        const snap1 = await getDocs(q1);
+        if (!snap1.empty && !isCancelled) {
+          const d = snap1.docs[0].data();
+          setProofingAlbumSlug(d.slug || snap1.docs[0].id);
+          return;
+        }
+
+        if (booking.bookingCode && booking.id !== booking.bookingCode) {
+          const q2 = query(collection(db, "proofing_albums"), where("bookingCode", "==", booking.id));
+          const snap2 = await getDocs(q2);
+          if (!snap2.empty && !isCancelled) {
+            const d = snap2.docs[0].data();
+            setProofingAlbumSlug(d.slug || snap2.docs[0].id);
+            return;
+          }
+        }
+        if (!isCancelled) setProofingAlbumSlug(null);
+      } catch (err) {
+        console.warn("Could not check associated proofing album:", err);
+      }
+    };
+
+    checkProofingAlbum();
+    return () => {
+      isCancelled = true;
+    };
+  }, [booking]);
 
   const currentStepIdx = getStepIndex(booking?.editingStatus);
   const progressPercent =
@@ -705,6 +746,31 @@ export const PhotoProgressLookupModal: React.FC<PhotoProgressLookupModalProps> =
                   </div>
                 </div>
               </div>
+
+              {/* Direct Link to Proofing Album if available */}
+              {proofingAlbumSlug && (
+                <div className="bg-gradient-to-r from-[#ffe3e3] to-[#fff0f0] border border-[#ffc9c9] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-900 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#e03131] text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm">
+                      💎
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-[#e03131]">
+                        Album Chọn Ảnh Đã Sẵn Sàng!
+                      </h4>
+                      <p className="text-xs text-slate-600">
+                        Studio đã tạo link chọn ảnh cho đơn đặt lịch này. Bạn có thể duyệt và thả tim những ảnh ưng ý nhất ngay bây giờ.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={`?proofing=${proofingAlbumSlug}`}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#e03131] hover:bg-[#c92a2a] text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
+                  >
+                    <span>💎 Vào Album Chọn Ảnh & Duyệt File</span>
+                  </a>
+                </div>
+              )}
 
               {/* Progress Bar Container */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-4">

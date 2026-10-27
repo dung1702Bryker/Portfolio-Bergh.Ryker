@@ -66,12 +66,9 @@ import { useToast } from "../hooks/useToast";
 import { ToastContainer } from "./ToastContainer";
 
 import { AvailabilityCalendar } from "./AvailabilityCalendar";
+import { AdminDashboard } from "./AdminDashboard";
 const FapWeeklyCalendar = React.lazy(() =>
   import("./FapWeeklyCalendar").then((m) => ({ default: m.FapWeeklyCalendar }))
-);
-
-const AdminDashboard = React.lazy(() =>
-  import("./AdminDashboard").then((m) => ({ default: m.AdminDashboard }))
 );
 import {
   collection,

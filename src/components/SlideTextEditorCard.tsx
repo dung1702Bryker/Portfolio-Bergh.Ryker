@@ -1,21 +1,19 @@
-import React, { useState } from"react";
+import React, { useState } from "react";
 import {
- Settings,
- Save,
- Check,
- Edit3,
- Eye,
- EyeOff,
- Sparkles,
- Compass,
- Link2,
-} from"lucide-react";
-import { motion, AnimatePresence } from"motion/react";
-import { SlideData, SlideCtaConfig } from"../types";
-import { compressImage } from"../utils/imageCompressor";
-import { ImagePositionControl } from"./ImagePositionControl";
-import { resolveImage } from"../utils/imageMapper";
-import { useAdminAuth } from"../hooks/useAdminAuth";
+  Settings,
+  Save,
+  Check,
+  Edit3,
+  EyeOff,
+  Sparkles,
+  Compass,
+  Link2,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { SlideData, SlideCtaConfig } from "../types";
+import { ImagePositionControl } from "./ImagePositionControl";
+import { resolveImage } from "../utils/imageMapper";
+import { useAdminAuth } from "../hooks/useAdminAuth";
 import { toast } from "../hooks/useToast";
 import { normalizeDriveImageUrl } from "../constants/founderConfig";
 
@@ -567,3 +565,5 @@ export const SlideTextEditorCard: React.FC<SlideTextEditorProps> = ({
  </div>
  );
 };
+
+export default SlideTextEditorCard;

@@ -35,6 +35,7 @@ import { AdminPhotoProgressModal } from "./AdminPhotoProgressModal";
 import { BookingConfirmationQrSection } from "./admin/BookingConfirmationQrSection";
 import { AdminCreateBookingModal } from "./admin/AdminCreateBookingModal";
 import { AdminBatchImportModal } from "./admin/AdminBatchImportModal";
+import { ProofingManagementTab } from "./admin/ProofingManagementTab";
 
 interface AdminDashboardProps {
   isAdminMode: boolean;
@@ -89,7 +90,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   TIME_SLOTS,
 }) => {
   const [adminActiveTab, setAdminActiveTab] = useState<
-    "schedule" | "chat" | "school_sync" | "availability_config"
+    "schedule" | "chat" | "school_sync" | "availability_config" | "proofing"
   >("schedule");
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
@@ -376,7 +377,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
+          {/* 3b. Chọn Ảnh & Lọc File (Proofing) */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setAdminActiveTab("proofing")}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+                adminActiveTab === "proofing"
+                  ? "bg-gradient-to-br from-[#DFB779] to-[#B5945B] text-zinc-950 font-bold shadow-md shadow-[#B5945B]/30 scale-105"
+                  : "text-[#E5C17C] hover:text-white hover:bg-white/10"
+              }`}
+              aria-label="Chọn Ảnh & Lọc File (Proofing)"
+            >
+              <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
+            <div className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-all duration-150 flex flex-col items-center z-50">
+              <div className="px-2.5 py-1 text-[11px] font-sans font-medium text-white bg-zinc-900/95 border border-white/15 rounded-lg shadow-2xl whitespace-nowrap backdrop-blur-xl">
+                💎 Chọn Ảnh & Lọc File (Proofing)
+              </div>
+              <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-zinc-900/95 -mt-px" />
+            </div>
+          </div>
+
           {/* 4. Thêm mới Booking */}
+
           <div className="relative group">
             <button
               type="button"
@@ -485,6 +509,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* TAB CONTENT: AVAILABILITY SLOT CONFIG */}
       {adminActiveTab === "availability_config" && <BookingSlotAvailabilityManager />}
+
+      {/* TAB CONTENT: PROOFING & LOCAL FILE FILTER */}
+      {adminActiveTab === "proofing" && (
+        <ProofingManagementTab
+          onOpenProofingView={(slugOrId) => {
+            const proofingUrl = `${window.location.origin}?proofing=${slugOrId}`;
+            window.location.href = proofingUrl;
+          }}
+          onClose={() => setAdminActiveTab("schedule")}
+          showToast={showToast}
+          triggerConfirm={triggerConfirm}
+        />
+      )}
 
       {/* TAB CONTENT: SCHEDULE */}
       {adminActiveTab === "schedule" &&

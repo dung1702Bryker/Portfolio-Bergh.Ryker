@@ -40,8 +40,10 @@ import { AdminPushNotificationBanner } from "./components/AdminPushNotificationB
 import { AdminNotificationCenterModal } from "./components/AdminNotificationCenterModal";
 import { PhotoProgressLookupModal } from "./components/PhotoProgressLookupModal";
 import { BookingConfirmationPage } from "./components/BookingConfirmationPage";
+import { ProofingGalleryView } from "./components/ProofingGalleryView";
 import Lenis from "lenis";
 import { recordAutoBackup, getSystemBackupVault } from "./services/backupService";
+import { safeLocalStorage, safeSessionStorage } from "./utils/safeStorage";
 
 // Slide Layout Components
 import { HeroLayout } from "./components/HeroLayout";
@@ -53,9 +55,8 @@ import { CreatorShowcase } from "./components/CreatorShowcase";
 import { BookingContactForm } from "./components/BookingContactForm";
 import { SocialProof } from "./components/SocialProof";
 
-// Lazy-loaded heavy off-screen & admin components
-const SlideTextEditorCard = React.lazy(() => import("./components/SlideTextEditorCard").then((m) => ({ default: m.SlideTextEditorCard })));
-const Chatbot = React.lazy(() => import("./components/Chatbot").then((m) => ({ default: m.Chatbot })));
+import { SlideTextEditorCard } from "./components/SlideTextEditorCard";
+import { Chatbot } from "./components/Chatbot";
 
 const localforage = {
   getItem: async <T = any>(..._args: any[]): Promise<T | null> => null,
@@ -170,7 +171,7 @@ export default function App() {
  const [lookupBookingId, setLookupBookingId] = useState("");
  const [myBookingIds, setMyBookingIds] = useState<string[]>(() => {
    try {
-     const s = localStorage.getItem("my_booking_ids");
+     const s = safeLocalStorage.getItem("my_booking_ids");
      return s ? JSON.parse(s) : [];
    } catch (e) {
      return [];
@@ -312,6 +313,88 @@ export default function App() {
     return () => window.removeEventListener("popstate", checkBookingFromUrl);
   }, []);
 
+  // Hỗ trợ mở trực tiếp Album Chọn Ảnh & Lọc File /albums/:slug, /proofing/:slug hoặc ?proofing=
+  const [proofingSlug, setProofingSlug] = useState<string | null>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const pSlug = params.get("proofing") || params.get("proof") || params.get("album_proof") || params.get("album");
+        if (pSlug) return pSlug.trim();
+        const path = window.location.pathname;
+        if (path.startsWith("/proofing/")) {
+          const s = path.replace("/proofing/", "").trim();
+          if (s) return decodeURIComponent(s);
+        }
+        if (path.startsWith("/albums/")) {
+          const s = path.replace("/albums/", "").trim();
+          if (s) return decodeURIComponent(s);
+        }
+        const hash = window.location.hash;
+        if (hash.includes("/proofing/")) {
+          const parts = hash.split("/proofing/");
+          if (parts[1]) {
+            const s = parts[1].split("?")[0].trim();
+            if (s) return decodeURIComponent(s);
+          }
+        }
+        if (hash.includes("/albums/")) {
+          const parts = hash.split("/albums/");
+          if (parts[1]) {
+            const s = parts[1].split("?")[0].trim();
+            if (s) return decodeURIComponent(s);
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  });
+
+  // Lắng nghe thay đổi URL (popstate) để nhận diện tham số ?proofing= công khai ngay lập tức
+  useEffect(() => {
+    const checkProofingFromUrl = () => {
+      try {
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          const pSlug = params.get("proofing") || params.get("proof") || params.get("album_proof") || params.get("album");
+          if (pSlug && pSlug.trim()) {
+            setProofingSlug(pSlug.trim());
+            return;
+          }
+          const path = window.location.pathname;
+          if (path.startsWith("/proofing/")) {
+            const s = path.replace("/proofing/", "").trim();
+            if (s) {
+              setProofingSlug(decodeURIComponent(s));
+              return;
+            }
+          }
+          if (path.startsWith("/albums/")) {
+            const s = path.replace("/albums/", "").trim();
+            if (s) {
+              setProofingSlug(decodeURIComponent(s));
+              return;
+            }
+          }
+          const hash = window.location.hash;
+          if (hash.includes("/albums/")) {
+            const parts = hash.split("/albums/");
+            if (parts[1]) {
+              const s = parts[1].split("?")[0].trim();
+              if (s) {
+                setProofingSlug(decodeURIComponent(s));
+                return;
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    };
+
+    window.addEventListener("popstate", checkProofingFromUrl);
+    return () => window.removeEventListener("popstate", checkProofingFromUrl);
+  }, []);
+
+
   // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps (Quy tắc 4)
   // Khởi tạo Lenis Smooth Scrolling mượt mà 60fps - Chỉ chạy trên Desktop
   useEffect(() => {
@@ -350,69 +433,90 @@ export default function App() {
    };
  }, []);
 
- // Hidden admin access
- const [hasAdminAccess, setHasAdminAccess] = useState(() => {
- return (
- window.location.pathname ==="/admin"||
- window.location.hash ==="#admin"||
- window.location.hash ==="#admin-access"||
- window.location.search.includes("admin=true")
- );
- });
+  // Zero-friction public customer routes detection
+  const isPublicCustomerRoute = Boolean(proofingSlug || bookingConfirmationCode);
 
- useEffect(() => {
- const checkAdminAccess = () => {
- const isRouteMatch =
- window.location.pathname ==="/admin"||
- window.location.hash ==="#admin"||
- window.location.hash ==="#admin-access"||
- window.location.search.includes("admin=true");
+  // Hidden admin access
+  const [hasAdminAccess, setHasAdminAccess] = useState(() => {
+    if (isPublicCustomerRoute) return false;
+    return (
+      window.location.pathname === "/admin" ||
+      window.location.hash === "#admin" ||
+      window.location.hash === "#admin-access" ||
+      window.location.search.includes("admin=true")
+    );
+  });
 
- if (isRouteMatch) {
- setHasAdminAccess(true);
- setIsLoginOpen(true);
- if (window.history.replaceState) {
- const url = new URL(window.location.href);
- url.hash = '';
- url.searchParams.delete('admin');
- if (url.pathname ==="/admin") url.pathname ="/";
- window.history.replaceState({}, '', url.toString());
- }
- }
- };
+  useEffect(() => {
+    // Zero-friction public bypass: strictly disable admin listeners on customer routes
+    if (isPublicCustomerRoute) {
+      setHasAdminAccess(false);
+      setIsLoginOpen(false);
+      return;
+    }
 
- // Keyboard shortcut helper: Ctrl + Shift + A (Windows/Linux) or Cmd + Shift + A (macOS)
- const handleKeyDown = (e: KeyboardEvent) => {
- if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() ==="a") {
- e.preventDefault();
- setHasAdminAccess(true);
- setIsLoginOpen(true);
- }
- };
+    const checkAdminAccess = () => {
+      if (proofingSlug || bookingConfirmationCode) {
+        setHasAdminAccess(false);
+        setIsLoginOpen(false);
+        return;
+      }
+      const isRouteMatch =
+        window.location.pathname === "/admin" ||
+        window.location.hash === "#admin" ||
+        window.location.hash === "#admin-access" ||
+        window.location.search.includes("admin=true");
 
- checkAdminAccess();
- window.addEventListener("hashchange", checkAdminAccess);
- window.addEventListener("popstate", checkAdminAccess);
- window.addEventListener("keydown", handleKeyDown);
+      if (isRouteMatch) {
+        setHasAdminAccess(true);
+        setIsLoginOpen(true);
+        if (window.history.replaceState) {
+          const url = new URL(window.location.href);
+          url.hash = "";
+          url.searchParams.delete("admin");
+          if (url.pathname === "/admin") url.pathname = "/";
+          window.history.replaceState({}, "", url.toString());
+        }
+      }
+    };
 
- return () => {
- window.removeEventListener("hashchange", checkAdminAccess);
- window.removeEventListener("popstate", checkAdminAccess);
- window.removeEventListener("keydown", handleKeyDown);
- };
- }, []);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (proofingSlug || bookingConfirmationCode) return;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setHasAdminAccess(true);
+        setIsLoginOpen(true);
+      }
+    };
 
- useEffect(() => {
- recordPortfolioVisitor();
- }, []);
+    checkAdminAccess();
+    window.addEventListener("hashchange", checkAdminAccess);
+    window.addEventListener("popstate", checkAdminAccess);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("hashchange", checkAdminAccess);
+      window.removeEventListener("popstate", checkAdminAccess);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPublicCustomerRoute, proofingSlug, bookingConfirmationCode]);
+
+  useEffect(() => {
+    if (!proofingSlug && !bookingConfirmationCode) {
+      recordPortfolioVisitor();
+    }
+  }, [proofingSlug, bookingConfirmationCode]);
 
 
 
- useEffect(() => {
- const docRef = doc(db,"appStore","slidesConfig");
- const unsubscribe = onSnapshot(
- docRef, 
- async (docSnap) => {
+  useEffect(() => {
+    if (proofingSlug || bookingConfirmationCode) {
+      return;
+    }
+    const docRef = doc(db,"appStore","slidesConfig");
+    const unsubscribe = onSnapshot(
+      docRef, 
+      async (docSnap) => {
  if (docSnap.exists()) {
  let data = docSnap.data()?.slides;
  if (data && Array.isArray(data) && data.length > 0) {
@@ -579,7 +683,7 @@ export default function App() {
  login: handleLogin,
  loginWithEmailPassword: handleLoginWithEmailPassword,
  logout: handleLogout,
- } = useAdminAuth();
+ } = useAdminAuth(isPublicCustomerRoute);
 
  const [isLoginOpen, setIsLoginOpen] = useState(false);
  const [loginError, setLoginError] = useState("");
@@ -595,17 +699,17 @@ export default function App() {
 
  // Rate Limiting Config
  const [failedAttempts, setFailedAttempts] = useState(() => {
- const saved = sessionStorage.getItem("admin_failed_attempts");
+ const saved = safeSessionStorage.getItem("admin_failed_attempts");
  return saved ? parseInt(saved, 10) : 0;
  });
  const [lockoutUntil, setLockoutUntil] = useState(() => {
- const saved = sessionStorage.getItem("admin_lockout_until");
+ const saved = safeSessionStorage.getItem("admin_lockout_until");
  return saved ? parseInt(saved, 10) : 0;
  });
  const [countdown, setCountdown] = useState(0);
 
  // Deep structural security evaluation
- const isVerifiedAdminLoggedIn = !!(globalAdminMode && adminUser && sessionStorage.getItem("admin_logged_in") === "true");
+ const isVerifiedAdminLoggedIn = !isPublicCustomerRoute && !!(globalAdminMode && adminUser && safeSessionStorage.getItem("admin_logged_in") === "true");
 
  const verifiedAdminEditMode = !!(
  isEditMode &&
@@ -646,12 +750,12 @@ export default function App() {
  const recordFailedAttempt = (customMsg?: string) => {
  const nextAttempts = failedAttempts + 1;
  setFailedAttempts(nextAttempts);
- sessionStorage.setItem("admin_failed_attempts", nextAttempts.toString());
+ safeSessionStorage.setItem("admin_failed_attempts", nextAttempts.toString());
  
  if (nextAttempts >= 5) {
  const lockTime = Date.now() + 30 * 1000; // 30 seconds lockout
  setLockoutUntil(lockTime);
- sessionStorage.setItem("admin_lockout_until", lockTime.toString());
+ safeSessionStorage.setItem("admin_lockout_until", lockTime.toString());
  setLoginError("⚠️ Đăng nhập sai quá 5 lần! Hệ thống tạm thời khóa đăng nhập trong 30 giây.");
  } else {
  setLoginError(customMsg || `⚠️ Đăng nhập thất bại. Bạn còn ${5 - nextAttempts} lần thử.`);
@@ -664,9 +768,9 @@ export default function App() {
  try {
  await handleLogout(); // This calls Firebase signOut
  // Clear any session storage we manually set
- sessionStorage.removeItem("admin_failed_attempts");
- sessionStorage.removeItem("admin_lockout_until");
- sessionStorage.removeItem("admin_logged_in");
+ safeSessionStorage.removeItem("admin_failed_attempts");
+ safeSessionStorage.removeItem("admin_lockout_until");
+ safeSessionStorage.removeItem("admin_logged_in");
  setIsEditMode(false);
  setIsLoginOpen(false);
  window.location.reload();
@@ -688,10 +792,10 @@ export default function App() {
  await handleLogin();
  // On successful login, clear lockout and count
  setFailedAttempts(0);
- sessionStorage.removeItem("admin_failed_attempts");
- sessionStorage.removeItem("admin_lockout_until");
+ safeSessionStorage.removeItem("admin_failed_attempts");
+ safeSessionStorage.removeItem("admin_lockout_until");
  setLoginSuccess(true);
-        sessionStorage.setItem('admin_logged_in', 'true');
+        safeSessionStorage.setItem('admin_logged_in', 'true');
  setTimeout(() => {
  setIsLoginOpen(false);
  setLoginSuccess(false);
@@ -723,10 +827,10 @@ export default function App() {
  await handleLoginWithEmailPassword(emailInput.trim(), passwordInput);
  // On success
  setFailedAttempts(0);
- sessionStorage.removeItem("admin_failed_attempts");
- sessionStorage.removeItem("admin_lockout_until");
+ safeSessionStorage.removeItem("admin_failed_attempts");
+ safeSessionStorage.removeItem("admin_lockout_until");
  setLoginSuccess(true);
-        sessionStorage.setItem('admin_logged_in', 'true');
+        safeSessionStorage.setItem('admin_logged_in', 'true');
  setTimeout(() => {
  setIsLoginOpen(false);
  setLoginSuccess(false);
@@ -902,20 +1006,22 @@ export default function App() {
  ref={containerRef}
  className="relative bg-transparent text-white font-manrope selection:bg-optic-yellow selection:text-black min-h-screen"
  >
- <Helmet>
- <title>{activeSeo?.title ||"BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện"}</title>
- <meta name="description"content={activeSeo?.description ||"Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER. Lưu giữ mọi khoảnh khắc thanh xuân rực rỡ và chuyên nghiệp."} />
- {activeSeo?.keywords && <meta name="keywords"content={activeSeo.keywords} />}
- <meta property="og:title" content={activeSeo?.title || "BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện"} />
- <meta property="og:description" content={activeSeo?.description || "Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER."} />
- <meta property="og:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
- <meta property="og:type" content="website" />
- <meta name="twitter:card" content="summary_large_image" />
- <meta name="twitter:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
- </Helmet>
+  {!proofingSlug && (
+  <Helmet>
+  <title>{activeSeo?.title ||"BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện"}</title>
+  <meta name="description"content={activeSeo?.description ||"Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER. Lưu giữ mọi khoảnh khắc thanh xuân rực rỡ và chuyên nghiệp."} />
+  {activeSeo?.keywords && <meta name="keywords"content={activeSeo.keywords} />}
+  <meta property="og:title" content={activeSeo?.title || "BERGH.RYKER — Portfolio Kỷ Yếu & Nhiếp Ảnh Sự Kiện"} />
+  <meta property="og:description" content={activeSeo?.description || "Portfolio kỷ yếu và nhiếp ảnh sự kiện chất lượng cao của BERGH.RYKER."} />
+  <meta property="og:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://bergh-ryker.ai.studio/og-image-square.png?v=2" />
+  </Helmet>
+  )}
 
  {/* CINEMATIC INTRO OVERLAY (Quy tắc 3) */}
-  {!bookingConfirmationCode && introConfig.enabled && !isIntroComplete && (
+  {!bookingConfirmationCode && !proofingSlug && introConfig.enabled && !isIntroComplete && (
    <CinematicIntroOverlay
      config={introConfig}
      realAlbumCards={prefetchedIntroCards}
@@ -923,13 +1029,14 @@ export default function App() {
    />
  )}
 
- {/* GLOBAL FIXED BACKGROUND VIDEO WITH ADAPTIVE STREAMING & COMPRESSED MOBILE FALLBACK */}
- <GlobalBackgroundVideo
- isHeroLayout={slides[activeSlide]?.layout ==="Hero Layout" || slides[activeSlide]?.layout ==="Hero"}
- />
+  {!proofingSlug && (
+   <GlobalBackgroundVideo
+   isHeroLayout={slides[activeSlide]?.layout ==="Hero Layout" || slides[activeSlide]?.layout ==="Hero"}
+   />
+ )}
 
   {/* 1. GLASSMORPHISM NAVIGATION HEADER */}
-  {!bookingConfirmationCode && (
+  {!bookingConfirmationCode && !proofingSlug && (
     <>
   <header className="sticky top-0 left-0 w-full z-40 bg-[rgba(18,18,20,0.75)] backdrop-blur-[16px] border-b border-[rgba(255,255,255,0.08)] pt-[max(env(safe-area-inset-top),0px)]">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-3 flex flex-row justify-between items-center gap-2">
@@ -1118,6 +1225,17 @@ export default function App() {
         }}
       />
     </div>
+  ) : proofingSlug ? (
+    <div className="w-full min-h-screen relative z-20">
+      <ProofingGalleryView
+        albumSlugOrId={proofingSlug}
+        isAdmin={isVerifiedAdminLoggedIn}
+        onNavigateHome={() => {
+          window.history.pushState({}, "", "/");
+          setProofingSlug(null);
+        }}
+      />
+    </div>
   ) : (
     <div className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12 pb-4 md:pb-6 relative">
  {slides.map((slide, index) => {
@@ -1197,7 +1315,7 @@ export default function App() {
   </main>
 
  {/* 4. FOOTER WITH INTEGRATED GLOBAL ADMINISTRATIVE SWITCH */}
- {!bookingConfirmationCode && (
+ {!bookingConfirmationCode && !proofingSlug && (
  <>
  <footer className="w-full bg-zinc-950/20 backdrop-blur-md border-t border-white/5 pt-8 pb-[calc(1.25rem+env(safe-area-inset-bottom,16px))] md:pt-10 md:pb-8 text-center font-sans text-[12px] text-gray-500 leading-relaxed relative z-20">
  <div className="max-w-2xl mx-auto px-6 space-y-4">
@@ -1391,7 +1509,7 @@ export default function App() {
 
  {/* ADMIN PASSCODE ACCORDION / DIALOG WINDOW */}
  <AnimatePresence>
- {isLoginOpen && (
+ {!isPublicCustomerRoute && isLoginOpen && (
  <div key="admin-login-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
  <motion.div
  initial={{ scale: 0.93, opacity: 0 }}
@@ -1578,38 +1696,42 @@ export default function App() {
  )}
  </AnimatePresence>
 
- <AnalyticsDashboardModal
- isOpen={isAnalyticsOpen}
- onClose={() => setIsAnalyticsOpen(false)}
- />
+ {!bookingConfirmationCode && !proofingSlug && (
+   <>
+     <AnalyticsDashboardModal
+       isOpen={isAnalyticsOpen}
+       onClose={() => setIsAnalyticsOpen(false)}
+     />
 
- <LiveVisitorsFloatingWidget
- onOpenAnalytics={() => setIsAnalyticsOpen(true)}
- />
+     <LiveVisitorsFloatingWidget
+       onOpenAnalytics={() => setIsAnalyticsOpen(true)}
+     />
 
- <AdminPushNotificationBanner />
- <AdminNotificationCenterModal />
+     <AdminPushNotificationBanner />
+     <AdminNotificationCenterModal />
 
- <PhotoProgressLookupModal
- isOpen={isPhotoProgressOpen}
- onClose={() => {
-   setIsPhotoProgressOpen(false);
-   setLookupBookingId("");
- }}
- initialBookingId={lookupBookingId}
- myBookingIds={myBookingIds}
- />
+     <PhotoProgressLookupModal
+       isOpen={isPhotoProgressOpen}
+       onClose={() => {
+         setIsPhotoProgressOpen(false);
+         setLookupBookingId("");
+       }}
+       initialBookingId={lookupBookingId}
+       myBookingIds={myBookingIds}
+     />
 
- <AdminIntroEditorModal
- isOpen={isIntroEditorOpen}
- onClose={() => setIsIntroEditorOpen(false)}
- config={introConfig}
- onSave={saveIntroConfig}
- onPreview={() => {
-   setIsIntroComplete(false);
- }}
- showToast={(msg) => alert(msg)}
- />
+     <AdminIntroEditorModal
+       isOpen={isIntroEditorOpen}
+       onClose={() => setIsIntroEditorOpen(false)}
+       config={introConfig}
+       onSave={saveIntroConfig}
+       onPreview={() => {
+         setIsIntroComplete(false);
+       }}
+       showToast={(msg) => alert(msg)}
+     />
+   </>
+ )}
  </div>
  );
 }
